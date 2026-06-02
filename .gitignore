@@ -1,0 +1,22 @@
+# macOS metadata
+.DS_Store
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Local database export copy
+DataBase_copy/
+python-code/DataBase_copy/
+
+# Generated HTML visualization output
+html-visualization/
+python-code/html-visualization/
+
+# Avoid tracking generated analysis outputs
+python-code/MHC0_vs_MHC1sa-admission_notes/admission_note_analysis_output/
+python-code/MHC0_vs_MHC1sa-admission_notes/chief_complaint_analysis_output/
+python-code/MHC0_vs_MHC1sa-admission_notes/mhc1_sa_icd_lookup_output/
+
+# Ignore Python bytecode and caches in nested folders
+**/__pycache__/
