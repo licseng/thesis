@@ -11,6 +11,8 @@ python-code/html-visualization/
 **/html-visualization/
 
 # Avoid tracking huge files and generated analysis outputs
+python-code-old/
+python-code/admission notes/parsed_admission_notes/
 python-code/MHC0_vs_MHC1sa-admission_notes/admission_note_analysis_output/
 python-code/MHC0_vs_MHC1sa-admission_notes/chief_complaint_analysis_output/
 python-code/MHC0_vs_MHC1sa-admission_notes/mhc1_sa_icd_lookup_output/
