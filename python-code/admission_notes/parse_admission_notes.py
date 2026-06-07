@@ -11,8 +11,20 @@ THESIS_DIR = PROJECT_DIR.parent.parent
 DB_PATH = THESIS_DIR / "DataBase"
 OUTPUT_DIR = SCRIPT_DIR / "parsed_admission_notes"
 
-SOURCE_TABLE = "export_MHH_psychotic"
-OUTPUT_NAME = "MHH_psychotic_admission_notes"
+EXPORTS = [
+    {
+        "source_table": "export_MHH_psychotic",
+        "output_name": "MHH_psychotic_admission_notes",
+    },
+    {
+        "source_table": "export_MHH_history_only",
+        "output_name": "MHH_history_only_admission_notes",
+    },
+    {
+        "source_table": "export_only_MHC0",
+        "output_name": "MHC0_admission_notes",
+    },
+]
 
 ADMISSION_SECTIONS = {
     "chief_complaint": "chief complaint:",
@@ -34,6 +46,16 @@ def quote_identifier(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
 
 
+def table_columns(con: duckdb.DuckDBPyConnection, table_name: str) -> list[str]:
+    rows = con.execute(f"DESCRIBE {quote_identifier(table_name)}").fetchall()
+    return [row[0] for row in rows]
+
+
+def metadata_columns(con: duckdb.DuckDBPyConnection, table_name: str) -> list[str]:
+    excluded_columns = {"subject_id", "hadm_id", "text"}
+    return [column for column in table_columns(con, table_name) if column not in excluded_columns]
+
+
 def section_pattern(section_heading: str) -> str:
     return rf"(?i){section_heading}([\s\S]+?)\n\s*?\n[^(\\|\d|\.)]+?:"
 
@@ -51,7 +73,19 @@ def section_expr(section_heading: str) -> str:
     return f"CASE WHEN starts_with({raw_section}, '[]') THEN '' ELSE {raw_section} END"
 
 
-def parsed_notes_query() -> str:
+def parsed_notes_query(
+    source_table: str,
+    metadata_column_names: list[str],
+) -> str:
+    metadata_selects = ",\n            ".join(
+        quote_identifier(column_name) for column_name in metadata_column_names
+    )
+    metadata_columns_sql = ",\n            ".join(
+        quote_identifier(column_name) for column_name in metadata_column_names
+    )
+    metadata_final_sql = ",\n        ".join(
+        quote_identifier(column_name) for column_name in metadata_column_names
+    )
     section_selects = ",\n            ".join(
         f"{section_expr(section_heading)} AS {quote_identifier(column_name)}"
         for column_name, section_heading in ADMISSION_SECTIONS.items()
@@ -62,21 +96,14 @@ def parsed_notes_query() -> str:
         SELECT
             subject_id,
             hadm_id,
-            admittime,
-            has_secondary_psychiatric_same_admission,
-            has_prior_psychiatric_history,
-            same_admission_psych_categories,
-            prior_psych_categories,
-            has_psychotic_history,
-            note_id,
-            charttime,
-            storetime,
+            {metadata_selects}
+            {"," if metadata_selects else ""}
             regexp_replace(
                 coalesce(text, ''),
                 '(?i)___\\nFamily History:',
                 '___\\n\\nFamily History:'
             ) AS note_text
-        FROM {quote_identifier(SOURCE_TABLE)}
+        FROM {quote_identifier(source_table)}
         WHERE subject_id IS NOT NULL
           AND hadm_id IS NOT NULL
           AND text IS NOT NULL
@@ -86,30 +113,16 @@ def parsed_notes_query() -> str:
         SELECT
             subject_id,
             hadm_id,
-            admittime,
-            has_secondary_psychiatric_same_admission,
-            has_prior_psychiatric_history,
-            same_admission_psych_categories,
-            prior_psych_categories,
-            has_psychotic_history,
-            note_id,
-            charttime,
-            storetime,
+            {metadata_columns_sql}
+            {"," if metadata_columns_sql else ""}
             {section_selects}
         FROM source_notes
     )
     SELECT
         subject_id,
         hadm_id,
-        admittime,
-        has_secondary_psychiatric_same_admission,
-        has_prior_psychiatric_history,
-        same_admission_psych_categories,
-        prior_psych_categories,
-        has_psychotic_history,
-        note_id,
-        charttime,
-        storetime,
+        {metadata_final_sql}
+        {"," if metadata_final_sql else ""}
         chief_complaint,
         present_illness,
         medical_history,
@@ -136,10 +149,10 @@ def ensure_database_exists() -> None:
         raise FileNotFoundError(f"No DuckDB database found at: {DB_PATH}")
 
 
-def write_exports(con: duckdb.DuckDBPyConnection, query: str) -> None:
+def write_exports(con: duckdb.DuckDBPyConnection, query: str, output_name: str) -> None:
     OUTPUT_DIR.mkdir(exist_ok=True)
-    parquet_path = OUTPUT_DIR / f"{OUTPUT_NAME}.parquet"
-    sample_csv_path = OUTPUT_DIR / f"{OUTPUT_NAME}_sample.csv"
+    parquet_path = OUTPUT_DIR / f"{output_name}.parquet"
+    sample_csv_path = OUTPUT_DIR / f"{output_name}_sample.csv"
 
     con.execute(
         f"""
@@ -161,11 +174,12 @@ def write_exports(con: duckdb.DuckDBPyConnection, query: str) -> None:
     )
 
 
-def print_summary(con: duckdb.DuckDBPyConnection, query: str) -> None:
+def print_summary(con: duckdb.DuckDBPyConnection, query: str, output_name: str) -> None:
     summary = con.execute(
         f"""
         WITH parsed AS ({query})
         SELECT
+            {sql_string(output_name)} AS output_name,
             count(*) AS n_rows,
             count(DISTINCT subject_id) AS n_subjects,
             count(DISTINCT hadm_id) AS n_admissions,
@@ -185,13 +199,18 @@ def print_summary(con: duckdb.DuckDBPyConnection, query: str) -> None:
 
 def main() -> None:
     ensure_database_exists()
-    query = parsed_notes_query()
 
     con = duckdb.connect(str(DB_PATH), read_only=True)
     try:
-        print(f"Parsing {SOURCE_TABLE} from: {DB_PATH}", flush=True)
-        write_exports(con, query)
-        print_summary(con, query)
+        for export in EXPORTS:
+            source_table = export["source_table"]
+            output_name = export["output_name"]
+            metadata_column_names = metadata_columns(con, source_table)
+            query = parsed_notes_query(source_table, metadata_column_names)
+
+            print(f"Parsing {source_table} from: {DB_PATH}", flush=True)
+            write_exports(con, query, output_name)
+            print_summary(con, query, output_name)
     finally:
         con.close()
 
