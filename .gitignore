@@ -12,7 +12,11 @@ python-code-old/
 
 # Generated outputs from current Python analyses
 python-code/admission_notes/parsed_admission_notes/
-python-code/admission_notes/chief_complaint_analysis_output/
+python-code/admission_notes/chief_complaint/chief_complaint_analysis_output/
+python-code/admission_notes/chief_complaint/chief_complaint_parquets/
+python-code/admission_notes/chief_complaint/chief_complaint_preprocessed/
+python-code/admission_notes/chief_complaint/chief_complaint_preprocessed_analysis_output/
+python-code/admission_notes/chief_complaint/chief_complaint_preprocessing_samples/
 
 # Generated HTML visualization output
 html-visualization/
