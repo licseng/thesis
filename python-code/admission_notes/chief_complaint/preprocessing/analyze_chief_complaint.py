@@ -17,7 +17,7 @@ import duckdb
 #   - group-enriched chief complaint terms, saved separately by enrichment direction
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PARQUET_DIR = SCRIPT_DIR.parent / "parsed_admission_notes"
+PARQUET_DIR = SCRIPT_DIR.parent.parent / "parsed_admission_notes"
 OUTPUT_DIR = SCRIPT_DIR / "chief_complaint_analysis_output"
 
 ADMISSION_PARQUETS = {
