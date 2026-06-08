@@ -63,136 +63,271 @@ ABBREVIATIONS = {
     "uti": "urinary tract infection",
 }
 
+# These rules are used as a synonym/near-synonym vocabulary, not as final
+# unsupervised clusters. Each target should group surface forms that express the
+# same presenting problem or a very close chief-complaint variant.
 TARGET_RULES = {
     "abdominal_pain": {
         "entity_type": "physical_complaint",
-        "literals": ["abdominal pain", "left lower quadrant", "left upper quadrant", "right lower quadrant", "right upper quadrant"],
+        "literals": [
+            "abdominal pain",
+            "abd pain",
+            "stomach pain",
+            "belly pain",
+            "epigastric pain",
+            "right upper quadrant pain",
+            "left upper quadrant pain",
+            "right lower quadrant pain",
+            "left lower quadrant pain",
+            "ruq pain",
+            "luq pain",
+            "rlq pain",
+            "llq pain",
+        ],
     },
     "altered_mental_status": {
-        "entity_type": "psych_neuro_complaint",
-        "literals": ["altered mental status", "confusion"],
+        "entity_type": "physical_complaint",
+        "literals": [
+            "altered mental status",
+            "confusion",
+            "confused",
+            "encephalopathy",
+            "lethargy",
+            "lethargic",
+            "somnolence",
+            "somnolent",
+            "unresponsive",
+            "unresponsiveness",
+        ],
+    },
+    "back_pain": {
+        "entity_type": "physical_complaint",
+        "literals": ["back pain", "low back pain", "lower back pain"],
+    },
+    "chest_pain": {
+        "entity_type": "physical_complaint",
+        "literals": [
+            "chest pain",
+            "chest pressure",
+            "chest discomfort",
+            "chest tightness",
+            "chest heaviness",
+            "angina",
+        ],
+    },
+    "cough": {
+        "entity_type": "physical_complaint",
+        "literals": ["cough", "coughing", "hemoptysis", "coughing blood"],
+    },
+    "diarrhea": {
+        "entity_type": "physical_complaint",
+        "literals": ["diarrhea", "loose stools", "watery stools"],
+    },
+    "dizziness_vertigo": {
+        "entity_type": "physical_complaint",
+        "literals": ["dizziness", "dizzy", "vertigo", "room spinning"],
+    },
+    "dyspnea": {
+        "entity_type": "physical_complaint",
+        "literals": [
+            "dyspnea",
+            "shortness of breath",
+            "difficulty breathing",
+            "trouble breathing",
+            "cannot breathe",
+            "can't breathe",
+            "cant breathe",
+            "i cannot breathe",
+            "i can't breathe",
+            "i cant breathe",
+            "dyspnea on exertion",
+            "respiratory distress",
+            "hypoxia",
+            "hypoxemia",
+        ],
+    },
+    "fall": {
+        "entity_type": "physical_complaint",
+        "literals": ["fall", "falls", "fell", "found down"],
+    },
+    "fever": {
+        "entity_type": "physical_complaint",
+        "literals": ["fever", "fevers", "febrile", "high fever"],
+    },
+    "gastrointestinal_bleed": {
+        "entity_type": "physical_complaint",
+        "literals": [
+            "gastrointestinal bleed",
+            "gastrointestinal bleeding",
+            "gi bleed",
+            "gib",
+            "bright red blood per rectum",
+            "brbpr",
+            "rectal bleeding",
+            "melena",
+            "hematochezia",
+            "hematemesis",
+            "coffee ground emesis",
+        ],
+    },
+    "headache": {
+        "entity_type": "physical_complaint",
+        "literals": ["headache", "headaches", "head pain", "migraine"],
+    },
+    "hypotension": {
+        "entity_type": "physical_complaint",
+        "literals": ["hypotension", "low blood pressure"],
+    },
+    "limb_pain": {
+        "entity_type": "physical_complaint",
+        "literals": [
+            "arm pain",
+            "leg pain",
+            "hip pain",
+            "knee pain",
+            "ankle pain",
+            "foot pain",
+            "shoulder pain",
+            "elbow pain",
+            "wrist pain",
+            "hand pain",
+        ],
+    },
+    "limb_swelling": {
+        "entity_type": "physical_complaint",
+        "literals": [
+            "leg swelling",
+            "arm swelling",
+            "foot swelling",
+            "ankle swelling",
+            "lower extremity swelling",
+            "upper extremity swelling",
+            "edema",
+        ],
+    },
+    "loss_of_consciousness": {
+        "entity_type": "physical_complaint",
+        "literals": ["loss of consciousness", "lost consciousness", "loc"],
+    },
+    "motor_vehicle_collision": {
+        "entity_type": "physical_complaint",
+        "literals": [
+            "motor vehicle collision",
+            "motor vehicle crash",
+            "motor vehicle accident",
+            "mvc",
+            "mva",
+        ],
+    },
+    "nausea_vomiting": {
+        "entity_type": "physical_complaint",
+        "literals": [
+            "nausea",
+            "vomiting",
+            "emesis",
+            "nausea vomiting",
+            "nausea and vomiting",
+            "n/v",
+        ],
+    },
+    "palpitations": {
+        "entity_type": "physical_complaint",
+        "literals": ["palpitations", "heart racing", "racing heart"],
+    },
+    "pneumonia": {
+        "entity_type": "physical_complaint",
+        "literals": ["pneumonia", "pna"],
+    },
+    "seizure": {
+        "entity_type": "physical_complaint",
+        "literals": ["seizure", "seizures", "sz"],
+    },
+    "stroke_like_symptoms": {
+        "entity_type": "physical_complaint",
+        "literals": [
+            "stroke",
+            "code stroke",
+            "aphasia",
+            "slurred speech",
+            "facial droop",
+            "facial weakness",
+            "word finding difficulty",
+        ],
+    },
+    "syncope": {
+        "entity_type": "physical_complaint",
+        "literals": ["syncope", "presyncope", "near syncope", "fainting", "passed out"],
+    },
+    "traumatic_injury": {
+        "entity_type": "physical_complaint",
+        "literals": ["fracture", "fx", "trauma", "injury", "laceration"],
+    },
+    "urinary_symptoms": {
+        "entity_type": "physical_complaint",
+        "literals": [
+            "urinary tract infection",
+            "uti",
+            "dysuria",
+            "hematuria",
+            "urinary retention",
+        ],
+    },
+    "weakness": {
+        "entity_type": "physical_complaint",
+        "literals": ["weakness", "generalized weakness", "fatigue", "malaise"],
     },
     "anxiety": {
         "entity_type": "psych_substance_self_harm",
         "literals": ["anxiety", "panic attack", "panic"],
     },
-    "back_pain": {
-        "entity_type": "physical_complaint",
-        "literals": ["back pain"],
-    },
-    "chest_pain": {
-        "entity_type": "physical_complaint",
-        "literals": ["chest pain"],
-    },
     "depression": {
         "entity_type": "psych_substance_self_harm",
         "literals": ["depression", "depressed"],
     },
-    "diarrhea": {
-        "entity_type": "physical_complaint",
-        "literals": ["diarrhea"],
-    },
-    "dyspnea": {
-        "entity_type": "physical_complaint",
-        "literals": ["dyspnea", "shortness of breath", "dyspnea on exertion"],
-    },
-    "fall": {
-        "entity_type": "physical_complaint",
-        "literals": ["fall", "found down"],
-    },
-    "fever": {
-        "entity_type": "physical_complaint",
-        "literals": ["fever", "fevers"],
-    },
-    "gastrointestinal_bleed": {
-        "entity_type": "physical_complaint",
-        "literals": [
-        "bright red blood per rectum",
-        "gastrointestinal bleed",
-        "hematemesis",
-        "melena",
-        ],
-    },
     "hallucinations": {
         "entity_type": "psych_substance_self_harm",
-        "literals": ["hallucinations", "hallucination", "auditory hallucinations", "visual hallucinations"],
-    },
-    "headache": {
-        "entity_type": "physical_complaint",
-        "literals": ["headache"],
+        "literals": [
+            "hallucinations",
+            "hallucination",
+            "auditory hallucinations",
+            "visual hallucinations",
+            "hearing voices",
+            "seeing things",
+        ],
     },
     "homicidal_ideation": {
         "entity_type": "psych_substance_self_harm",
         "literals": ["homicidal ideation", "homicidal", "hi"],
     },
-    "hypotension": {
-        "entity_type": "physical_complaint",
-        "literals": ["hypotension"],
-    },
-    "limb_complaint": {
-        "entity_type": "physical_complaint",
-        "literals": [
-            "left lower extremity",
-            "left upper extremity",
-            "right lower extremity",
-            "right upper extremity",
-        ],
-    },
-    "loss_of_consciousness": {
-        "entity_type": "physical_complaint",
-        "literals": ["loss of consciousness"],
-    },
-    "motor_vehicle_collision": {
-        "entity_type": "physical_complaint",
-        "literals": ["motor vehicle collision"],
-    },
     "intoxication": {
         "entity_type": "psych_substance_self_harm",
-        "literals": ["intoxication", "intoxicated"],
-    },
-    "nausea_vomiting": {
-        "entity_type": "physical_complaint",
-        "literals": ["nausea", "vomiting", "nausea vomiting"],
-    },
-    "pneumonia": {
-        "entity_type": "physical_complaint",
-        "literals": ["pneumonia"],
+        "literals": ["intoxication", "intoxicated", "alcohol intoxication", "etoh intoxication"],
     },
     "overdose_ingestion": {
         "entity_type": "psych_substance_self_harm",
-        "literals": ["overdose", "ingestion", "intentional ingestion"],
+        "literals": ["overdose", "od", "ingestion", "intentional ingestion"],
     },
     "psychosis": {
         "entity_type": "psych_substance_self_harm",
-        "literals": ["psychosis", "psychotic", "paranoia", "delusions"],
-    },
-    "seizure": {
-        "entity_type": "physical_complaint",
-        "literals": ["seizure", "seizures"],
+        "literals": ["psychosis", "psychotic", "paranoia", "paranoid", "delusions", "delusional"],
     },
     "substance_use": {
         "entity_type": "psych_substance_self_harm",
-        "literals": ["alcohol", "cocaine", "heroin", "substance use", "drug use", "withdrawal"],
+        "literals": [
+            "alcohol",
+            "etoh",
+            "cocaine",
+            "heroin",
+            "opioid",
+            "opiate",
+            "substance use",
+            "drug use",
+            "withdrawal",
+        ],
     },
     "suicidal_ideation": {
         "entity_type": "psych_substance_self_harm",
         "literals": ["suicidal ideation", "suicidal", "suicide", "si"],
-    },
-    "syncope": {
-        "entity_type": "physical_complaint",
-        "literals": ["syncope"],
-    },
-    "traumatic_injury": {
-        "entity_type": "physical_complaint",
-        "literals": ["fracture"],
-    },
-    "urinary_tract_infection": {
-        "entity_type": "physical_complaint",
-        "literals": ["urinary tract infection"],
-    },
-    "weakness": {
-        "entity_type": "physical_complaint",
-        "literals": ["weakness"],
     },
 }
 
