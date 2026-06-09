@@ -1,24 +1,40 @@
+"""Parse admission-relevant sections from MIMIC-IV discharge notes.
+
+This script is the first text-processing step in the chief-complaint pipeline.
+It reads cohort-specific discharge-note export tables from the local DuckDB
+MIMIC database and extracts structured admission sections.
+
+Inputs:
+    DuckDB tables listed in `EXPORTS`, currently:
+        - export_MHH_psychotic (case)
+        - export_only_MHC0 (control)
+
+Outputs:
+    For each input table, writes:
+        - parsed_admission_notes/<output_name>.parquet
+        - parsed_admission_notes/<output_name>_sample.csv
+
+Important limitation:
+    Section extraction is rule-based and depends on recognizable note headings
+    such as "Chief Complaint:" and "Present Illness:".
+"""
+
 from __future__ import annotations
-
 from pathlib import Path
-
 import duckdb
 
-
+# Paths
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 THESIS_DIR = PROJECT_DIR.parent.parent
 DB_PATH = THESIS_DIR / "DataBase"
 OUTPUT_DIR = SCRIPT_DIR / "parsed_admission_notes"
 
+# Cohort tables to parse
 EXPORTS = [
     {
         "source_table": "export_MHH_psychotic",
         "output_name": "MHH_psychotic_admission_notes",
-    },
-    {
-        "source_table": "export_MHH_history_only",
-        "output_name": "MHH_history_only_admission_notes",
     },
     {
         "source_table": "export_only_MHC0",
@@ -26,6 +42,7 @@ EXPORTS = [
     },
 ]
 
+# Discharge-note sections to extract
 ADMISSION_SECTIONS = {
     "chief_complaint": "chief complaint:",
     "present_illness": "present illness:",
@@ -38,28 +55,36 @@ ADMISSION_SECTIONS = {
 }
 
 
+# Safely quote a Python string as a SQL string literal.
+# Used for file paths and regex patterns embedded in DuckDB SQL queries.
 def sql_string(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+# Safely quote a SQL identifier such as a table name or column name.
 def quote_identifier(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
 
 
+# Return the column names of a DuckDB table.
 def table_columns(con: duckdb.DuckDBPyConnection, table_name: str) -> list[str]:
     rows = con.execute(f"DESCRIBE {quote_identifier(table_name)}").fetchall()
     return [row[0] for row in rows]
 
 
+# Identify source-table columns that should be copied through as metadata.
 def metadata_columns(con: duckdb.DuckDBPyConnection, table_name: str) -> list[str]:
     excluded_columns = {"subject_id", "hadm_id", "text"}
     return [column for column in table_columns(con, table_name) if column not in excluded_columns]
 
 
+# Build the regular expression used to capture one note section.
 def section_pattern(section_heading: str) -> str:
     return rf"(?i){section_heading}([\s\S]+?)\n\s*?\n[^(\\|\d|\.)]+?:"
 
 
+# Build the DuckDB SQL expression that extracts and lightly cleans one section.
+# Missing sections become empty strings rather than NULLs.
 def section_expr(section_heading: str) -> str:
     raw_section = (
         "trim("
@@ -73,6 +98,11 @@ def section_expr(section_heading: str) -> str:
     return f"CASE WHEN starts_with({raw_section}, '[]') THEN '' ELSE {raw_section} END"
 
 
+# Construct the full SQL query used to parse one cohort table.
+# The query has three stages:
+#   1. source_notes: load valid raw notes and apply a small formatting fix.
+#   2. extracted: create one column per requested admission section.
+#   3. final SELECT: preserve metadata and reconstruct a shorter parsed text.
 def parsed_notes_query(
     source_table: str,
     metadata_column_names: list[str],
@@ -144,11 +174,13 @@ def parsed_notes_query(
     """
 
 
+# Fail early with a clear message if the expected DuckDB database file is absent.
 def ensure_database_exists() -> None:
     if not DB_PATH.exists():
         raise FileNotFoundError(f"No DuckDB database found at: {DB_PATH}")
 
 
+# Write the full parsed table to parquet and a small CSV sample for inspection.
 def write_exports(con: duckdb.DuckDBPyConnection, query: str, output_name: str) -> None:
     OUTPUT_DIR.mkdir(exist_ok=True)
     parquet_path = OUTPUT_DIR / f"{output_name}.parquet"
@@ -174,6 +206,7 @@ def write_exports(con: duckdb.DuckDBPyConnection, query: str, output_name: str) 
     )
 
 
+# Print basic extraction-quality counts for one parsed cohort table.
 def print_summary(con: duckdb.DuckDBPyConnection, query: str, output_name: str) -> None:
     summary = con.execute(
         f"""
@@ -197,6 +230,8 @@ def print_summary(con: duckdb.DuckDBPyConnection, query: str, output_name: str) 
     print(summary.to_string(index=False))
 
 
+# Script entry point: open the database, parse each configured cohort table,
+# write outputs, print summaries, and close the connection.
 def main() -> None:
     ensure_database_exists()
 
@@ -217,5 +252,7 @@ def main() -> None:
     print(f"Saved parsed admission-note exports to: {OUTPUT_DIR}")
 
 
+# Allow the script to be run directly with:
+#     python parse_discharge_notes_for_admission_part.py
 if __name__ == "__main__":
     main()
