@@ -13,7 +13,7 @@ import pandas as pd
  # Paths
 SCRIPT_DIR = Path(__file__).resolve().parent
 INPUT_DIR = SCRIPT_DIR / "chief_complaint_preprocessed"
-OUTPUT_DIR = SCRIPT_DIR / "chief_complaint_preprocessed_analysis_output"
+OUTPUT_DIR = SCRIPT_DIR / "analysis_output_chief_complaint_preprocessed"
 
  # Cohort-specific preprocessed parquet files to summarize.
 INPUTS = {
@@ -37,6 +37,7 @@ REQUIRED_COLUMNS = {
     "psych_substance_self_harm_entities_negated",
     "has_affirmed_psych_substance_self_harm_entity",
     "has_quickumls_match",
+    "quickumls_negated_terms",
 }
 
  # Load one cohort parquet and validate that required preprocessing columns exist.
@@ -88,6 +89,12 @@ def build_summary(df: pd.DataFrame) -> pd.DataFrame:
         no_quickumls = int(
             (group["has_chief_complaint"] & ~group["has_quickumls_match"]).sum()
         )
+        quickumls_negated = int(
+            (
+                group["has_chief_complaint"]
+                & group["quickumls_negated_terms"].fillna("").ne("")
+            ).sum()
+        )
 
         rows.append(
             {
@@ -116,6 +123,11 @@ def build_summary(df: pd.DataFrame) -> pd.DataFrame:
                 "pct_with_quickumls_match_among_usable": pct(quickumls_matches, usable),
                 "n_without_quickumls_match": no_quickumls,
                 "pct_without_quickumls_match_among_usable": pct(no_quickumls, usable),
+                "n_with_negated_quickumls_terms": quickumls_negated,
+                "pct_with_negated_quickumls_terms_among_usable": pct(
+                    quickumls_negated,
+                    usable,
+                ),
             }
         )
 
@@ -130,6 +142,7 @@ def review_columns(df: pd.DataFrame) -> list[str]:
         "hadm_id",
         "chief_complaint_raw",
         "chief_complaint_normalized",
+        "chief_complaint_context_text",
         "psych_substance_self_harm_entities_affirmed",
         "psych_substance_self_harm_entities_negated",
         "medspacy_entities_all",
@@ -137,6 +150,7 @@ def review_columns(df: pd.DataFrame) -> list[str]:
         "quickumls_cuis",
         "quickumls_semtypes",
         "quickumls_extracted_text",
+        "quickumls_negated_terms",
         "quickumls_matches_json",
         "has_quickumls_match",
     ]

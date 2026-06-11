@@ -21,6 +21,7 @@ Important limitation:
 
 from __future__ import annotations
 from pathlib import Path
+import re
 import duckdb
 
 # Paths
@@ -54,6 +55,26 @@ ADMISSION_SECTIONS = {
     "social_history": "social history:",
 }
 
+# Discharge-note headings that should stop section extraction even though this
+# script does not export them as separate columns. Without these boundaries, text
+# after Chief Complaint can leak into the chief_complaint field.
+SECTION_BOUNDARY_HEADINGS = [
+    *ADMISSION_SECTIONS.values(),
+    "hpi:",
+    "history of present illness:",
+    "major surgical or invasive procedure:",
+    "major surgical or invasive procedures:",
+]
+
+# Chief complaint is short and often immediately followed by headings that are
+# not in the exported section list. For chief_complaint only, use a broader
+# heading-like boundary plus explicit short section labels such as "HPI:". The
+# broad heading pattern requires the first token to have at least five letters so
+# short internal labels such as "CC:" are not treated as section boundaries.
+CHIEF_COMPLAINT_BOUNDARY_PATTERN = (
+    r"(?:hpi|[A-Z][A-Za-z]{4,}(?:\s+(?:[A-Za-z]{2,}|_+)){0,8})\s*:"
+)
+
 
 # Safely quote a Python string as a SQL string literal.
 # Used for file paths and regex patterns embedded in DuckDB SQL queries.
@@ -78,9 +99,40 @@ def metadata_columns(con: duckdb.DuckDBPyConnection, table_name: str) -> list[st
     return [column for column in table_columns(con, table_name) if column not in excluded_columns]
 
 
+# Heading variants that should be extracted into the same output section.
+SECTION_HEADING_ALIASES = {
+    "present illness:": [
+        "present illness:",
+        "history of present illness:",
+        "hpi:",
+    ],
+}
+
+
 # Build the regular expression used to capture one note section.
+#
+# Chief complaint uses a broad heading-like boundary because it should be short
+# and can be followed by deidentified headings such as "Major ___ or Invasive
+# Procedure:". Other sections use known heading boundaries to avoid premature
+# stops on internal labels. Use `$` as the end-of-string fallback because
+# DuckDB's regex engine rejects Python's `\Z` escape.
 def section_pattern(section_heading: str) -> str:
-    return rf"(?i){section_heading}([\s\S]+?)\n\s*?\n[^(\\|\d|\.)]+?:"
+    heading_variants = SECTION_HEADING_ALIASES.get(section_heading, [section_heading])
+    start_pattern = "|".join(re.escape(heading) for heading in heading_variants)
+
+    if section_heading == ADMISSION_SECTIONS["chief_complaint"]:
+        return (
+            rf"(?i)(?:{start_pattern})"
+            rf"([\s\S]+?)(?:\n\s*(?:{CHIEF_COMPLAINT_BOUNDARY_PATTERN})|$)"
+        )
+
+    boundary_headings = [
+        re.escape(heading)
+        for heading in SECTION_BOUNDARY_HEADINGS
+        if heading not in heading_variants
+    ]
+    boundary_pattern = "|".join(boundary_headings)
+    return rf"(?i)(?:{start_pattern})([\s\S]+?)(?:\n\s*(?:{boundary_pattern})|$)"
 
 
 # Build the DuckDB SQL expression that extracts and lightly cleans one section.

@@ -12,7 +12,7 @@ Inputs:
 
 Outputs:
     chief_complaint_preprocessed/<group>_chief_complaints_preprocessed.parquet
-    chief_complaint_preprocessing_samples/<group>_chief_complaint_preprocessing_sample.csv
+    chief_complaint_preprocessed/<group>_chief_complaint_preprocessing_sample.csv
 
 Important limitations:
     Normalization is intentionally conservative and does not fully interpret
@@ -37,7 +37,7 @@ from medspacy.ner import TargetRule
 SCRIPT_DIR = Path(__file__).resolve().parent
 INPUT_DIR = SCRIPT_DIR / "chief_complaint_parquets"
 OUTPUT_DIR = SCRIPT_DIR / "chief_complaint_preprocessed"
-SAMPLE_OUTPUT_DIR = SCRIPT_DIR / "chief_complaint_preprocessing_samples"
+SAMPLE_OUTPUT_DIR = OUTPUT_DIR
 SAMPLE_SIZE = 100 #size for the .csv sample of preprocessed complaints for manual inspection
 SAMPLE_RANDOM_SEED = 42
 
@@ -50,7 +50,7 @@ SAMPLE_RANDOM_SEED = 42
 
 USE_QUICKUMLS = True
 QUICKUMLS_INDEX_DIR = Path("QUICKUMLS_INDEX_DIR")
-QUICKUMLS_THRESHOLD = 0.7 #how similar a phrase must be to a UMLS term to count as a match
+QUICKUMLS_THRESHOLD = 1 #how similar a phrase must be to a UMLS term to count as a match
 QUICKUMLS_WINDOW = 5 #the maximum phrase length QuickUMLS considers when scanning text
 QUICKUMLS_SIMILARITY_NAME = "jaccard" #jaccard compares token overlap
 QUICKUMLS_BEST_MATCH = True #return only the best matching UMLS candidate
@@ -77,14 +77,20 @@ QUICKUMLS_ALLOWED_SEMTYPES = {
     "T030",  # Body Space or Junction
 
     # Functional concepts
-    "T038"  # Biologic Function
-    "T039"  # Physiologic Function
-    "T040"  # Organism Function
+    "T038",  # Biologic Function
+    "T039",  # Physiologic Function
+    "T040",  # Organism Function
 
     # Procedures (sometimes mentioned in chief complaints, e.g. "here for chemo")
     "T060",  # Diagnostic Procedure
     "T061",  # Therapeutic or Preventive Procedure
     "T059",  # Laboratory Procedure
+
+    # Drug / medication / treatment-related concepts
+    "T121",  # Pharmacologic Substance
+    "T200",  # Clinical Drug
+    "T109",  # Organic Chemical
+    "T123",  # Biologically Active Substance
 
     # Accident / mechanism-of-injury concepts (???) 
     "T051",  # Event
@@ -102,7 +108,20 @@ INPUTS = {
 PLACEHOLDER_RE = re.compile(r"\b_+\b|_+")
 SPACING_RE = re.compile(r"\s+")
 PUNCT_RE = re.compile(r"[^\w\s/+-]")
+CONTEXT_PUNCT_RE = re.compile(r"[^\w\s/+.;:?!-]")
+SENTENCE_BOUNDARY_RE = re.compile(r"[.!?;]+")
 TOKEN_RE = re.compile(r"[a-z][a-z0-9/+.-]*")
+CONTRACTION_REPLACEMENTS = {
+    r"\bdon['’]?t\b": "do not",
+    r"\bdoesn['’]?t\b": "does not",
+    r"\bdidn['’]?t\b": "did not",
+    r"\bcan['’]?t\b": "cannot",
+    r"\bwon['’]?t\b": "will not",
+    r"\bisn['’]?t\b": "is not",
+    r"\baren['’]?t\b": "are not",
+    r"\bwasn['’]?t\b": "was not",
+    r"\bweren['’]?t\b": "were not",
+}
 MISSING_CHIEF_COMPLAINT_VALUES = {
     "",
     "none",
@@ -114,11 +133,21 @@ MISSING_CHIEF_COMPLAINT_VALUES = {
     "?",
 }
 
-# Common prefixes that sometimes remain in the extracted chief complaint field.
+# Common administrative prefixes/fragments that sometimes remain in the extracted
+# chief complaint field. These are stripped repeatedly from the beginning after
+# deidentification placeholders have been removed, so values such as
+# "CC: ___ PCP: ___" normalize to empty rather than to administrative labels.
 PREFIX_PATTERNS = [
-    re.compile(r"^\s*(?:cc|chief complaint)\s*:\s*", re.IGNORECASE),
+    re.compile(
+        r"^\s*(?:cc|chief complaint|pcp|primary care provider|provider|referring provider)\s*:\s*",
+        re.IGNORECASE,
+    ),
     re.compile(r"^\s*(?:admit(?:ted)?\s+for|admission\s+for)\s+", re.IGNORECASE),
     re.compile(r"^\s*(?:s/p|status post)\s+", re.IGNORECASE),
+    re.compile(
+        r"^\s*major\s+(?:surgical\s+)?or\s+invasive\s+procedure\s*:\s*",
+        re.IGNORECASE,
+    ),
 ]
 
 
@@ -237,6 +266,27 @@ def strip_prefixes(text: str) -> str:
 
 
 
+# Apply the shared cleanup steps before choosing whether sentence punctuation
+# should be preserved.
+def prepare_text_for_normalization(text: str) -> str:
+    value = str(text or "")
+    value = PLACEHOLDER_RE.sub(" ", value)
+    value = strip_prefixes(value)
+    value = value.lower().replace("&", " and ")
+    for pattern, replacement in CONTRACTION_REPLACEMENTS.items():
+        value = re.sub(pattern, replacement, value)
+    value = re.sub(r"\bs\.?\s*/\s*p\.?\b", " ", value)
+    return value
+
+
+# Expand a small set of frequent chief-complaint abbreviations.
+def expand_abbreviations(text: str) -> str:
+    value = text
+    for short, expanded in sorted(ABBREVIATIONS.items(), key=lambda item: len(item[0]), reverse=True):
+        value = re.sub(rf"(?<!\w){re.escape(short)}(?!\w)", expanded, value)
+    return SPACING_RE.sub(" ", value).strip()
+
+
 # Normalize one raw chief complaint string.
 #
 # This removes placeholders, strips common prefixes, lowercases text, expands a
@@ -246,19 +296,36 @@ def normalize_text(text: str) -> str:
     if pd.isna(text):
         return ""
 
-    value = str(text or "")
-    value = PLACEHOLDER_RE.sub(" ", value)
-    value = strip_prefixes(value)
-    value = value.lower().replace("&", " and ")
-    value = re.sub(r"\bs\.?\s*/\s*p\.?\b", " ", value)
+    value = prepare_text_for_normalization(text)
     value = PUNCT_RE.sub(" ", value)
     value = SPACING_RE.sub(" ", value).strip()
+    value = expand_abbreviations(value)
 
-    for short, expanded in sorted(ABBREVIATIONS.items(), key=lambda item: len(item[0]), reverse=True):
-        value = re.sub(rf"(?<!\w){re.escape(short)}(?!\w)", expanded, value)
-
-    value = SPACING_RE.sub(" ", value).strip()
     if value in MISSING_CHIEF_COMPLAINT_VALUES:
+        return ""
+    return value
+
+
+# Normalize one raw chief complaint for QuickUMLS + ConText.
+#
+# This intentionally preserves sentence boundaries so negation does not leak
+# from one sentence into the next, while keeping the main normalized complaint
+# unchanged for existing downstream steps.
+def normalize_context_text(text: str) -> str:
+    if pd.isna(text):
+        return ""
+
+    value = prepare_text_for_normalization(text)
+    value = CONTEXT_PUNCT_RE.sub(" ", value)
+    value = SPACING_RE.sub(" ", value).strip()
+    value = expand_abbreviations(value)
+    value = re.sub(r"\s+([.;:?!])", r"\1", value)
+    value = re.sub(r"([.;:?!])(?=\S)", r"\1 ", value)
+    value = SPACING_RE.sub(" ", value).strip()
+
+    missing_check = PUNCT_RE.sub(" ", value)
+    missing_check = SPACING_RE.sub(" ", missing_check).strip()
+    if missing_check in MISSING_CHIEF_COMPLAINT_VALUES:
         return ""
     return value
 
@@ -429,6 +496,75 @@ def quickumls_display_term(match: dict[str, Any]) -> str:
 
 
 
+# Add a prefix to negated QuickUMLS terms so negation is preserved for embedding
+# and matching instead of deleting the concept.
+def quickumls_polarized_display_term(match: dict[str, Any]) -> str:
+    term = quickumls_display_term(match)
+    if not term:
+        return ""
+    if match.get("is_negated"):
+        return f"negated:{term}"
+    return term
+
+
+
+# Return True if a simplified QuickUMLS match is negated in the local complaint
+# context. QuickUMLS provides character offsets; we turn each match into a
+# temporary spaCy entity and let MedSpaCy ConText evaluate negation scope. A
+# small local fallback catches common normalized phrases such as "do not feel".
+def is_negated_quickumls_match(
+    nlp: spacy.Language,
+    text: str,
+    match: dict[str, Any],
+) -> bool:
+    start = match.get("start")
+    end = match.get("end")
+    if start is None or end is None:
+        return False
+
+    try:
+        start = int(start)
+        end = int(end)
+    except (TypeError, ValueError):
+        return False
+
+    if start < 0 or end <= start or end > len(text):
+        return False
+
+    doc = nlp.make_doc(text)
+    doc = nlp.get_pipe("sentencizer")(doc)
+    span = doc.char_span(start, end, label="QUICKUMLS", alignment_mode="expand")
+    if span is None:
+        return False
+
+    doc.ents = [span]
+    doc = nlp.get_pipe("medspacy_context")(doc)
+    if doc.ents and bool(doc.ents[0]._.is_negated):
+        return True
+
+    preceding_text = text[:start].lower()
+    last_sentence_boundary = -1
+    for boundary in SENTENCE_BOUNDARY_RE.finditer(preceding_text):
+        last_sentence_boundary = boundary.end() - 1
+    if last_sentence_boundary >= 0:
+        preceding_text = preceding_text[last_sentence_boundary + 1:]
+
+    preceding_tokens = preceding_text.split()[-5:]
+    preceding_window = " ".join(preceding_tokens)
+    return (
+        any(token in {"no", "not", "denies", "denied", "without"} for token in preceding_tokens)
+        or any(
+            phrase in preceding_window
+            for phrase in [
+                "do not",
+                "does not",
+                "did not",
+            ]
+        )
+    )
+
+
+
 # Preserve first occurrence order while removing empty and duplicate values.
 def unique_nonempty(values: list[Any]) -> list[str]:
     seen = set()
@@ -453,6 +589,7 @@ def empty_quickumls_row() -> dict[str, Any]:
         "quickumls_terms": "",
         "quickumls_semtypes": "",
         "quickumls_extracted_text": "",
+        "quickumls_negated_terms": "",
         "has_quickumls_match": False,
     }
 
@@ -460,7 +597,11 @@ def empty_quickumls_row() -> dict[str, Any]:
 
 # Run QuickUMLS over normalized chief complaints and return one output row per
 # input complaint. 
-def extract_quickumls_rows(matcher, texts: pd.Series) -> pd.DataFrame:
+def extract_quickumls_rows(
+    matcher,
+    texts: pd.Series,
+    nlp: spacy.Language,
+) -> pd.DataFrame:
     if matcher is None:
         return pd.DataFrame([empty_quickumls_row() for _ in range(len(texts))])
 
@@ -487,7 +628,16 @@ def extract_quickumls_rows(matcher, texts: pd.Series) -> pd.DataFrame:
                 continue
             if not quickumls_display_term(simplified):
                 continue
+            simplified["is_negated"] = is_negated_quickumls_match(nlp, text, simplified)
             simplified_matches.append(simplified)
+
+        negated_terms = unique_nonempty(
+            [
+                quickumls_display_term(match)
+                for match in simplified_matches
+                if match["is_negated"]
+            ]
+        )
 
         deduped_matches = []
         seen = set()
@@ -506,7 +656,9 @@ def extract_quickumls_rows(matcher, texts: pd.Series) -> pd.DataFrame:
             deduped_matches.append(match)
 
         cuis = unique_nonempty([match["cui"] for match in deduped_matches])
-        terms = unique_nonempty([quickumls_display_term(match) for match in deduped_matches])
+        terms = unique_nonempty(
+            [quickumls_polarized_display_term(match) for match in deduped_matches]
+        )
         semtypes = unique_nonempty(
             [
                 semtype
@@ -525,6 +677,7 @@ def extract_quickumls_rows(matcher, texts: pd.Series) -> pd.DataFrame:
                 "quickumls_terms": " | ".join(terms),
                 "quickumls_semtypes": " | ".join(semtypes),
                 "quickumls_extracted_text": " | ".join(terms),
+                "quickumls_negated_terms": " | ".join(negated_terms),
                 "has_quickumls_match": bool(deduped_matches),
             }
         )
@@ -583,12 +736,16 @@ def preprocess_frame(
     output.insert(0, "source_table", group_name)
     output = output.rename(columns={"chief_complaint": "chief_complaint_raw"})
     output["chief_complaint_normalized"] = output["chief_complaint_raw"].map(normalize_text)
+    output["chief_complaint_context_text"] = output["chief_complaint_raw"].map(
+        normalize_context_text
+    )
     output["chief_complaint_tokens"] = output["chief_complaint_normalized"].map(extract_tokens)
 
     entity_rows = extract_entity_rows_with_medspacy(nlp, output["chief_complaint_normalized"])
     quickumls_rows = extract_quickumls_rows(
         quickumls_matcher,
-        output["chief_complaint_normalized"],
+        output["chief_complaint_context_text"],
+        nlp,
     )
     output = pd.concat(
         [
@@ -648,6 +805,7 @@ def write_sample(df: pd.DataFrame, group_name: str) -> None:
         "hadm_id",
         "chief_complaint_raw",
         "chief_complaint_normalized",
+        "chief_complaint_context_text",
         "chief_complaint_tokens",
         "psych_substance_self_harm_entities_affirmed",
         "psych_substance_self_harm_entities_negated",
@@ -658,6 +816,7 @@ def write_sample(df: pd.DataFrame, group_name: str) -> None:
         "quickumls_cuis",
         "quickumls_semtypes",
         "quickumls_extracted_text",
+        "quickumls_negated_terms",
         "quickumls_matches_json",
         "has_quickumls_match",
     ]

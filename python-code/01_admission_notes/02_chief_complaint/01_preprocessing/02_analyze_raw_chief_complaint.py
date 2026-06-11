@@ -8,7 +8,7 @@ Inputs:
     chief_complaint_parquets/MHC0_chief_complaints.parquet
 
 Outputs:
-    chief_complaint_raw_analysis_output folder
+    analysis_output_chief_complaint_raw folder
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import pandas as pd
 # Paths
 SCRIPT_DIR = Path(__file__).resolve().parent
 INPUT_DIR = SCRIPT_DIR / "chief_complaint_parquets"
-OUTPUT_DIR = SCRIPT_DIR / "chief_complaint_raw_analysis_output"
+OUTPUT_DIR = SCRIPT_DIR / "analysis_output_chief_complaint_raw"
 
 # Input parquet files produced by the chief-complaint export step.
 INPUTS = {

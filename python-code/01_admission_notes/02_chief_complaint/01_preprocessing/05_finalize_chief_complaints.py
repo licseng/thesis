@@ -4,7 +4,9 @@ This script reads the preprocessed chief-complaint parquet files and keeps only
 admissions that have:
     - a usable normalized chief complaint,
     - no psychiatric/substance/self-harm TargetMatcher flag, and
-    - at least one QuickUMLS match.
+    - at least one QuickUMLS match,
+    - no negated QuickUMLS term, and
+    - no likely parsing leakage based on QuickUMLS term count.
 
 The goal is to create a clean chief-complaint dataset for downstream semantic
 embedding and cohort matching.
@@ -38,6 +40,11 @@ INPUTS = {
     "MHC0": INPUT_DIR / "MHC0_chief_complaints_preprocessed.parquet",
 }
 
+# Exclude likely parsing-leakage rows. Manual review showed that chief complaints
+# with 9 or more QuickUMLS terms often contain HPI/history text rather than only
+# the chief complaint.
+MAX_QUICKUMLS_TERMS = 8
+
 # Required columns for filtering and final output.
 REQUIRED_COLUMNS = {
     "source_table",
@@ -50,6 +57,8 @@ REQUIRED_COLUMNS = {
     "psych_substance_self_harm_entities_negated",
     "has_affirmed_psych_substance_self_harm_entity",
     "has_quickumls_match",
+    "quickumls_terms",
+    "quickumls_negated_terms",
 }
 
 # Columns to preserve in the final dataset when present.
@@ -62,12 +71,8 @@ FINAL_COLUMNS = [
     "chief_complaint_normalized",
     "chief_complaint_tokens",
     "quickumls_terms",
-    "quickumls_cuis",
     "quickumls_semtypes",
     "quickumls_extracted_text",
-    "quickumls_matches_json",
-    "has_chief_complaint",
-    "has_quickumls_match",
 ]
 
 
@@ -97,12 +102,24 @@ def has_any_psych_flag(df: pd.DataFrame) -> pd.Series:
     return affirmed | negated
 
 
-# Keep only rows that are usable, not psych-flagged, and QuickUMLS-matched.
+# Count pipe-separated QuickUMLS terms in one row.
+def count_quickumls_terms(value: object) -> int:
+    if pd.isna(value):
+        return 0
+    return len([term.strip() for term in str(value).split("|") if term.strip()])
+
+
+# Keep only rows that are usable, not psych-flagged, QuickUMLS-matched, not
+# negated by QuickUMLS context, and not suspiciously long by QuickUMLS term count.
 def filter_final_chief_complaints(df: pd.DataFrame) -> pd.DataFrame:
+    quickumls_term_count = df["quickumls_terms"].map(count_quickumls_terms)
+    has_negated_quickumls_term = df["quickumls_negated_terms"].fillna("").ne("")
     mask = (
         df["has_chief_complaint"]
         & ~has_any_psych_flag(df)
         & df["has_quickumls_match"]
+        & ~has_negated_quickumls_term
+        & (quickumls_term_count <= MAX_QUICKUMLS_TERMS)
     )
     final = df.loc[mask].copy()
     columns = [column for column in FINAL_COLUMNS if column in final.columns]
