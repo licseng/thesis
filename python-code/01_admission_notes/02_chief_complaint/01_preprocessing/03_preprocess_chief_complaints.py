@@ -23,6 +23,7 @@ Important limitations:
 
 from __future__ import annotations
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -49,7 +50,12 @@ SAMPLE_RANDOM_SEED = 42
 # complaint text.
 
 USE_QUICKUMLS = True
-QUICKUMLS_INDEX_DIR = Path("QUICKUMLS_INDEX_DIR")
+QUICKUMLS_INDEX_DIR = Path(
+    os.environ.get(
+        "QUICKUMLS_INDEX_DIR",
+        Path.home() / "Downloads" / "thesis" / "quickumls_index_2026AA",
+    )
+)
 QUICKUMLS_THRESHOLD = 1 #how similar a phrase must be to a UMLS term to count as a match
 QUICKUMLS_WINDOW = 5 #the maximum phrase length QuickUMLS considers when scanning text
 QUICKUMLS_SIMILARITY_NAME = "jaccard" #jaccard compares token overlap
