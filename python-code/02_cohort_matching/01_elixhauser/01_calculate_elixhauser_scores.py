@@ -1,3 +1,36 @@
+"""Calculate Elixhauser comorbidity scores for cohort matching.
+
+This script builds one admission-level Elixhauser score table for each thesis
+cohort. It reads long-format ICD diagnosis rows from the local DuckDB database,
+cleans ICD codes, runs `comorbidipy` separately for ICD-9 and ICD-10 codes, then
+combines the results back to one row per hospital admission.
+
+The score is used later as a cohort-matching covariate together with chief
+complaint semantic similarity, age, and sex.
+
+Inputs:
+    DuckDB table admission_icd_lists_MHH_psychotic
+    DuckDB table admission_icd_lists_only_MHC0
+
+Expected input columns:
+    subject_id
+    hadm_id
+    icd_version
+    icd_code
+
+Outputs:
+    elixhauser_scores_output/elixhauser_MHH_psychotic.parquet
+    elixhauser_scores_output/elixhauser_MHH_psychotic.csv
+    elixhauser_scores_output/elixhauser_only_MHC0.parquet
+    elixhauser_scores_output/elixhauser_only_MHC0.csv
+    elixhauser_scores_output/elixhauser_summary.csv
+
+Method:
+    comorbidipy score="elixhauser"
+    variant="quan"
+    weighting="vanwalraven" (`vw` in comorbidipy)
+"""
+
 from __future__ import annotations
 
 import warnings
@@ -16,18 +49,21 @@ pandas_common.SettingWithCopyWarning = SettingWithCopyWarning
 import comorbidipy as com  # noqa: E402
 
 
+# Paths
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent.parent
 THESIS_DIR = PROJECT_DIR.parent.parent
 DB_PATH = THESIS_DIR / "DataBase"
 OUTPUT_DIR = SCRIPT_DIR / "elixhauser_scores_output"
 
+# Comorbidipy / Elixhauser configuration.
 REQUIRED_COLUMNS = {"subject_id", "hadm_id", "icd_version", "icd_code"}
 SCORE = "elixhauser"
 VARIANT = "quan"
 WEIGHTING = "vanwalraven"
 COMORBIDIPY_WEIGHTING = "vw"
 
+# Cohort-specific ICD diagnosis tables exported to DuckDB.
 INPUTS = {
     "MHH_psychotic": {
         "source_table": "admission_icd_lists_MHH_psychotic",
@@ -40,20 +76,25 @@ INPUTS = {
 }
 
 
+# Quote a string literal for SQL.
 def sql_string(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+# Quote a DuckDB table or column identifier.
 def quote_identifier(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
 
 
+# Confirm that the long-format ICD table has the columns needed by this step.
 def validate_columns(df: pd.DataFrame, path: str) -> None:
     missing_columns = sorted(REQUIRED_COLUMNS - set(df.columns))
     if missing_columns:
         raise ValueError(f"{path} is missing required columns: {missing_columns}")
 
 
+# Clean ICD codes into the format expected by comorbidipy:
+# string, stripped, dot-free, uppercase, non-empty.
 def clean_icd_codes(df: pd.DataFrame) -> pd.DataFrame:
     clean = df.copy()
     clean["icd_code"] = (
@@ -68,6 +109,7 @@ def clean_icd_codes(df: pd.DataFrame) -> pd.DataFrame:
     return clean
 
 
+# Create a stable admission identifier because comorbidipy expects one ID column.
 def add_admission_id(df: pd.DataFrame) -> pd.DataFrame:
     with_id = df.copy()
     with_id["admission_id"] = (
@@ -76,6 +118,8 @@ def add_admission_id(df: pd.DataFrame) -> pd.DataFrame:
     return with_id
 
 
+# Run comorbidipy on one ICD version subset. ICD-9 and ICD-10 are handled
+# separately because comorbidipy needs the ICD vocabulary specified explicitly.
 def run_comorbidipy_for_version(df: pd.DataFrame, icd_label: str) -> pd.DataFrame:
     if df.empty:
         print(f"No rows for {icd_label}; skipping comorbidipy.", flush=True)
@@ -103,6 +147,10 @@ def run_comorbidipy_for_version(df: pd.DataFrame, icd_label: str) -> pd.DataFram
     return result
 
 
+# Normalize the score column name returned by comorbidipy. Different package
+# versions may return slightly different score-column names. If no weighted
+# score is available, keep the output usable by falling back to an unweighted
+# count of numeric comorbidity flags and raise a warning.
 def standardize_score_column(df: pd.DataFrame) -> pd.DataFrame:
     standardized = df.copy()
     if standardized.empty:
@@ -148,6 +196,9 @@ def standardize_score_column(df: pd.DataFrame) -> pd.DataFrame:
     return standardized
 
 
+# Ensure every admission that had at least one diagnosis row remains in the final
+# table. Admissions with diagnosis rows but no returned Elixhauser flags are
+# assigned score 0.
 def ensure_all_admissions_present(original_dx: pd.DataFrame, elix_df: pd.DataFrame) -> pd.DataFrame:
     admissions = (
         original_dx[["admission_id", "subject_id", "hadm_id"]]
@@ -196,6 +247,8 @@ def ensure_all_admissions_present(original_dx: pd.DataFrame, elix_df: pd.DataFra
     return completed.loc[:, ordered_columns]
 
 
+# Combine ICD-9 and ICD-10 comorbidipy outputs. Scores are summed across ICD
+# versions, while indicator columns are combined as max/any.
 def combine_version_outputs(version_outputs: list[pd.DataFrame]) -> pd.DataFrame:
     non_empty_outputs = [df for df in version_outputs if not df.empty]
     if not non_empty_outputs:
@@ -214,6 +267,7 @@ def combine_version_outputs(version_outputs: list[pd.DataFrame]) -> pd.DataFrame
     return combined.groupby("admission_id", as_index=False).agg(aggregations)
 
 
+# Calculate and save Elixhauser scores for one cohort ICD table.
 def calculate_for_file(input_path: str, output_basename: str) -> pd.DataFrame:
     con = duckdb.connect(str(DB_PATH), read_only=True)
     try:
@@ -255,6 +309,7 @@ def calculate_for_file(input_path: str, output_basename: str) -> pd.DataFrame:
     return completed
 
 
+# Write a compact cohort-level summary for sanity checks and reporting.
 def write_summary(results: dict[str, pd.DataFrame]) -> None:
     rows = []
     for cohort_name, df in results.items():
@@ -282,6 +337,8 @@ def write_summary(results: dict[str, pd.DataFrame]) -> None:
     print(f"Saved summary to: {summary_path}", flush=True)
 
 
+# Script entry point: process each cohort table and write cohort outputs plus a
+# combined summary.
 def main() -> None:
     if not DB_PATH.exists():
         raise FileNotFoundError(f"No DuckDB database found at: {DB_PATH}")
