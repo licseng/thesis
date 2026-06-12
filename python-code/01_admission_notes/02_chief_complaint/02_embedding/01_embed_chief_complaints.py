@@ -1,3 +1,23 @@
+"""Embed finalized chief complaints with local Bio_ClinicalBERT.
+
+This script reads the finalized chief-complaint parquet files and embeds one
+text field per admission. The current default is `chief_complaint_normalized`,
+which keeps the cleaned chief complaint wording while benefiting from the
+updated parsing, prefix stripping, psychiatric-flag filtering, QuickUMLS coverage
+filtering, negation filtering, and long-term-list filtering done upstream.
+
+The model is downloaded from Hugging Face if needed, then runs locally with
+PyTorch. No chief-complaint text is sent to an external API.
+
+Inputs:
+    ../01_preprocessing/chief_complaint_final/MHH1_psychotic_chief_complaints_final.parquet
+    ../01_preprocessing/chief_complaint_final/MHC0_chief_complaints_final.parquet
+
+Outputs:
+    chief_complaint_embeddings/<group>_chief_complaint_embedding_metadata.parquet
+    chief_complaint_embeddings/<group>_chief_complaint_embeddings.npy
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,7 +30,7 @@ from transformers import AutoModel, AutoTokenizer
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-INPUT_DIR = SCRIPT_DIR.parent / "preprocessing" / "chief_complaint_preprocessed"
+INPUT_DIR = SCRIPT_DIR.parent / "01_preprocessing" / "chief_complaint_final"
 OUTPUT_DIR = SCRIPT_DIR / "chief_complaint_embeddings"
 
 MODEL_NAME = "emilyalsentzer/Bio_ClinicalBERT"
@@ -21,34 +41,40 @@ BATCH_SIZE = 8
 MAX_LENGTH = 64
 
 INPUTS = {
-    #"MHH1_psychotic": INPUT_DIR / "MHH1_psychotic_chief_complaints_preprocessed.parquet",
-    "MHC0": INPUT_DIR / "MHC0_chief_complaints_preprocessed.parquet",
+    "MHH1_psychotic": INPUT_DIR / "MHH1_psychotic_chief_complaints_final.parquet",
+    "MHC0": INPUT_DIR / "MHC0_chief_complaints_final.parquet",
 }
 
 BASE_METADATA_COLUMNS = [
+    "cohort",
     "source_table",
     "subject_id",
     "hadm_id",
     "chief_complaint_raw",
     "chief_complaint_normalized",
+    "quickumls_terms",
+    "quickumls_semtypes",
+    "quickumls_extracted_text",
 ]
 
 OPTIONAL_METADATA_COLUMNS = [
-    "physical_entities_affirmed",
     "psych_substance_self_harm_entities_affirmed",
-    "has_affirmed_physical_entity",
     "has_affirmed_psych_substance_self_harm_entity",
 ]
 
 
+# Quote a string literal for DuckDB SQL.
 def sql_string(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+# Quote a column identifier for DuckDB SQL.
 def sql_identifier(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
 
 
+# Pick the fastest available local device. CUDA is preferred, then Apple MPS,
+# then CPU.
 def get_device() -> torch.device:
     if torch.cuda.is_available():
         return torch.device("cuda")
@@ -57,6 +83,9 @@ def get_device() -> torch.device:
     return torch.device("cpu")
 
 
+# Load one finalized cohort file, filter to rows with valid embedding text, and
+# return metadata aligned to the future embedding matrix. `embedding_row_id = i`
+# means row i in this metadata table corresponds to row i in the `.npy` matrix.
 def load_group(group_name: str, parquet_path: Path) -> pd.DataFrame:
     if not parquet_path.exists():
         raise FileNotFoundError(f"Missing input parquet for {group_name}: {parquet_path}")
@@ -71,7 +100,7 @@ def load_group(group_name: str, parquet_path: Path) -> pd.DataFrame:
         ).fetchdf()
         available_columns = set(schema["column_name"])
 
-        required_columns = {"has_chief_complaint", *BASE_METADATA_COLUMNS}
+        required_columns = set(BASE_METADATA_COLUMNS)
         missing_columns = sorted(required_columns - available_columns)
         if missing_columns:
             raise ValueError(
@@ -88,8 +117,7 @@ def load_group(group_name: str, parquet_path: Path) -> pd.DataFrame:
             SELECT *
             FROM read_parquet({sql_string(str(parquet_path))})
             WHERE
-                coalesce(has_chief_complaint, false)
-                AND {text_column} IS NOT NULL
+                {text_column} IS NOT NULL
                 AND trim(cast({text_column} AS VARCHAR)) <> ''
             ORDER BY subject_id, hadm_id
             {limit_clause}
@@ -108,6 +136,8 @@ def load_group(group_name: str, parquet_path: Path) -> pd.DataFrame:
     return metadata
 
 
+# Mean-pool token embeddings over non-padding tokens. This uses the attention
+# mask so padding tokens do not affect the admission-level embedding.
 def mean_pool(last_hidden_state: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
     mask = attention_mask.unsqueeze(-1).type_as(last_hidden_state)
     summed = (last_hidden_state * mask).sum(dim=1)
@@ -115,6 +145,8 @@ def mean_pool(last_hidden_state: torch.Tensor, attention_mask: torch.Tensor) -> 
     return summed / counts
 
 
+# Embed a list of texts in batches. The output is L2-normalized, so cosine
+# similarity can later be computed as a dot product.
 def embed_texts(
     texts: list[str],
     tokenizer: AutoTokenizer,
@@ -150,6 +182,8 @@ def embed_texts(
     return np.vstack(embeddings)
 
 
+# Script entry point: load the tokenizer/model, embed each cohort, and save both
+# the metadata and embedding matrix for downstream matching.
 def main() -> None:
     OUTPUT_DIR.mkdir(exist_ok=True)
 
