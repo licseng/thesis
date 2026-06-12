@@ -12,6 +12,9 @@ Inputs:
 Outputs:
     analysis_output_matched_cohort/match_quality_summary.csv
     analysis_output_matched_cohort/match_type_counts.csv
+    analysis_output_matched_cohort/elixhauser_score_summary.csv
+    analysis_output_matched_cohort/elixhauser_difference_counts.csv
+    analysis_output_matched_cohort/elixhauser_score_pair_counts.csv
     analysis_output_matched_cohort/age_bin_distance_counts.csv
     analysis_output_matched_cohort/age_year_distance_summary.csv
     analysis_output_matched_cohort/age_year_distance_counts.csv
@@ -182,6 +185,106 @@ def build_match_type_counts(matched_pairs: pd.DataFrame) -> pd.DataFrame:
     return counts
 
 
+# Summarize exposed/control Elixhauser distributions and balance after matching.
+def build_elixhauser_score_summary(matched_pairs: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for cohort_label, column in [
+        ("MHH_psychotic", "mhh_elixhauser_score"),
+        ("only_MHC0", "mhc0_elixhauser_score"),
+    ]:
+        scores = pd.to_numeric(matched_pairs[column], errors="coerce")
+        rows.append(
+            {
+                "cohort": cohort_label,
+                "n_pairs": len(scores),
+                "mean_elixhauser_score": scores.mean(),
+                "sd_elixhauser_score": scores.std(ddof=1),
+                "median_elixhauser_score": scores.median(),
+                "q1_elixhauser_score": scores.quantile(0.25),
+                "q3_elixhauser_score": scores.quantile(0.75),
+                "min_elixhauser_score": scores.min(),
+                "max_elixhauser_score": scores.max(),
+                "n_score_zero": int(scores.eq(0).sum()),
+                "pct_score_zero": 100.0 * scores.eq(0).mean(),
+                "n_score_positive": int(scores.gt(0).sum()),
+                "pct_score_positive": 100.0 * scores.gt(0).mean(),
+                "n_score_10_or_higher": int(scores.ge(10).sum()),
+                "pct_score_10_or_higher": 100.0 * scores.ge(10).mean(),
+                "n_score_20_or_higher": int(scores.ge(20).sum()),
+                "pct_score_20_or_higher": 100.0 * scores.ge(20).mean(),
+            }
+        )
+
+    exposed = pd.to_numeric(matched_pairs["mhh_elixhauser_score"], errors="coerce")
+    control = pd.to_numeric(matched_pairs["mhc0_elixhauser_score"], errors="coerce")
+    rows.append(
+        {
+            "cohort": "balance_MHH_minus_MHC0",
+            "n_pairs": len(matched_pairs),
+            "mean_elixhauser_score": exposed.mean() - control.mean(),
+            "sd_elixhauser_score": pd.NA,
+            "median_elixhauser_score": (
+                exposed.median() - control.median()
+            ),
+            "q1_elixhauser_score": pd.NA,
+            "q3_elixhauser_score": pd.NA,
+            "min_elixhauser_score": pd.NA,
+            "max_elixhauser_score": pd.NA,
+            "n_score_zero": pd.NA,
+            "pct_score_zero": pd.NA,
+            "n_score_positive": pd.NA,
+            "pct_score_positive": pd.NA,
+            "n_score_10_or_higher": pd.NA,
+            "pct_score_10_or_higher": pd.NA,
+            "n_score_20_or_higher": pd.NA,
+            "pct_score_20_or_higher": pd.NA,
+            "smd_elixhauser": standardized_mean_difference(exposed, control),
+        }
+    )
+    return pd.DataFrame(rows)
+
+
+# Count how closely matched pairs align on the Elixhauser score.
+def build_elixhauser_difference_counts(matched_pairs: pd.DataFrame) -> pd.DataFrame:
+    bins = [-0.1, 0, 1, 2, 5, 10, 20, float("inf")]
+    labels = ["0", "1", "2", "3-5", "6-10", "11-20", ">20"]
+    counts = matched_pairs.copy()
+    counts["abs_elixhauser_difference_bin"] = pd.cut(
+        counts["abs_elixhauser_difference"],
+        bins=bins,
+        labels=labels,
+        include_lowest=True,
+    )
+    counts = (
+        counts.groupby("abs_elixhauser_difference_bin", observed=False)
+        .agg(n_pairs=("pair_id", "size"))
+        .reset_index()
+    )
+    counts["pct_pairs"] = 100.0 * counts["n_pairs"] / len(matched_pairs)
+    return counts
+
+
+# Cross-tab exposed/control Elixhauser scores to inspect exact score pairings.
+def build_elixhauser_score_pair_counts(matched_pairs: pd.DataFrame) -> pd.DataFrame:
+    counts = (
+        matched_pairs.groupby(["mhh_elixhauser_score", "mhc0_elixhauser_score"])
+        .agg(n_pairs=("pair_id", "size"))
+        .reset_index()
+        .sort_values(
+            ["n_pairs", "mhh_elixhauser_score", "mhc0_elixhauser_score"],
+            ascending=[False, True, True],
+        )
+    )
+    counts["pct_pairs"] = 100.0 * counts["n_pairs"] / len(matched_pairs)
+    counts["elixhauser_score_difference"] = (
+        counts["mhh_elixhauser_score"] - counts["mhc0_elixhauser_score"]
+    )
+    counts["abs_elixhauser_score_difference"] = counts[
+        "elixhauser_score_difference"
+    ].abs()
+    return counts
+
+
 # Count how often controls were selected from the same or neighboring age bins.
 def build_age_bin_distance_counts(matched_pairs: pd.DataFrame) -> pd.DataFrame:
     if "age_bin_distance" not in matched_pairs.columns:
@@ -276,6 +379,9 @@ def build_lowest_cosine_review(matched_pairs: pd.DataFrame) -> pd.DataFrame:
 def write_outputs(
     match_quality_summary: pd.DataFrame,
     match_type_counts: pd.DataFrame,
+    elixhauser_score_summary: pd.DataFrame,
+    elixhauser_difference_counts: pd.DataFrame,
+    elixhauser_score_pair_counts: pd.DataFrame,
     age_bin_distance_counts: pd.DataFrame,
     age_year_distance_summary: pd.DataFrame,
     age_year_distance_counts: pd.DataFrame,
@@ -285,6 +391,11 @@ def write_outputs(
     outputs = {
         "match_quality_summary": OUTPUT_DIR / "match_quality_summary.csv",
         "match_type_counts": OUTPUT_DIR / "match_type_counts.csv",
+        "elixhauser_score_summary": OUTPUT_DIR / "elixhauser_score_summary.csv",
+        "elixhauser_difference_counts": OUTPUT_DIR
+        / "elixhauser_difference_counts.csv",
+        "elixhauser_score_pair_counts": OUTPUT_DIR
+        / "elixhauser_score_pair_counts.csv",
         "age_bin_distance_counts": OUTPUT_DIR / "age_bin_distance_counts.csv",
         "age_year_distance_summary": OUTPUT_DIR / "age_year_distance_summary.csv",
         "age_year_distance_counts": OUTPUT_DIR / "age_year_distance_counts.csv",
@@ -292,6 +403,15 @@ def write_outputs(
     }
     match_quality_summary.to_csv(outputs["match_quality_summary"], index=False)
     match_type_counts.to_csv(outputs["match_type_counts"], index=False)
+    elixhauser_score_summary.to_csv(
+        outputs["elixhauser_score_summary"], index=False
+    )
+    elixhauser_difference_counts.to_csv(
+        outputs["elixhauser_difference_counts"], index=False
+    )
+    elixhauser_score_pair_counts.to_csv(
+        outputs["elixhauser_score_pair_counts"], index=False
+    )
     age_bin_distance_counts.to_csv(outputs["age_bin_distance_counts"], index=False)
     age_year_distance_summary.to_csv(outputs["age_year_distance_summary"], index=False)
     age_year_distance_counts.to_csv(outputs["age_year_distance_counts"], index=False)
@@ -306,6 +426,9 @@ def main() -> None:
 
     match_quality_summary = build_match_quality_summary(matched_pairs)
     match_type_counts = build_match_type_counts(matched_pairs)
+    elixhauser_score_summary = build_elixhauser_score_summary(matched_pairs)
+    elixhauser_difference_counts = build_elixhauser_difference_counts(matched_pairs)
+    elixhauser_score_pair_counts = build_elixhauser_score_pair_counts(matched_pairs)
     age_bin_distance_counts = build_age_bin_distance_counts(matched_pairs)
     age_year_distance_summary = build_age_year_distance_summary(matched_pairs)
     age_year_distance_counts = build_age_year_distance_counts(matched_pairs)
@@ -314,6 +437,9 @@ def main() -> None:
     outputs = write_outputs(
         match_quality_summary,
         match_type_counts,
+        elixhauser_score_summary,
+        elixhauser_difference_counts,
+        elixhauser_score_pair_counts,
         age_bin_distance_counts,
         age_year_distance_summary,
         age_year_distance_counts,
@@ -324,6 +450,10 @@ def main() -> None:
     print(match_quality_summary.to_string(index=False))
     print("\n=== Age Distance In Years ===")
     print(age_year_distance_summary.to_string(index=False))
+    print("\n=== Elixhauser Score Summary ===")
+    print(elixhauser_score_summary.to_string(index=False))
+    print("\n=== Elixhauser Absolute Difference Counts ===")
+    print(elixhauser_difference_counts.to_string(index=False))
     if not matching_summary.empty:
         print("\n=== Original Matching Summary ===")
         print(matching_summary.to_string(index=False))
