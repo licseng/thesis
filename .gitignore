@@ -9,6 +9,7 @@ __pycache__/
 
 # Archived pre-reorganization code and generated outputs
 python-code-old/
+sql-scripts/
 
 # Generated outputs from current Python analyses
 python-code/01_admission_notes/parsed_admission_notes/
