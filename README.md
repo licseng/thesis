@@ -162,20 +162,3 @@ analysis_output_*/
 ```
 
 Regenerate these locally by running the pipeline scripts in order.
-
-## Local Configuration
-
-Use environment variables or ignored local helper files for machine-specific
-paths. Do not hardcode local absolute paths in tracked scripts.
-
-Recommended local patterns:
-
-```bash
-export QUICKUMLS_INDEX_DIR="/path/to/quickumls_index"
-```
-
-```sql
-@set mimic_dirs=/path/to/mimic/files
-```
-
-If a local config file is needed, add it to `.gitignore` before using it.
