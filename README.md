@@ -55,15 +55,21 @@ The numbered folders follow the main analysis order.
 python-code/01_admission_notes/
 ```
 
-Main script:
+Discharge-note parsing scripts:
 
 ```text
-01_parse_discharge_notes_for_admission_part.py
+01_discharge_note_parsing/01_parse_chief_complaints_from_discharge_notes.py
+01_discharge_note_parsing/02_parse_full_discharge_notes.py
 ```
 
-This parses admission-relevant sections from MIMIC-IV discharge notes exported
-from DuckDB. It extracts fields such as chief complaint and present illness into
-local parquet outputs.
+The first parser extracts only the chief complaint from MIMIC-IV discharge
+notes exported from DuckDB. Its local outputs are used by the downstream chief
+complaint preprocessing step.
+
+The second parser creates a broader full-discharge-note section map for later
+psychiatric-history detection. It parses only admissions that are already in the
+matched case/control cohort, preserves the original note text locally, and also
+writes named section columns plus a JSON map of detected headings.
 
 ### Chief Complaint Preprocessing
 
@@ -151,7 +157,8 @@ balance.
 Generated outputs are intentionally ignored by Git. Examples include:
 
 ```text
-parsed_admission_notes/
+parsed_chief_complaints/
+full_discharge_note_sections/
 chief_complaint_preprocessed/
 chief_complaint_final/
 chief_complaint_embeddings/

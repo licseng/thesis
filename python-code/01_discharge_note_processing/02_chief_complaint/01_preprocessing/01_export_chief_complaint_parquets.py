@@ -1,16 +1,17 @@
-"""Export minimal chief-complaint parquet files from parsed admission notes.
+"""Export minimal chief-complaint parquet files from parsed discharge notes.
 
 This script is a bridge between the discharge-note parsing step and the chief
-complaint preprocessing step. The parsed admission-note parquet files contain
-multiple extracted note sections and metadata columns, but the chief-complaint
-preprocessing script only needs three columns:
+complaint preprocessing step. The parsed chief-complaint parquet files may
+contain metadata columns, but the chief-complaint preprocessing script only
+needs three columns:
     - subject_id
     - hadm_id
     - chief_complaint
 
 Inputs:
-    parsed_admission_notes/MHH_psychotic_admission_notes.parquet
-    parsed_admission_notes/MHC0_admission_notes.parquet
+    ../../01_discharge_note_parsing/parsed_chief_complaints/
+        MHH_psychotic_chief_complaints_from_discharge_notes.parquet
+        MHC0_chief_complaints_from_discharge_notes.parquet
 
 Outputs:
     chief_complaint_parquets/MHH1_psychotic_chief_complaints.parquet
@@ -28,13 +29,17 @@ import duckdb
 
 # Paths
 SCRIPT_DIR = Path(__file__).resolve().parent
-PARQUET_DIR = SCRIPT_DIR.parent.parent / "parsed_admission_notes"
+PARQUET_DIR = SCRIPT_DIR.parent.parent / "01_discharge_note_parsing" / "parsed_chief_complaints"
 OUTPUT_DIR = SCRIPT_DIR / "chief_complaint_parquets"
 
 # Input-to-output mapping
 EXPORTS = {
-    "MHH1_psychotic_chief_complaints.parquet": PARQUET_DIR / "MHH_psychotic_admission_notes.parquet",
-    "MHC0_chief_complaints.parquet": PARQUET_DIR / "MHC0_admission_notes.parquet",
+    "MHH1_psychotic_chief_complaints.parquet": (
+        PARQUET_DIR / "MHH_psychotic_chief_complaints_from_discharge_notes.parquet"
+    ),
+    "MHC0_chief_complaints.parquet": (
+        PARQUET_DIR / "MHC0_chief_complaints_from_discharge_notes.parquet"
+    ),
 }
 
 # Safely quote a Python string as a SQL string literal for DuckDB queries.
