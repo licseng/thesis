@@ -10,7 +10,7 @@ For each cohort, it combines:
     - Elixhauser comorbidity score from the prior Elixhauser step.
 
 Inputs:
-    ../../01_admission_notes/02_chief_complaint/02_embedding/chief_complaint_embeddings/
+    ../../01_discharge_note_processing/02_chief_complaint/02_embedding/chief_complaint_embeddings/
     ../01_elixhauser/elixhauser_scores_output/
     DuckDB tables export_MHH_psychotic and export_only_MHC0
 
@@ -39,7 +39,7 @@ DB_PATH = THESIS_DIR / "DataBase"
 
 CHIEF_COMPLAINT_EMBEDDING_DIR = (
     PROJECT_DIR
-    / "01_admission_notes"
+    / "01_discharge_note_processing"
     / "02_chief_complaint"
     / "02_embedding"
     / "chief_complaint_embeddings"
