@@ -229,7 +229,26 @@ TARGET_RULES = {
     },
     "psychosis": {
         "entity_type": "psych_substance_self_harm",
-        "literals": ["psychosis", "psychotic", "paranoia", "paranoid", "delusions", "delusional"],
+        "literals": [
+            "psychiatric",
+            "psychiatric complaint",
+            "psychiatric evaluation",
+            "psychiatric problem",
+            "psych eval",
+            "psych evaluation",
+            "psych complaint",
+            "psychosis",
+            "psychotic",
+            "paranoia",
+            "paranoid",
+            "delusions",
+            "delusional",
+            "schizophrenia",
+            "schizophrenic",
+            "schizoaffective",
+            "schizoaffective disorder",
+            "paranoid schizophrenia",
+        ],
     },
     "substance_use": {
         "entity_type": "psych_substance_self_harm",
@@ -247,7 +266,13 @@ TARGET_RULES = {
     },
     "suicidal_ideation": {
         "entity_type": "psych_substance_self_harm",
-        "literals": ["suicidal ideation", "suicidal", "suicide", "si"],
+        "literals": [
+            "suicidal ideation",
+            "suicidal",
+            "suicide",
+            "suicidality",
+            "si",
+        ],
     },
 }
 
