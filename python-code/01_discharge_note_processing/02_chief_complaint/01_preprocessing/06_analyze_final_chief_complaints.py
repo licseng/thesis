@@ -57,7 +57,6 @@ REQUIRED_COLUMNS = {
     "chief_complaint_raw",
     "chief_complaint_normalized",
     "quickumls_terms",
-    "quickumls_cuis",
     "quickumls_semtypes",
     "quickumls_extracted_text",
 }
