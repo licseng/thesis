@@ -63,7 +63,7 @@ ADMISSION_SECTIONS = {
 }
 
 CHIEF_COMPLAINT_BOUNDARY_PATTERN = (
-    r"(?:hpi|[A-Z][A-Za-z]{4,}(?:\s+(?:[A-Za-z]{2,}|_+)){0,8})\s*:"
+    r"(?:hpi|[A-Z][A-Za-z]{4,}(?:[ \t]+(?:[A-Za-z]{2,}|_+)){0,8})[ \t]*:"
 )
 
 

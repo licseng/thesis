@@ -164,6 +164,17 @@ HEADING_LINE_RE = re.compile(
     r"^\s*(?P<heading>[A-Za-z][A-Za-z0-9/_&,\-() ]{1,90}|[A-Z]{2,12})\s*:\s*(?P<rest>.*)$"
 )
 
+# Keep the full-note parser's chief_complaint column aligned with the dedicated
+# chief-complaint pipeline. That earlier pipeline extracts only text after
+# "Chief Complaint:" and stops at the next likely section heading.
+CHIEF_COMPLAINT_BOUNDARY_PATTERN = (
+    r"(?:hpi|[A-Z][A-Za-z]{4,}(?:[ \t]+(?:[A-Za-z]{2,}|_+)){0,8})[ \t]*:"
+)
+CHIEF_COMPLAINT_RE = re.compile(
+    rf"(?i)(?:{re.escape('chief complaint:')})"
+    rf"([\s\S]+?)(?:\n\s*(?:{CHIEF_COMPLAINT_BOUNDARY_PATTERN})|$)"
+)
+
 
 def quote_identifier(identifier: str) -> str:
     """Safely quote a SQL identifier."""
@@ -252,6 +263,22 @@ def clean_section_text(text: str) -> str:
     return text
 
 
+def extract_pipeline_chief_complaint(note_text: str) -> str:
+    """Extract chief complaint with the dedicated chief-complaint parser logic."""
+    note_text = re.sub(
+        r"(?i)___\nFamily History:",
+        "___\n\nFamily History:",
+        note_text or "",
+    )
+    match = CHIEF_COMPLAINT_RE.search(note_text)
+    if not match:
+        return ""
+    chief_complaint = match.group(1).replace("\n", " ").strip()
+    if chief_complaint.startswith("[]"):
+        return ""
+    return chief_complaint
+
+
 def parse_sections(note_text: str) -> dict[str, Any]:
     """Parse one discharge note into canonical section columns plus JSON map."""
     note_text = note_text or ""
@@ -297,6 +324,7 @@ def parse_sections(note_text: str) -> dict[str, Any]:
         section: " ".join(section_texts.get(section, [])).strip()
         for section in CANONICAL_SECTIONS
     }
+    parsed["chief_complaint"] = extract_pipeline_chief_complaint(note_text)
     parsed["unsectioned_text"] = " ".join(
         section["text"]
         for section in sections
