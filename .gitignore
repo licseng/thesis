@@ -38,10 +38,10 @@ python-code/02_cohort_matching/01_elixhauser/elixhauser_scores_output/
 python-code/02_cohort_matching/02_matching_variables/matching_variable_tables_output/
 python-code/02_cohort_matching/matched_cohort_output/
 python-code/02_cohort_matching/analysis_output_matched_cohort/
-python-code/04_LLM_flagging/02_psych_history_classifier/psych_history_classifier_output/
-python-code/04_LLM_flagging/02_psych_history_classifier/psych_history_keyword_exploration_output/
 python-code/04_LLM_flagging/analysis_output_psych_keyword_exploration/
 python-code/04_LLM_flagging/psych_history_classifier_output/
+python-code/04_classification/analysis_output_psych_keyword_exploration/
+python-code/04_classification/psych_history_classifier_output/
 
 # Generated HTML visualization output
 html-visualization/
