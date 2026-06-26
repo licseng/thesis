@@ -5,7 +5,7 @@ modify, or filter the matched cohort. The matched cohort is already defined by
 `02_cohort_matching/03_match_chief_complaint_cohorts.py`.
 
 The script converts matched pairs into one row per admission, attaches the
-already-computed Bio_ClinicalBERT embedding for each admission, and runs two
+already-computed Bio_ClinicalBERT embedding for each admission, and runs three
 independent clustering routes:
 
 1. BERT route:
@@ -17,6 +17,16 @@ independent clustering routes:
    - reduce with TruncatedSVD
    - cluster with UMAP + HDBSCAN
    - create a 2D UMAP projection for plotting
+
+3. Agglomerative route:
+   - cluster matched-admission Bio_ClinicalBERT embeddings directly with cosine
+     agglomerative clustering across several candidate k values
+   - produce broad, reviewable candidate complaint groups for downstream
+     workup/lab comparison
+
+The agglomerative route is not intended to prove individual pair validity. It is
+for clinically interpretable candidate grouping; final complaint groups will
+likely need manual review and possibly manual merging.
 
 Outputs are local QC artifacts under:
     03_clustering/chief_complaint_cluster_qc_output/
@@ -32,8 +42,13 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.cluster import AgglomerativeClustering
 from sklearn.decomposition import TruncatedSVD
-from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+from sklearn.feature_extraction.text import (
+    CountVectorizer,
+    ENGLISH_STOP_WORDS,
+    TfidfVectorizer,
+)
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -44,7 +59,7 @@ MATCHED_PAIRS_PATH = (
 )
 EMBEDDING_DIR = (
     PROJECT_DIR
-    / "01_admission_notes"
+    / "01_discharge_note_processing"
     / "02_chief_complaint"
     / "02_embedding"
     / "chief_complaint_embeddings"
@@ -62,6 +77,9 @@ RANDOM_STATE = 42
 #   "bert"  - Bio_ClinicalBERT embeddings only
 #   "tfidf" - normalized chief complaint TF-IDF only
 #   "both"  - run both routes
+#   "agglomerative" - Bio_ClinicalBERT agglomerative clustering only
+#   "lexical_hierarchy" - frequency-aware parent complaint candidates
+#   "all" - run BERT, TF-IDF, agglomerative, and lexical hierarchy routes
 CLUSTERING_ROUTE = "both"
 
 # UMAP/HDBSCAN starting parameters.
@@ -78,6 +96,27 @@ TFIDF_NGRAM_RANGE = (1, 3)
 TFIDF_MIN_DF = 3
 TFIDF_MAX_DF = 0.80
 SVD_MAX_COMPONENTS = 50
+
+# Agglomerative route candidate cluster counts. This route is meant to create
+# broad candidate complaint groups for workup/lab comparison, then support manual
+# review and manual merging into clinically meaningful groups.
+AGGLOMERATIVE_N_CLUSTERS_LIST = [20, 30, 40, 50, 75]
+
+# Lexical hierarchy route settings. This route is not standard clustering; it
+# extracts frequent parent/core complaint phrases and their longer child
+# complaints for manual review into broad workup/lab comparison groups.
+LEXICAL_NGRAM_RANGE = (1, 5)
+LEXICAL_MIN_PARENT_FREQUENCY = 20
+LEXICAL_MIN_CHILD_COMPLAINTS = 2
+LEXICAL_MAX_EXAMPLE_CHILDREN = 20
+LEXICAL_SINGLE_TOKEN_PARENT_TERMS = {
+    "fall",
+    "fever",
+    "fracture",
+    "seizure",
+    "syncope",
+    "trauma",
+}
 
 # Human-readable cluster summaries.
 TOP_COMPLAINTS_N = 10
@@ -120,10 +159,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--route",
         default=CLUSTERING_ROUTE,
-        choices=["1", "2", "3", "bert", "tfidf", "both"],
+        choices=[
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "bert",
+            "tfidf",
+            "both",
+            "agglomerative",
+            "lexical_hierarchy",
+            "all",
+        ],
         help=(
             "Clustering route to run. Use 1/bert for BERT, 2/tfidf for TF-IDF, "
-            "or 3/both for both routes. Default comes from CLUSTERING_ROUTE."
+            "3/both for both HDBSCAN routes, 4/agglomerative for cosine "
+            "agglomerative clustering, 6/lexical_hierarchy for parent complaint "
+            "candidates, or 5/all for all routes. Default comes from "
+            "CLUSTERING_ROUTE."
         ),
     )
     return parser.parse_args()
@@ -132,7 +187,14 @@ def parse_args() -> argparse.Namespace:
 def normalize_route_value(route_value: str) -> str:
     """Map numeric route choices to readable route names."""
     route = route_value.strip().lower()
-    numeric_map = {"1": "bert", "2": "tfidf", "3": "both"}
+    numeric_map = {
+        "1": "bert",
+        "2": "tfidf",
+        "3": "both",
+        "4": "agglomerative",
+        "5": "all",
+        "6": "lexical_hierarchy",
+    }
     return numeric_map.get(route, route)
 
 
@@ -141,10 +203,13 @@ def selected_routes(route_value: str) -> set[str]:
     route = normalize_route_value(route_value)
     if route == "both":
         return {"bert", "tfidf"}
-    if route in {"bert", "tfidf"}:
+    if route == "all":
+        return {"bert", "tfidf", "agglomerative", "lexical_hierarchy"}
+    if route in {"bert", "tfidf", "agglomerative", "lexical_hierarchy"}:
         return {route}
     raise ValueError(
-        "CLUSTERING_ROUTE must be one of: 'bert', 'tfidf', or 'both'. "
+        "CLUSTERING_ROUTE must be one of: 'bert', 'tfidf', 'both', "
+        "'agglomerative', 'lexical_hierarchy', or 'all'. "
         f"Current value: {route_value!r}"
     )
 
@@ -412,6 +477,40 @@ def run_tfidf_clustering(
     return results
 
 
+def fit_agglomerative_cosine(n_clusters: int) -> AgglomerativeClustering:
+    """Create cosine agglomerative clustering across sklearn API versions."""
+    try:
+        return AgglomerativeClustering(
+            n_clusters=n_clusters,
+            metric="cosine",
+            linkage="average",
+        )
+    except TypeError:
+        return AgglomerativeClustering(
+            n_clusters=n_clusters,
+            affinity="cosine",
+            linkage="average",
+        )
+
+
+def run_agglomerative_clustering(embeddings: np.ndarray) -> dict[int, np.ndarray]:
+    """Cluster Bio_ClinicalBERT embeddings for several candidate k values."""
+    results = {}
+    for n_clusters in AGGLOMERATIVE_N_CLUSTERS_LIST:
+        if n_clusters < 2:
+            raise ValueError("Agglomerative clustering requires at least 2 clusters.")
+        if n_clusters > len(embeddings):
+            raise ValueError(
+                f"Cannot run agglomerative k={n_clusters} with only "
+                f"{len(embeddings)} admissions."
+            )
+        clusterer = fit_agglomerative_cosine(n_clusters)
+        labels = clusterer.fit_predict(embeddings)
+        results[n_clusters] = labels
+        print(f"Agglomerative route k={n_clusters}: {len(set(labels))} clusters")
+    return results
+
+
 def split_terms(value: Any) -> list[str]:
     """Split pipe-separated QuickUMLS terms for optional summaries."""
     if pd.isna(value):
@@ -448,6 +547,219 @@ def top_text_terms(texts: pd.Series, n: int = TOP_TERMS_N) -> str:
     terms = np.asarray(vectorizer.get_feature_names_out())
     order = np.argsort(counts)[::-1][:n]
     return " | ".join(f"{terms[i]} ({int(counts[i])})" for i in order)
+
+
+def complaint_tokens(text: Any) -> tuple[str, ...]:
+    """Tokenize a normalized chief complaint for lexical hierarchy matching."""
+    return tuple(str(text or "").lower().split())
+
+
+def token_ngrams(tokens: tuple[str, ...], min_n: int, max_n: int) -> set[tuple[str, ...]]:
+    """Return unique contiguous token n-grams from one token tuple."""
+    ngrams = set()
+    upper = min(max_n, len(tokens))
+    for n in range(min_n, upper + 1):
+        for start in range(0, len(tokens) - n + 1):
+            ngrams.add(tokens[start : start + n])
+    return ngrams
+
+
+def contains_token_sequence(
+    child_tokens: tuple[str, ...],
+    parent_tokens: tuple[str, ...],
+) -> bool:
+    """Return True when parent_tokens occur contiguously inside child_tokens."""
+    if not parent_tokens or len(parent_tokens) > len(child_tokens):
+        return False
+    width = len(parent_tokens)
+    return any(
+        child_tokens[start : start + width] == parent_tokens
+        for start in range(0, len(child_tokens) - width + 1)
+    )
+
+
+def is_meaningful_parent_phrase(parent_tokens: tuple[str, ...]) -> bool:
+    """Filter away generic lexical parent candidates."""
+    if not parent_tokens:
+        return False
+    if all(token in ENGLISH_STOP_WORDS for token in parent_tokens):
+        return False
+    if len(parent_tokens) == 1:
+        return parent_tokens[0] in LEXICAL_SINGLE_TOKEN_PARENT_TERMS
+    if parent_tokens[0] in ENGLISH_STOP_WORDS or parent_tokens[-1] in ENGLISH_STOP_WORDS:
+        return False
+    return any(token not in ENGLISH_STOP_WORDS for token in parent_tokens)
+
+
+def prune_redundant_lexical_parents(
+    candidates: pd.DataFrame,
+    assignments: pd.DataFrame,
+    overlap_threshold: float = 0.85,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Drop shorter lexical fragments nearly covered by longer parent phrases."""
+    if candidates.empty or assignments.empty:
+        return candidates, assignments
+
+    parent_to_keys = {
+        parent: set(zip(group["cohort"], group["subject_id"], group["hadm_id"]))
+        for parent, group in assignments.groupby("parent_phrase")
+    }
+    parent_to_tokens = {
+        parent: complaint_tokens(parent)
+        for parent in candidates["parent_phrase"]
+    }
+    parent_to_exact_count = candidates.set_index("parent_phrase")[
+        "parent_exact_count"
+    ].to_dict()
+
+    redundant_parents = set()
+    parents = list(parent_to_tokens)
+    for parent in parents:
+        parent_tokens = parent_to_tokens[parent]
+        parent_keys = parent_to_keys.get(parent, set())
+        if not parent_keys or parent_to_exact_count.get(parent, 0) > 0:
+            continue
+
+        for longer_parent in parents:
+            if parent == longer_parent:
+                continue
+            longer_tokens = parent_to_tokens[longer_parent]
+            if len(longer_tokens) <= len(parent_tokens):
+                continue
+            if not contains_token_sequence(longer_tokens, parent_tokens):
+                continue
+
+            longer_keys = parent_to_keys.get(longer_parent, set())
+            overlap = len(parent_keys & longer_keys) / len(parent_keys)
+            if overlap >= overlap_threshold:
+                redundant_parents.add(parent)
+                break
+
+    if not redundant_parents:
+        return candidates, assignments
+
+    candidates = candidates.loc[
+        ~candidates["parent_phrase"].isin(redundant_parents)
+    ].copy()
+    assignments = assignments.loc[
+        ~assignments["parent_phrase"].isin(redundant_parents)
+    ].copy()
+    return candidates, assignments
+
+
+def build_lexical_parent_complaint_candidates(
+    admissions: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Build frequency-aware parent complaint candidates and row assignments.
+
+    This route extracts frequent short/core phrases that appear as exact
+    complaints and/or as token subsequences inside longer complaints. It is a
+    review aid for candidate workup/lab comparison groups, not a formal
+    validation of individual matching.
+    """
+    working = admissions.copy()
+    working["chief_complaint_normalized"] = (
+        working["chief_complaint_normalized"].fillna("").astype(str).str.strip()
+    )
+    working = working.loc[working["chief_complaint_normalized"].ne("")].copy()
+    working["complaint_tokens"] = working["chief_complaint_normalized"].map(
+        complaint_tokens
+    )
+
+    exact_counts = Counter(working["chief_complaint_normalized"])
+    complaint_to_tokens = (
+        working.drop_duplicates("chief_complaint_normalized")
+        .set_index("chief_complaint_normalized")["complaint_tokens"]
+        .to_dict()
+    )
+
+    phrase_admission_counts: Counter[tuple[str, ...]] = Counter()
+    for tokens in working["complaint_tokens"]:
+        for ngram in token_ngrams(tokens, *LEXICAL_NGRAM_RANGE):
+            phrase_admission_counts[ngram] += 1
+
+    candidate_rows = []
+    assignment_rows = []
+    for parent_tokens, phrase_count in phrase_admission_counts.items():
+        if phrase_count < LEXICAL_MIN_PARENT_FREQUENCY:
+            continue
+        if not is_meaningful_parent_phrase(parent_tokens):
+            continue
+
+        parent_phrase = " ".join(parent_tokens)
+        child_complaints = []
+        for complaint, tokens in complaint_to_tokens.items():
+            if contains_token_sequence(tokens, parent_tokens):
+                child_complaints.append(complaint)
+
+        if len(child_complaints) < LEXICAL_MIN_CHILD_COMPLAINTS:
+            continue
+        if not any(len(complaint_to_tokens[child]) > len(parent_tokens) for child in child_complaints):
+            continue
+
+        group = working.loc[
+            working["chief_complaint_normalized"].isin(child_complaints)
+        ].copy()
+        if group.empty:
+            continue
+
+        frequent_children = Counter(group["chief_complaint_normalized"]).most_common(
+            LEXICAL_MAX_EXAMPLE_CHILDREN
+        )
+        exact_count = exact_counts.get(parent_phrase, 0)
+        candidate_rows.append(
+            {
+                "parent_phrase": parent_phrase,
+                "parent_exact_count": int(exact_count),
+                "total_group_admissions": len(group),
+                "n_unique_child_complaints": len(child_complaints),
+                "n_MHH1_psychotic": int(group["cohort"].eq("MHH1_psychotic").sum()),
+                "n_MHC0": int(group["cohort"].eq("MHC0").sum()),
+                "pct_MHH1_psychotic": 100.0
+                * group["cohort"].eq("MHH1_psychotic").mean(),
+                "example_child_complaints": " | ".join(
+                    sorted(child_complaints)[:LEXICAL_MAX_EXAMPLE_CHILDREN]
+                ),
+                "most_frequent_child_complaints": " | ".join(
+                    f"{complaint} ({count})"
+                    for complaint, count in frequent_children
+                ),
+                "suggested_manual_label": "",
+                "include_for_workup_analysis": "",
+                "reviewer_notes": "",
+            }
+        )
+
+        for row in group.itertuples(index=False):
+            assignment_rows.append(
+                {
+                    "parent_phrase": parent_phrase,
+                    "is_exact_parent_complaint": bool(
+                        row.chief_complaint_normalized == parent_phrase
+                    ),
+                    "pair_id": row.pair_id,
+                    "cohort": row.cohort,
+                    "subject_id": row.subject_id,
+                    "hadm_id": row.hadm_id,
+                    "chief_complaint_normalized": row.chief_complaint_normalized,
+                }
+            )
+
+    candidates = pd.DataFrame(candidate_rows)
+    if not candidates.empty:
+        candidates = candidates.sort_values(
+            ["total_group_admissions", "parent_exact_count", "parent_phrase"],
+            ascending=[False, False, True],
+        )
+
+    assignments = pd.DataFrame(assignment_rows)
+    if not assignments.empty:
+        assignments = assignments.sort_values(
+            ["parent_phrase", "pair_id", "cohort", "subject_id", "hadm_id"]
+        )
+
+    return prune_redundant_lexical_parents(candidates, assignments)
+
 
 
 def build_cluster_summary(
@@ -494,6 +806,9 @@ def build_pair_agreement(admissions: pd.DataFrame, routes: set[str]) -> pd.DataF
         required.add("bert_cluster")
     if "tfidf" in routes:
         required.add("tfidf_cluster")
+    if "agglomerative" in routes:
+        for n_clusters in AGGLOMERATIVE_N_CLUSTERS_LIST:
+            required.add(f"agglomerative_k{n_clusters}_cluster")
 
     missing = sorted(required - set(admissions.columns))
     if missing:
@@ -549,6 +864,21 @@ def build_pair_agreement(admissions: pd.DataFrame, routes: set[str]) -> pd.DataF
                     ),
                 }
             )
+
+        if "agglomerative" in routes:
+            for n_clusters in AGGLOMERATIVE_N_CLUSTERS_LIST:
+                cluster_column = f"agglomerative_k{n_clusters}_cluster"
+                mhh_cluster = int(mhh[cluster_column])
+                mhc0_cluster = int(mhc0[cluster_column])
+                row.update(
+                    {
+                        f"agglomerative_k{n_clusters}_mhh_cluster": mhh_cluster,
+                        f"agglomerative_k{n_clusters}_mhc0_cluster": mhc0_cluster,
+                        f"agglomerative_k{n_clusters}_same_cluster": bool(
+                            mhh_cluster == mhc0_cluster
+                        ),
+                    }
+                )
 
         pair_rows.append(row)
 
@@ -607,6 +937,12 @@ def build_overall_summary(
                 ),
             }
         )
+    if "agglomerative" in routes:
+        for n_clusters in AGGLOMERATIVE_N_CLUSTERS_LIST:
+            same_column = f"agglomerative_k{n_clusters}_same_cluster"
+            summary[f"agglomerative_k{n_clusters}_pct_pairs_same_cluster"] = (
+                percent_true(pair_agreement[same_column])
+            )
     return pd.DataFrame([summary])
 
 
@@ -614,6 +950,7 @@ def add_clustering_outputs_to_admissions(
     admissions: pd.DataFrame,
     bert_results: dict[str, np.ndarray] | None,
     tfidf_results: dict[str, Any] | None,
+    agglomerative_results: dict[int, np.ndarray] | None,
 ) -> pd.DataFrame:
     """Attach cluster labels and 2D projection coordinates to admission rows."""
     admissions = admissions.copy()
@@ -625,11 +962,22 @@ def add_clustering_outputs_to_admissions(
         admissions["tfidf_cluster"] = tfidf_results["labels"]
         admissions["tfidf_umap_x"] = tfidf_results["projection_2d"][:, 0]
         admissions["tfidf_umap_y"] = tfidf_results["projection_2d"][:, 1]
+    if agglomerative_results is not None:
+        for n_clusters, labels in agglomerative_results.items():
+            admissions[f"agglomerative_k{n_clusters}_cluster"] = labels
     return admissions
 
 
 def maybe_write_umap_plots(admissions: pd.DataFrame, routes: set[str]) -> list[Path]:
     """Write optional UMAP scatter plots if matplotlib imports cleanly."""
+    route_plot_columns = {
+        "bert": ("bert_umap_x", "bert_umap_y", "bert_cluster"),
+        "tfidf": ("tfidf_umap_x", "tfidf_umap_y", "tfidf_cluster"),
+    }
+    plot_routes = routes & set(route_plot_columns)
+    if not plot_routes:
+        return []
+
     try:
         import matplotlib
 
@@ -640,11 +988,7 @@ def maybe_write_umap_plots(admissions: pd.DataFrame, routes: set[str]) -> list[P
         return []
 
     plot_paths = []
-    route_plot_columns = {
-        "bert": ("bert_umap_x", "bert_umap_y", "bert_cluster"),
-        "tfidf": ("tfidf_umap_x", "tfidf_umap_y", "tfidf_cluster"),
-    }
-    for route in sorted(routes):
+    for route in sorted(plot_routes):
         x_column, y_column, cluster_column = route_plot_columns[route]
         fig, ax = plt.subplots(figsize=(9, 7))
 
@@ -825,12 +1169,129 @@ def build_bert_noise_pairs(admissions: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def build_agglomerative_pair_agreement_summary(
+    admissions: pd.DataFrame,
+    pair_agreement: pd.DataFrame,
+) -> pd.DataFrame:
+    """Summarize pair agreement and cohort balance for each agglomerative k."""
+    rows = []
+    for n_clusters in AGGLOMERATIVE_N_CLUSTERS_LIST:
+        cluster_column = f"agglomerative_k{n_clusters}_cluster"
+        same_column = f"agglomerative_k{n_clusters}_same_cluster"
+        cluster_sizes = admissions.groupby(cluster_column).size()
+        cohort_counts = (
+            admissions.groupby([cluster_column, "cohort"]).size().unstack(fill_value=0)
+        )
+        has_mhh = cohort_counts.get("MHH1_psychotic", 0).gt(0)
+        has_mhc0 = cohort_counts.get("MHC0", 0).gt(0)
+        has_both = has_mhh & has_mhc0
+
+        rows.append(
+            {
+                "k": n_clusters,
+                "n_clusters": admissions[cluster_column].nunique(),
+                "n_admissions": len(admissions),
+                "n_matched_pairs": pair_agreement["pair_id"].nunique(),
+                "pct_pairs_same_cluster": percent_true(pair_agreement[same_column]),
+                "median_cluster_size": cluster_sizes.median(),
+                "min_cluster_size": cluster_sizes.min(),
+                "max_cluster_size": cluster_sizes.max(),
+                "n_clusters_with_both_cohorts": int(has_both.sum()),
+                "pct_clusters_with_both_cohorts": 100.0 * has_both.mean(),
+                "n_clusters_mhh_only": int((has_mhh & ~has_mhc0).sum()),
+                "n_clusters_mhc0_only": int((~has_mhh & has_mhc0).sum()),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_agglomerative_cluster_review_candidates(
+    cluster_summaries: dict[str, pd.DataFrame],
+) -> pd.DataFrame:
+    """Create review-friendly agglomerative cluster rows for manual labeling."""
+    review_frames = []
+    for n_clusters in AGGLOMERATIVE_N_CLUSTERS_LIST:
+        route_name = f"agglomerative_k{n_clusters}"
+        summary = cluster_summaries.get(route_name)
+        if summary is None:
+            continue
+        review = summary.loc[
+            :,
+            [
+                "cluster_label",
+                "n_admissions",
+                "n_MHH1_psychotic",
+                "n_MHC0",
+                "most_frequent_normalized_chief_complaints",
+                "top_terms",
+            ],
+        ].copy()
+        review.insert(0, "k", n_clusters)
+        review["suggested_manual_label"] = ""
+        review["include_for_workup_analysis"] = ""
+        review["reviewer_notes"] = ""
+        review_frames.append(review)
+
+    if not review_frames:
+        return pd.DataFrame()
+    return pd.concat(review_frames, ignore_index=True).sort_values(
+        ["k", "n_admissions", "cluster_label"],
+        ascending=[True, False, True],
+    )
+
+
+def build_agglomerative_different_cluster_pairs(
+    admissions: pd.DataFrame,
+    n_clusters: int,
+) -> pd.DataFrame:
+    """Return matched pairs separated by an agglomerative clustering solution."""
+    cluster_column = f"agglomerative_k{n_clusters}_cluster"
+    rows = []
+    for pair_id, pair_df in admissions.groupby("pair_id", sort=True):
+        if len(pair_df) != 2:
+            continue
+        by_cohort = pair_df.set_index("cohort")
+        if "MHH1_psychotic" not in by_cohort.index or "MHC0" not in by_cohort.index:
+            continue
+
+        mhh = by_cohort.loc["MHH1_psychotic"]
+        mhc0 = by_cohort.loc["MHC0"]
+        mhh_cluster = int(mhh[cluster_column])
+        mhc0_cluster = int(mhc0[cluster_column])
+        if mhh_cluster == mhc0_cluster:
+            continue
+
+        rows.append(
+            {
+                "pair_id": pair_id,
+                "cosine_similarity": mhh.get("cosine_similarity"),
+                "embedding_distance": mhh.get("embedding_distance"),
+                "mhh_subject_id": mhh["subject_id"],
+                "mhh_hadm_id": mhh["hadm_id"],
+                "mhh_chief_complaint_normalized": mhh[
+                    "chief_complaint_normalized"
+                ],
+                "mhh_cluster": mhh_cluster,
+                "mhc0_subject_id": mhc0["subject_id"],
+                "mhc0_hadm_id": mhc0["hadm_id"],
+                "mhc0_chief_complaint_normalized": mhc0[
+                    "chief_complaint_normalized"
+                ],
+                "mhc0_cluster": mhc0_cluster,
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
 def write_outputs(
     admissions: pd.DataFrame,
     pair_agreement: pd.DataFrame,
     cluster_summaries: dict[str, pd.DataFrame],
     overall_summary: pd.DataFrame,
     routes: set[str],
+    lexical_parent_candidates: pd.DataFrame | None = None,
+    lexical_admission_assignments: pd.DataFrame | None = None,
 ) -> dict[str, Path]:
     """Write all clustering QC outputs."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -850,19 +1311,48 @@ def write_outputs(
         "overall_clustering_summary": OUTPUT_DIR / "overall_clustering_summary.csv",
     }
     for route in routes:
-        outputs[f"{route}_cluster_summary"] = OUTPUT_DIR / f"{route}_cluster_summary.csv"
+        if route in {"bert", "tfidf"}:
+            outputs[f"{route}_cluster_summary"] = OUTPUT_DIR / f"{route}_cluster_summary.csv"
     if "bert" in routes:
         outputs["bert_different_cluster_normalized_pairs"] = (
             OUTPUT_DIR / "bert_different_cluster_normalized_pairs.csv"
         )
         outputs["bert_noise_admissions"] = OUTPUT_DIR / "bert_noise_admissions.csv"
         outputs["bert_noise_pairs"] = OUTPUT_DIR / "bert_noise_pairs.csv"
+    if "agglomerative" in routes:
+        outputs["agglomerative_pair_agreement_summary"] = (
+            OUTPUT_DIR / "agglomerative_pair_agreement_summary.csv"
+        )
+        outputs["agglomerative_cluster_review_candidates"] = (
+            OUTPUT_DIR / "agglomerative_cluster_review_candidates.csv"
+        )
+        for n_clusters in AGGLOMERATIVE_N_CLUSTERS_LIST:
+            outputs[f"agglomerative_cluster_summary_k{n_clusters}"] = (
+                OUTPUT_DIR / f"agglomerative_cluster_summary_k{n_clusters}.csv"
+            )
+            outputs[f"agglomerative_different_cluster_pairs_k{n_clusters}"] = (
+                OUTPUT_DIR / f"agglomerative_different_cluster_pairs_k{n_clusters}.csv"
+            )
+    if "lexical_hierarchy" in routes:
+        outputs["lexical_parent_complaint_candidates"] = (
+            OUTPUT_DIR / "lexical_parent_complaint_candidates.csv"
+        )
+        outputs["lexical_parent_complaint_admission_assignments"] = (
+            OUTPUT_DIR / "lexical_parent_complaint_admission_assignments.csv"
+        )
 
     admissions.to_parquet(outputs["matched_admissions_with_clusters"], index=False)
     admissions.to_csv(outputs["matched_admissions_with_clusters_csv"], index=False)
     pair_agreement.to_csv(outputs["pair_cluster_agreement"], index=False)
     for route, summary in cluster_summaries.items():
-        summary.to_csv(outputs[f"{route}_cluster_summary"], index=False)
+        if route in {"bert", "tfidf"}:
+            summary.to_csv(outputs[f"{route}_cluster_summary"], index=False)
+        elif route.startswith("agglomerative_k"):
+            n_clusters = route.removeprefix("agglomerative_k")
+            summary.to_csv(
+                outputs[f"agglomerative_cluster_summary_k{n_clusters}"],
+                index=False,
+            )
     if "bert" in routes:
         build_bert_different_cluster_normalized_pairs(admissions).to_csv(
             outputs["bert_different_cluster_normalized_pairs"],
@@ -874,6 +1364,31 @@ def write_outputs(
         )
         build_bert_noise_pairs(admissions).to_csv(
             outputs["bert_noise_pairs"],
+            index=False,
+        )
+    if "agglomerative" in routes:
+        build_agglomerative_pair_agreement_summary(admissions, pair_agreement).to_csv(
+            outputs["agglomerative_pair_agreement_summary"],
+            index=False,
+        )
+        build_agglomerative_cluster_review_candidates(cluster_summaries).to_csv(
+            outputs["agglomerative_cluster_review_candidates"],
+            index=False,
+        )
+        for n_clusters in AGGLOMERATIVE_N_CLUSTERS_LIST:
+            build_agglomerative_different_cluster_pairs(admissions, n_clusters).to_csv(
+                outputs[f"agglomerative_different_cluster_pairs_k{n_clusters}"],
+                index=False,
+            )
+    if "lexical_hierarchy" in routes:
+        if lexical_parent_candidates is None or lexical_admission_assignments is None:
+            raise ValueError("Lexical hierarchy outputs were requested but not built.")
+        lexical_parent_candidates.to_csv(
+            outputs["lexical_parent_complaint_candidates"],
+            index=False,
+        )
+        lexical_admission_assignments.to_csv(
+            outputs["lexical_parent_complaint_admission_assignments"],
             index=False,
         )
     overall_summary.to_csv(outputs["overall_clustering_summary"], index=False)
@@ -889,7 +1404,10 @@ def main() -> None:
     args = parse_args()
     route_name = normalize_route_value(args.route)
     routes = selected_routes(args.route)
-    umap_module, hdbscan_module = require_clustering_dependencies()
+    umap_module = None
+    hdbscan_module = None
+    if routes & {"bert", "tfidf"}:
+        umap_module, hdbscan_module = require_clustering_dependencies()
 
     matched_pairs = load_matched_pairs()
     admissions = create_admission_rows(matched_pairs)
@@ -902,20 +1420,41 @@ def main() -> None:
 
     bert_results = None
     tfidf_results = None
+    agglomerative_results = None
+    lexical_parent_candidates = None
+    lexical_admission_assignments = None
     cluster_summaries = {}
 
     if "bert" in routes:
+        assert umap_module is not None and hdbscan_module is not None
         bert_results = run_bert_clustering(embeddings, umap_module, hdbscan_module)
 
     if "tfidf" in routes:
+        assert umap_module is not None and hdbscan_module is not None
         tfidf_results = run_tfidf_clustering(
             admissions["chief_complaint_normalized"],
             umap_module,
             hdbscan_module,
         )
 
+    if "agglomerative" in routes:
+        agglomerative_results = run_agglomerative_clustering(embeddings)
+
+    if "lexical_hierarchy" in routes:
+        lexical_parent_candidates, lexical_admission_assignments = (
+            build_lexical_parent_complaint_candidates(admissions)
+        )
+        print(
+            "Lexical hierarchy route: "
+            f"{len(lexical_parent_candidates):,} parent candidates, "
+            f"{len(lexical_admission_assignments):,} admission-parent assignments"
+        )
+
     admissions = add_clustering_outputs_to_admissions(
-        admissions, bert_results, tfidf_results
+        admissions,
+        bert_results,
+        tfidf_results,
+        agglomerative_results,
     )
     pair_agreement = build_pair_agreement(admissions, routes)
 
@@ -927,6 +1466,14 @@ def main() -> None:
         cluster_summaries["tfidf"] = build_cluster_summary(
             admissions, "tfidf_cluster", "tfidf"
         )
+    if "agglomerative" in routes:
+        for n_clusters in AGGLOMERATIVE_N_CLUSTERS_LIST:
+            route_key = f"agglomerative_k{n_clusters}"
+            cluster_summaries[route_key] = build_cluster_summary(
+                admissions,
+                f"{route_key}_cluster",
+                route_key,
+            ).drop(columns=["is_noise"])
 
     overall_summary = build_overall_summary(admissions, pair_agreement, routes)
 
@@ -936,10 +1483,35 @@ def main() -> None:
         cluster_summaries,
         overall_summary,
         routes,
+        lexical_parent_candidates,
+        lexical_admission_assignments,
     )
 
     print("\n=== Overall Clustering QC Summary ===")
     print(overall_summary.to_string(index=False))
+    if "agglomerative" in routes:
+        print("\n=== Agglomerative Pair Agreement Summary ===")
+        print(
+            build_agglomerative_pair_agreement_summary(
+                admissions,
+                pair_agreement,
+            ).to_string(index=False)
+        )
+    if "lexical_hierarchy" in routes and lexical_parent_candidates is not None:
+        print("\n=== Top Lexical Parent Complaint Candidates ===")
+        print(
+            lexical_parent_candidates.head(20).loc[
+                :,
+                [
+                    "parent_phrase",
+                    "parent_exact_count",
+                    "total_group_admissions",
+                    "n_unique_child_complaints",
+                    "n_MHH1_psychotic",
+                    "n_MHC0",
+                ],
+            ].to_string(index=False)
+        )
     print("\nSaved clustering QC outputs:")
     for path in outputs.values():
         print(f"  {path}")
