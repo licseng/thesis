@@ -42,6 +42,8 @@ python-code/04_LLM_flagging/analysis_output_psych_keyword_exploration/
 python-code/04_LLM_flagging/psych_history_classifier_output/
 python-code/04_classification/analysis_output_psych_keyword_exploration/
 python-code/04_classification/psych_history_classifier_output/
+python-code/04_classification/analysis_output_SL_keyword_exploration/
+python-code/04_classification/analysis_output_keyword_summary_excluding_chief_complaint/
 
 # Generated HTML visualization output
 html-visualization/
