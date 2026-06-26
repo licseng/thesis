@@ -18,6 +18,8 @@ Outputs:
     analysis_output_matched_cohort/age_bin_distance_counts.csv
     analysis_output_matched_cohort/age_year_distance_summary.csv
     analysis_output_matched_cohort/age_year_distance_counts.csv
+    analysis_output_matched_cohort/chief_complaint_bigram_counts.csv
+    analysis_output_matched_cohort/chief_complaint_selected_phrase_counts.csv
     analysis_output_matched_cohort/lowest_cosine_similarity_pairs_review.csv
 """
 
@@ -26,6 +28,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+from sklearn.feature_extraction.text import CountVectorizer
 
 
 # Paths
@@ -38,6 +41,21 @@ MATCHING_SUMMARY_PATH = MATCHED_OUTPUT_DIR / "matching_summary.csv"
 
 # Number of low-similarity matched pairs to export for manual review.
 LOWEST_COSINE_REVIEW_N = 100
+TOP_CHIEF_COMPLAINT_BIGRAMS_N = 200
+
+# Manually selected broad complaint phrases for cohort descriptives. These are
+# exploratory workup/lab comparison candidates, not additional matching criteria.
+SELECTED_CHIEF_COMPLAINT_PHRASE_GROUPS = {
+    "abdominal pain": ["abdominal pain"],
+    "shortness of breath": ["shortness of breath"],
+    "chest pain": ["chest pain"],
+    "altered mental status": [
+        "altered mental status",
+        "mental status",
+        "altered mental",
+    ],
+    "nausea vomiting": ["nausea vomiting"],
+}
 
 # Columns expected in the matched-pairs output.
 REQUIRED_COLUMNS = {
@@ -357,6 +375,142 @@ def build_age_year_distance_counts(matched_pairs: pd.DataFrame) -> pd.DataFrame:
     return counts
 
 
+# Convert matched pairs into one admission-level table for complaint text
+# summaries. This keeps the exposed and control complaint distributions visible
+# separately while also allowing overall counts.
+def build_admission_level_complaints(matched_pairs: pd.DataFrame) -> pd.DataFrame:
+    mhh = matched_pairs.loc[
+        :,
+        [
+            "pair_id",
+            "mhh_subject_id",
+            "mhh_hadm_id",
+            "mhh_chief_complaint_normalized",
+        ],
+    ].rename(
+        columns={
+            "mhh_subject_id": "subject_id",
+            "mhh_hadm_id": "hadm_id",
+            "mhh_chief_complaint_normalized": "chief_complaint_normalized",
+        }
+    )
+    mhh["cohort"] = "MHH_psychotic"
+
+    mhc0 = matched_pairs.loc[
+        :,
+        [
+            "pair_id",
+            "mhc0_subject_id",
+            "mhc0_hadm_id",
+            "mhc0_chief_complaint_normalized",
+        ],
+    ].rename(
+        columns={
+            "mhc0_subject_id": "subject_id",
+            "mhc0_hadm_id": "hadm_id",
+            "mhc0_chief_complaint_normalized": "chief_complaint_normalized",
+        }
+    )
+    mhc0["cohort"] = "only_MHC0"
+
+    admissions = pd.concat([mhh, mhc0], ignore_index=True)
+    admissions["chief_complaint_normalized"] = (
+        admissions["chief_complaint_normalized"].fillna("").astype(str).str.strip()
+    )
+    return admissions
+
+
+# Count the most frequent normalized chief-complaint bigrams overall and within
+# each matched cohort side. Occurrence counts count repeated mentions, while
+# admission counts count whether the bigram appears at least once in an
+# admission's complaint.
+def build_chief_complaint_bigram_counts(matched_pairs: pd.DataFrame) -> pd.DataFrame:
+    admissions = build_admission_level_complaints(matched_pairs)
+    groups = [("overall", admissions)]
+    groups.extend((cohort, group) for cohort, group in admissions.groupby("cohort"))
+
+    rows = []
+    for cohort, group in groups:
+        texts = group["chief_complaint_normalized"]
+        non_empty = texts[texts.str.strip().ne("")]
+        if non_empty.empty:
+            continue
+
+        vectorizer = CountVectorizer(
+            ngram_range=(2, 2),
+            lowercase=True,
+            strip_accents="unicode",
+        )
+        matrix = vectorizer.fit_transform(non_empty)
+        terms = vectorizer.get_feature_names_out()
+        occurrences = matrix.sum(axis=0).A1
+        admission_counts = (matrix > 0).sum(axis=0).A1
+        order = occurrences.argsort()[::-1][:TOP_CHIEF_COMPLAINT_BIGRAMS_N]
+
+        for index in order:
+            rows.append(
+                {
+                    "cohort": cohort,
+                    "bigram": terms[index],
+                    "n_occurrences": int(occurrences[index]),
+                    "n_admissions_with_bigram": int(admission_counts[index]),
+                    "pct_admissions_with_bigram": (
+                        100.0 * admission_counts[index] / len(group)
+                    ),
+                }
+            )
+
+    return pd.DataFrame(rows)
+
+
+def contains_token_phrase(text: str, phrase: str) -> bool:
+    """Return True when phrase occurs as a contiguous token sequence in text."""
+    text_tokens = str(text or "").lower().split()
+    phrase_tokens = str(phrase or "").lower().split()
+    if not phrase_tokens or len(phrase_tokens) > len(text_tokens):
+        return False
+    width = len(phrase_tokens)
+    return any(
+        text_tokens[start : start + width] == phrase_tokens
+        for start in range(0, len(text_tokens) - width + 1)
+    )
+
+
+def build_selected_phrase_counts(matched_pairs: pd.DataFrame) -> pd.DataFrame:
+    """Count manually selected complaint phrase groups by matched cohort side."""
+    admissions = build_admission_level_complaints(matched_pairs)
+    cohorts = ["MHH_psychotic", "only_MHC0", "overall"]
+    rows = []
+
+    for phrase_group, phrases in SELECTED_CHIEF_COMPLAINT_PHRASE_GROUPS.items():
+        group_hits = admissions["chief_complaint_normalized"].map(
+            lambda text: any(contains_token_phrase(text, phrase) for phrase in phrases)
+        )
+        for cohort in cohorts:
+            if cohort == "overall":
+                cohort_df = admissions
+                hits = group_hits
+            else:
+                cohort_mask = admissions["cohort"].eq(cohort)
+                cohort_df = admissions.loc[cohort_mask]
+                hits = group_hits.loc[cohort_mask]
+
+            rows.append(
+                {
+                    "phrase_group": phrase_group,
+                    "matched_phrases": " | ".join(phrases),
+                    "cohort": cohort,
+                    "n_admissions": len(cohort_df),
+                    "n_admissions_with_phrase": int(hits.sum()),
+                    "pct_admissions_with_phrase": (
+                        100.0 * hits.mean() if len(hits) else 0.0
+                    ),
+                }
+            )
+
+    return pd.DataFrame(rows)
+
+
 # Export the lowest-cosine matched pairs for manual review.
 def build_lowest_cosine_review(matched_pairs: pd.DataFrame) -> pd.DataFrame:
     columns = [
@@ -385,6 +539,8 @@ def write_outputs(
     age_bin_distance_counts: pd.DataFrame,
     age_year_distance_summary: pd.DataFrame,
     age_year_distance_counts: pd.DataFrame,
+    chief_complaint_bigram_counts: pd.DataFrame,
+    selected_phrase_counts: pd.DataFrame,
     lowest_cosine_review: pd.DataFrame,
 ) -> dict[str, Path]:
     OUTPUT_DIR.mkdir(exist_ok=True)
@@ -399,6 +555,10 @@ def write_outputs(
         "age_bin_distance_counts": OUTPUT_DIR / "age_bin_distance_counts.csv",
         "age_year_distance_summary": OUTPUT_DIR / "age_year_distance_summary.csv",
         "age_year_distance_counts": OUTPUT_DIR / "age_year_distance_counts.csv",
+        "chief_complaint_bigram_counts": OUTPUT_DIR
+        / "chief_complaint_bigram_counts.csv",
+        "chief_complaint_selected_phrase_counts": OUTPUT_DIR
+        / "chief_complaint_selected_phrase_counts.csv",
         "lowest_cosine_review": OUTPUT_DIR / "lowest_cosine_similarity_pairs_review.csv",
     }
     match_quality_summary.to_csv(outputs["match_quality_summary"], index=False)
@@ -415,6 +575,14 @@ def write_outputs(
     age_bin_distance_counts.to_csv(outputs["age_bin_distance_counts"], index=False)
     age_year_distance_summary.to_csv(outputs["age_year_distance_summary"], index=False)
     age_year_distance_counts.to_csv(outputs["age_year_distance_counts"], index=False)
+    chief_complaint_bigram_counts.to_csv(
+        outputs["chief_complaint_bigram_counts"],
+        index=False,
+    )
+    selected_phrase_counts.to_csv(
+        outputs["chief_complaint_selected_phrase_counts"],
+        index=False,
+    )
     lowest_cosine_review.to_csv(outputs["lowest_cosine_review"], index=False)
     return outputs
 
@@ -432,6 +600,8 @@ def main() -> None:
     age_bin_distance_counts = build_age_bin_distance_counts(matched_pairs)
     age_year_distance_summary = build_age_year_distance_summary(matched_pairs)
     age_year_distance_counts = build_age_year_distance_counts(matched_pairs)
+    chief_complaint_bigram_counts = build_chief_complaint_bigram_counts(matched_pairs)
+    selected_phrase_counts = build_selected_phrase_counts(matched_pairs)
     lowest_cosine_review = build_lowest_cosine_review(matched_pairs)
 
     outputs = write_outputs(
@@ -443,6 +613,8 @@ def main() -> None:
         age_bin_distance_counts,
         age_year_distance_summary,
         age_year_distance_counts,
+        chief_complaint_bigram_counts,
+        selected_phrase_counts,
         lowest_cosine_review,
     )
 
@@ -454,6 +626,10 @@ def main() -> None:
     print(elixhauser_score_summary.to_string(index=False))
     print("\n=== Elixhauser Absolute Difference Counts ===")
     print(elixhauser_difference_counts.to_string(index=False))
+    print("\n=== Top Chief Complaint Bigrams ===")
+    print(chief_complaint_bigram_counts.head(20).to_string(index=False))
+    print("\n=== Selected Chief Complaint Phrase Counts ===")
+    print(selected_phrase_counts.to_string(index=False))
     if not matching_summary.empty:
         print("\n=== Original Matching Summary ===")
         print(matching_summary.to_string(index=False))
