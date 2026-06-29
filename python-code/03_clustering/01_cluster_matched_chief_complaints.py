@@ -59,7 +59,7 @@ MATCHED_PAIRS_PATH = (
 )
 EMBEDDING_DIR = (
     PROJECT_DIR
-    / "01_discharge_note_processing"
+    / "01_discharge_note_preprocessing"
     / "02_chief_complaint"
     / "02_embedding"
     / "chief_complaint_embeddings"

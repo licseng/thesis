@@ -30,7 +30,7 @@ import pandas as pd
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_PYTHON_DIR = SCRIPT_DIR.parent
-PARSER_DIR = REPO_PYTHON_DIR / "01_discharge_note_processing" / "01_discharge_note_parsing"
+PARSER_DIR = REPO_PYTHON_DIR / "01_discharge_note_preprocessing" / "01_discharge_note_parsing"
 PARSER_PATH = PARSER_DIR / "02_parse_full_discharge_notes.py"
 FULL_NOTE_DIR = PARSER_DIR / "full_discharge_note_sections"
 PSYCH_KEYWORD_SCRIPT = SCRIPT_DIR / "02_explore_psych_keywords_by_section.py"
