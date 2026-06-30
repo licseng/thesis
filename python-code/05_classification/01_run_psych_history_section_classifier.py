@@ -123,31 +123,50 @@ OLLAMA_RESPONSE_SCHEMA = {
 
 SYSTEM_PROMPT = """You are a clinical text classification assistant.
 
+Context:
+The provided discharge-note section has already been selected by keyword matching
+because it contains one or more psychiatry-related terms. Keyword matches can be
+false positives. Your role is to decide whether the section truly contains
+patient-specific psychiatric context.
+
 Task:
-Classify whether the provided discharge-note section mentions that the patient
-has a prior or existing history of any psychiatric condition. That is the positive case.
+Classify whether the provided discharge-note section mentions psychiatric context
+for the patient.
+
+Use two separate flags:
+1. psychosis_related_context:
+   Use "yes" if the section mentions psychosis-related context, such as schizophrenia,
+   schizoaffective disorder, psychotic disorder, hallucinations, delusions, paranoia,
+   or antipsychotic treatment clearly related to psychosis.
+2. other_psychiatric_context:
+   Use "yes" if the section mentions other psychiatric context that is not psychosis-related,
+   such as anxiety, depression, bipolar disorder without psychotic features, PTSD,
+   personality disorder, suicidal ideation, psychiatric admission, psychiatry consult,
+   substance use disorder, withdrawal, behavioral framing, or psychiatric medication
+   not clearly related to psychosis.
 
 Do NOT count as positive:
-- negated history only, e.g. "no history of psychosis"
+- negated history or symptoms only, e.g. "no history of psychosis", "denies hallucinations"
 - family history only
+- psychiatric words referring only to someone other than the patient
+- keyword matches that are not clinically meaningful psychiatric context
 
 Use label values:
 - positive
 - negative
-- ambiguous
-
-Use ambiguous when psychiatric history is hinted at but not explicit.
 
 Return exactly this JSON schema without including any extra fields or comments.
-Keep evidence_span short, preferably 15 words or fewer. If the label is
-negative and there is no direct evidence phrase, use an empty evidence_span.
+Keep evidence_span short, preferably 15 words or fewer. 
 Keep reason brief, one sentence maximum.
 {
-  "mentions_psychotic_disorder_history": "yes|no|ambiguous",
-  "label": "positive|negative|ambiguous",
-  "disorder_type": "schizophrenia|schizoaffective disorder|psychotic disorder|bipolar disorder with psychotic features|other|none|unclear",
-  "temporality": "past_history|existing_history|current_admission_only|family_history_only|negated|unclear|none",
-  "negated": true,
+
+  "psychosis_related_context_label": "positive|negative",
+  "other_psychiatric_context_label": "positive|negative",
+  "disorder_type": "schizophrenia|schizoaffective disorder|psychotic disorder|bipolar disorder with psychotic features|other psychiatric|substance use disorder|none|unclear",
+  "negated_only": true|false,
+  "family_history_only": true|false,
+  "patient_specific": true|false,
+  "reason": ""
 }
 """
 
