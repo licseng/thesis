@@ -30,11 +30,9 @@ import pandas as pd
 # Paths
 SCRIPT_DIR = Path(__file__).resolve().parent
 INPUT_PATH = (
-    SCRIPT_DIR.parent
-    / "01_discharge_note_preprocessing"
-    / "01_discharge_note_parsing"
-    / "full_discharge_note_sections"
-    / "MHH1_psychotic_matched_full_discharge_note_sections.parquet"
+    SCRIPT_DIR
+    / "psych_history_llm_input"
+    / "filtered_psych_keyword_section_input.parquet"
 )
 OUTPUT_DIR = SCRIPT_DIR / "psych_history_classifier_output"
 
@@ -53,16 +51,6 @@ MAX_NOTES_OVERRIDE = os.environ.get("PSYCH_HISTORY_MAX_NOTES")
 if MAX_NOTES_OVERRIDE:
     MAX_NOTES = None if MAX_NOTES_OVERRIDE.lower() == "none" else int(MAX_NOTES_OVERRIDE)
 
-# Parsed section columns to classify. `full_note_text` is intentionally excluded
-# because this script is section-level. These high-yield sections were selected
-# from the psych keyword exploration to reduce local LLM runtime.
-SECTION_COLUMNS = [
-    "present_illness",
-    "brief_hospital_course",
-    "problems",
-    "discharge_diagnosis",
-]
-
 METADATA_COLUMNS = [
     "cohort",
     "subject_id",
@@ -74,13 +62,13 @@ METADATA_COLUMNS = [
 OLLAMA_RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
-        "mentions_psychotic_disorder_history": {
+        "psychosis_related_context_label": {
             "type": "string",
-            "enum": ["yes", "no", "ambiguous"],
+            "enum": ["positive", "negative"],
         },
-        "label": {
+        "other_psychiatric_context_label": {
             "type": "string",
-            "enum": ["positive", "negative", "ambiguous"],
+            "enum": ["positive", "negative"],
         },
         "disorder_type": {
             "type": "string",
@@ -89,33 +77,25 @@ OLLAMA_RESPONSE_SCHEMA = {
                 "schizoaffective disorder",
                 "psychotic disorder",
                 "bipolar disorder with psychotic features",
-                "other",
+                "other psychiatric",
+                "substance use disorder",
                 "none",
                 "unclear",
             ],
         },
-        "temporality": {
-            "type": "string",
-            "enum": [
-                "past_history",
-                "existing_history",
-                "current_admission_only",
-                "family_history_only",
-                "negated",
-                "unclear",
-                "none",
-            ],
-        },
-        "negated": {"type": "boolean"},
+        "negated_only": {"type": "boolean"},
+        "family_history_only": {"type": "boolean"},
+        "patient_specific": {"type": "boolean"},
         "evidence_span": {"type": "string", "maxLength": 160},
         "reason": {"type": "string", "maxLength": 240},
     },
     "required": [
-        "mentions_psychotic_disorder_history",
-        "label",
+        "psychosis_related_context_label",
+        "other_psychiatric_context_label",
         "disorder_type",
-        "temporality",
-        "negated",
+        "negated_only",
+        "family_history_only",
+        "patient_specific",
         "evidence_span",
         "reason",
     ],
@@ -166,6 +146,7 @@ Keep reason brief, one sentence maximum.
   "negated_only": true|false,
   "family_history_only": true|false,
   "patient_specific": true|false,
+  "evidence_span": "",
   "reason": ""
 }
 """
@@ -179,36 +160,33 @@ def validate_input_path() -> None:
 
 def validate_columns(df: pd.DataFrame) -> None:
     """Check that required metadata and section columns exist."""
-    required = set(METADATA_COLUMNS + SECTION_COLUMNS)
+    required = set(METADATA_COLUMNS + ["section_name", "section_text"])
     missing = sorted(required - set(df.columns))
     if missing:
         raise ValueError(f"Missing required columns in {INPUT_PATH}: {missing}")
 
 
 def load_section_rows() -> pd.DataFrame:
-    """Load the parsed table and reshape non-empty sections to long format."""
+    """Load keyword-filtered section rows for LLM classification."""
     df = pd.read_parquet(INPUT_PATH)
     validate_columns(df)
     if MAX_NOTES is not None:
-        df = df.head(MAX_NOTES).copy()
+        admission_keys = df.loc[:, ["cohort", "subject_id", "hadm_id"]].drop_duplicates()
+        selected_keys = admission_keys.head(MAX_NOTES)
+        df = df.merge(
+            selected_keys,
+            on=["cohort", "subject_id", "hadm_id"],
+            how="inner",
+            validate="many_to_one",
+        )
 
-    rows = []
-    for _, source_row in df.iterrows():
-        metadata = {column: source_row[column] for column in METADATA_COLUMNS}
-        for section in SECTION_COLUMNS:
-            section_text = str(source_row.get(section, "") or "").strip()
-            if section_text:
-                rows.append(
-                    {
-                        **metadata,
-                        "section_name": section,
-                        "section_text": section_text,
-                    }
-                )
-
-    long_df = pd.DataFrame(rows).reset_index(drop=True)
-    long_df.insert(0, "classifier_row_id", range(len(long_df)))
-    return long_df
+    df = df.copy().reset_index(drop=True)
+    df["section_text"] = df["section_text"].fillna("").astype(str).str.strip()
+    df = df.loc[df["section_text"].ne("")].copy()
+    if "classifier_row_id" in df.columns:
+        df = df.drop(columns=["classifier_row_id"])
+    df.insert(0, "classifier_row_id", range(len(df)))
+    return df
 
 
 def split_text_into_chunks(text: str) -> list[str]:
@@ -316,20 +294,27 @@ def parse_json_response(response_text: str) -> dict[str, Any]:
 
 def normalize_model_result(result: dict[str, Any]) -> dict[str, Any]:
     """Normalize optional or malformed model fields into stable output columns."""
-    label = str(result.get("label", "")).strip().lower()
-    mentions = str(result.get("mentions_psychotic_disorder_history", "")).strip().lower()
+    psychosis_label = str(result.get("psychosis_related_context_label", "")).strip().lower()
+    other_label = str(result.get("other_psychiatric_context_label", "")).strip().lower()
+    if psychosis_label not in {"positive", "negative"}:
+        psychosis_label = "negative"
+    if other_label not in {"positive", "negative"}:
+        other_label = "negative"
 
-    if label not in {"positive", "negative", "ambiguous"}:
-        label = "ambiguous"
-    if mentions not in {"yes", "no", "ambiguous"}:
-        mentions = {"positive": "yes", "negative": "no"}.get(label, "ambiguous")
+    label = (
+        "positive"
+        if psychosis_label == "positive" or other_label == "positive"
+        else "negative"
+    )
 
     return {
-        "mentions_psychotic_disorder_history": mentions,
+        "psychosis_related_context_label": psychosis_label,
+        "other_psychiatric_context_label": other_label,
         "label": label,
         "disorder_type": str(result.get("disorder_type", "unclear")).strip(),
-        "temporality": str(result.get("temporality", "unclear")).strip(),
-        "negated": bool(result.get("negated", False)),
+        "negated_only": bool(result.get("negated_only", False)),
+        "family_history_only": bool(result.get("family_history_only", False)),
+        "patient_specific": bool(result.get("patient_specific", True)),
         "evidence_span": str(result.get("evidence_span", "")).strip(),
         "reason": str(result.get("reason", "")).strip(),
     }
@@ -338,25 +323,30 @@ def normalize_model_result(result: dict[str, Any]) -> dict[str, Any]:
 def combine_chunk_results(chunk_results: list[dict[str, Any]]) -> dict[str, Any]:
     """Collapse chunk-level labels into one section-level label."""
     labels = [result["label"] for result in chunk_results]
+    psychosis_labels = [result["psychosis_related_context_label"] for result in chunk_results]
+    other_labels = [result["other_psychiatric_context_label"] for result in chunk_results]
     if "positive" in labels:
         chosen_label = "positive"
-    elif "ambiguous" in labels:
-        chosen_label = "ambiguous"
     else:
         chosen_label = "negative"
 
     chosen_result = next(
         result for result in chunk_results if result["label"] == chosen_label
     )
-    mentions = {"positive": "yes", "negative": "no"}.get(chosen_label, "ambiguous")
     return {
         **chosen_result,
-        "mentions_psychotic_disorder_history": mentions,
+        "psychosis_related_context_label": (
+            "positive" if "positive" in psychosis_labels else "negative"
+        ),
+        "other_psychiatric_context_label": (
+            "positive" if "positive" in other_labels else "negative"
+        ),
         "label": chosen_label,
         "n_chunks": len(chunk_results),
         "n_positive_chunks": labels.count("positive"),
-        "n_ambiguous_chunks": labels.count("ambiguous"),
         "n_negative_chunks": labels.count("negative"),
+        "n_psychosis_positive_chunks": psychosis_labels.count("positive"),
+        "n_other_psychiatric_positive_chunks": other_labels.count("positive"),
     }
 
 
@@ -394,6 +384,9 @@ def classify_sections(
                     "note_id": row["note_id"],
                     "charttime": row["charttime"],
                     "section_name": row["section_name"],
+                    "n_psych_keyword_hits": row.get("n_psych_keyword_hits", None),
+                    "psych_keyword_groups": row.get("psych_keyword_groups", ""),
+                    "matched_terms": row.get("matched_terms", ""),
                     "chunk_index": chunk_index,
                     "n_chunks": len(chunks),
                     "chunk_word_count": len(chunk_text.split()),
@@ -415,6 +408,9 @@ def classify_sections(
             "section_name": row["section_name"],
             "section_char_length": len(row["section_text"]),
             "section_word_count": len(row["section_text"].split()),
+            "n_psych_keyword_hits": row.get("n_psych_keyword_hits", None),
+            "psych_keyword_groups": row.get("psych_keyword_groups", ""),
+            "matched_terms": row.get("matched_terms", ""),
             **section_result,
             "model_name": MODEL_NAME,
         }
@@ -440,20 +436,47 @@ def write_outputs(results: pd.DataFrame, chunk_results: pd.DataFrame) -> None:
             handle.write(json.dumps(row, default=str, ensure_ascii=True) + "\n")
 
     label_summary = (
-        results.groupby(["cohort", "section_name", "label"], as_index=False)
+        results.groupby(
+            [
+                "cohort",
+                "section_name",
+                "psychosis_related_context_label",
+                "other_psychiatric_context_label",
+                "label",
+            ],
+            as_index=False,
+        )
         .size()
         .rename(columns={"size": "n_sections"})
-        .sort_values(["cohort", "section_name", "label"])
+        .sort_values(
+            [
+                "cohort",
+                "section_name",
+                "psychosis_related_context_label",
+                "other_psychiatric_context_label",
+                "label",
+            ]
+        )
     )
     label_summary.to_csv(OUTPUT_DIR / "psych_history_section_label_summary.csv", index=False)
 
     admission_summary = (
-        results.assign(is_positive=results["label"].eq("positive"))
+        results.assign(
+            is_positive=results["label"].eq("positive"),
+            is_psychosis_positive=results["psychosis_related_context_label"].eq("positive"),
+            is_other_psychiatric_positive=results[
+                "other_psychiatric_context_label"
+            ].eq("positive"),
+        )
         .groupby(["cohort", "subject_id", "hadm_id"], as_index=False)
         .agg(
             n_sections_classified=("section_name", "size"),
             n_positive_sections=("is_positive", "sum"),
+            n_psychosis_positive_sections=("is_psychosis_positive", "sum"),
+            n_other_psychiatric_positive_sections=("is_other_psychiatric_positive", "sum"),
             any_positive=("is_positive", "any"),
+            any_psychosis_positive=("is_psychosis_positive", "any"),
+            any_other_psychiatric_positive=("is_other_psychiatric_positive", "any"),
         )
     )
     admission_summary.to_csv(OUTPUT_DIR / "psych_history_admission_summary.csv", index=False)
