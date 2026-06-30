@@ -52,6 +52,7 @@ SELECTED_KEYWORD_GROUPS = [
     "psychosis_schizophrenia",
     "bipolar_mania",
     "psychiatry_general",
+    "common_psych_meds",
     "other_psych_conditions",
     "substance_use",
     "cognitive_behavioral",
