@@ -54,6 +54,7 @@ SELECTED_KEYWORD_GROUPS = [
     "psychiatry_general",
     "other_psych_conditions",
     "substance_use",
+    "cognitive_behavioral",
 ]
 NON_COGNITIVE_CHIEF_COMPLAINT_REVIEW_COLUMNS = [
     "cohort",
@@ -150,6 +151,19 @@ KEYWORD_PATTERNS = {
         r"\bagitation\b",
         r"\bconfusion\b",
         r"\bconfused\b",
+        r"\bsomatization\b",
+        r"\bsomatizing\b",
+        r"\bsomatize\w*\b",
+        r"\bsomatic symptom\w*\b",
+        r"\bsomatic complaint\w*\b",
+        r"\bsomatoform\b",
+        r"\bpsychosomatic\b",
+        r"\bconversion disorder\b",
+        r"\bfunctional neurologic\w*\b",
+        r"\bfunctional neurological disorder\b",
+        r"\bmedically unexplained symptom\w*\b",
+        r"\bhypochondriasis\b",
+        r"\billness anxiety\b",
     ],
 }
 
