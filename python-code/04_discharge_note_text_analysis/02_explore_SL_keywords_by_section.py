@@ -4,8 +4,12 @@ This is an exploratory keyword screen for potentially stigmatizing language
 (SL) in selected parsed matched discharge-note sections and writes local CSV
 summaries for manual review.
 
-The keyword list follows the provided SL table and additionally includes
-`homeless`, as requested. This is a broad lexical screen, not a classifier.
+The keyword list follows the provided three-group SL table, with clearly positive
+or broad neutral descriptors removed to focus the screen on potentially
+stigmatizing, blame-related, credibility-related, or friction-related language.
+A small set of retained terms from the prior project list is also included. This
+is a broad lexical screen, not a classifier. The list is adapted from:
+ https://physionet.org/content/stigmatizing-language/1.0.0/
 Keyword hits should be interpreted manually in context.
 
 Inputs:
@@ -70,48 +74,166 @@ FULL_NOTE_FILES = [
     },
 ]
 
-# Keyword list from the SL table plus "homeless". Most terms use word-boundary
-# matching. Multi-word phrases allow flexible whitespace.
+# Keyword list from the SL table plus retained prior terms:
+# homeless, homelessness, in denial, fake/fakes/faking, and difficult patient.
+# Clearly positive descriptors and broad neutral tokens were removed because this
+# script is intended to screen for potentially stigmatizing language, not all
+# evaluative patient descriptions. Most terms use word-boundary matching.
+# Multi-word phrases allow flexible whitespace and selected hyphenated variants.
 KEYWORD_PATTERNS = {
-    "stigmatizing_language": [
-        r"\badherence\b",
+    "adamant": [
+        r"\badamant\b",
+        r"\badamantly\b",
+        r"\badament\b",
+        r"\badamently\b",
+        r"\bclaim\b",
+        r"\bclaimed\b",
+        r"\bclaiming\b",
+        r"\bclaims\b",
+        r"\binsist\b",
+        r"\binsisted\b",
+        r"\binsistence\b",
+        r"\binsisting\b",
+        r"\binsists\b",
+    ],
+    "compliance": [
+        r"\bdeclined\b",
+        r"\bdeclines\b",
+        r"\bdeclining\b",
+        r"\bnonadherance\b",
+        r"\bnonadherence\b",
         r"\bnonadherent\b",
-        r"\bcompliance\b",
-        r"\bunwilling\b",
-        r"\babuse\b",
-        r"\bbelligerent\b",
-        r"\bdrug\s+seeking\b",
-        r"\babuser\b",
-        r"\bdifficult\s+patient\b",
+        r"\bnoncompliance\b",
+        r"\bnoncompliant\b",
+        r"\brefusal\b",
+        r"\brefuse\b",
         r"\brefused\b",
         r"\brefuses\b",
-        r"\bnoncompliance\b",
-        r"\bargumentative\b",
-        r"\bcheat\b",
-        r"\babuses\b",
-        r"\bmalingering\b",
-        r"\buser\b",
-        r"\bsecondary\s+gain\b",
-        r"\bin\s+denial\b",
-        r"\brefuse\b",
-        r"\bcompliant\b",
-        r"\bsubstance\s+abuse\b",
-        r"\bnonadherence\b",
-        r"\bdegenerate\b",
-        r"\bdrug\s+problem\b",
-        r"\bcombative\b",
-        r"\bfake\b",
-        r"\bbeen\s+clean\b",
-        r"\bnoncompliant\b",
-        r"\baddicted\b",
-        r"\bnarcotics\b",
-        r"\bhabit\b",
-        r"\badherent\b",
+        r"\brefusing\b",
     ],
-    "housing_insecurity": [
+    "other": [
+        r"\baggression\b",
+        r"\baggressive\b",
+        r"\baggressively\b",
+        r"\bagitated\b",
+        r"\bagitation\b",
+        r"\banger\b",
+        r"\bangered\b",
+        r"\bangers\b",
+        r"\bangrier\b",
+        r"\bangrily\b",
+        r"\bangry\b",
+        r"\bargumentative\b",
+        r"\bargumentatively\b",
+        r"\bbelligerence\b",
+        r"\bbelligerent\b",
+        r"\bbelligerently\b",
+        r"\bcombative\b",
+        r"\bcombatively\b",
+        r"\bconfrontational\b",
+        r"\bdefensive\b",
+        r"\bdifficult\s+patient\b",
+        r"\bdisheveled\b",
+        r"\bdrug[\s-]+seeking\b",
+        r"\bexaggerate\b",
+        r"\bexaggerates\b",
+        r"\bexaggerating\b",
+        r"\bfake\b",
+        r"\bfakes\b",
+        r"\bfaking\b",
         r"\bhomeless\b",
         r"\bhomelessness\b",
+        r"\bin\s+denial\b",
+        r"\bmalinger\b",
+        r"\bmalingered\b",
+        r"\bmalingerer\b",
+        r"\bmalingering\b",
+        r"\bmalingers\b",
+        r"\bnarcotic[\s-]+seeking\b",
+        r"\bpoorly[\s-]+groomed\b",
+        r"\bpoor\s+historian\b",
+        r"\bsecondary\s+gain\b",
+        r"\buncooperative\b",
+        r"\bunkempt\b",
+        r"\bunmotivated\b",
+        r"\bunwilling\b",
+        r"\bunwillingly\b",
     ],
+}
+
+KEYWORD_PATTERN_LABELS = {
+    r"\badamant\b": "adamant",
+    r"\badamantly\b": "adamant",
+    r"\badament\b": "adamant",
+    r"\badamently\b": "adamant",
+    r"\bclaim\b": "claim",
+    r"\bclaimed\b": "claim",
+    r"\bclaiming\b": "claim",
+    r"\bclaims\b": "claim",
+    r"\binsist\b": "insist",
+    r"\binsisted\b": "insist",
+    r"\binsistence\b": "insist",
+    r"\binsisting\b": "insist",
+    r"\binsists\b": "insist",
+    r"\bdeclined\b": "decline",
+    r"\bdeclines\b": "decline",
+    r"\bdeclining\b": "decline",
+    r"\bnonadherance\b": "nonadherence",
+    r"\bnonadherence\b": "nonadherence",
+    r"\bnonadherent\b": "nonadherence",
+    r"\bnoncompliance\b": "noncompliance",
+    r"\bnoncompliant\b": "noncompliance",
+    r"\brefusal\b": "refuse",
+    r"\brefuse\b": "refuse",
+    r"\brefused\b": "refuse",
+    r"\brefuses\b": "refuse",
+    r"\brefusing\b": "refuse",
+    r"\baggression\b": "aggressive",
+    r"\baggressive\b": "aggressive",
+    r"\baggressively\b": "aggressive",
+    r"\bagitated\b": "agitation",
+    r"\bagitation\b": "agitation",
+    r"\banger\b": "angry",
+    r"\bangered\b": "angry",
+    r"\bangers\b": "angry",
+    r"\bangrier\b": "angry",
+    r"\bangrily\b": "angry",
+    r"\bangry\b": "angry",
+    r"\bargumentative\b": "argumentative",
+    r"\bargumentatively\b": "argumentative",
+    r"\bbelligerence\b": "belligerent",
+    r"\bbelligerent\b": "belligerent",
+    r"\bbelligerently\b": "belligerent",
+    r"\bcombative\b": "combative",
+    r"\bcombatively\b": "combative",
+    r"\bconfrontational\b": "confrontational",
+    r"\bdefensive\b": "defensive",
+    r"\bdifficult\s+patient\b": "difficult patient",
+    r"\bdisheveled\b": "disheveled",
+    r"\bdrug[\s-]+seeking\b": "drug seeking",
+    r"\bexaggerate\b": "exaggerate",
+    r"\bexaggerates\b": "exaggerate",
+    r"\bexaggerating\b": "exaggerate",
+    r"\bfake\b": "fake",
+    r"\bfakes\b": "fake",
+    r"\bfaking\b": "fake",
+    r"\bhomeless\b": "homeless",
+    r"\bhomelessness\b": "homeless",
+    r"\bin\s+denial\b": "in denial",
+    r"\bmalinger\b": "malinger",
+    r"\bmalingered\b": "malinger",
+    r"\bmalingerer\b": "malinger",
+    r"\bmalingering\b": "malinger",
+    r"\bmalingers\b": "malinger",
+    r"\bnarcotic[\s-]+seeking\b": "narcotic seeking",
+    r"\bpoorly[\s-]+groomed\b": "poorly groomed",
+    r"\bpoor\s+historian\b": "poor historian",
+    r"\bsecondary\s+gain\b": "secondary gain",
+    r"\buncooperative\b": "uncooperative",
+    r"\bunkempt\b": "unkempt",
+    r"\bunmotivated\b": "unmotivated",
+    r"\bunwilling\b": "unwilling",
+    r"\bunwillingly\b": "unwilling",
 }
 
 
@@ -131,6 +253,12 @@ def compile_keyword_patterns() -> dict[str, list[re.Pattern[str]]]:
         group: [re.compile(pattern, flags=re.IGNORECASE) for pattern in patterns]
         for group, patterns in KEYWORD_PATTERNS.items()
     }
+
+
+def keyword_pattern_label(pattern: re.Pattern[str], matched_text: str) -> str:
+    """Return normalized root label for a matched keyword pattern."""
+    fallback = re.sub(r"\s+", " ", matched_text.lower()).strip()
+    return KEYWORD_PATTERN_LABELS.get(pattern.pattern, fallback)
 
 
 def selected_section_columns(parser: Any) -> list[str]:
@@ -194,7 +322,7 @@ def find_keyword_hits(
     for keyword_group, patterns in compiled_patterns.items():
         for pattern in patterns:
             for match in pattern.finditer(text):
-                term = re.sub(r"\s+", " ", match.group(0).lower()).strip()
+                term = keyword_pattern_label(pattern, match.group(0))
                 matched_groups.add(keyword_group)
                 matched_terms.add(term)
                 hits.append(

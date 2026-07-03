@@ -100,8 +100,12 @@ def combined_note_text(row: pd.Series, section_columns: list[str]) -> str:
 def find_keyword_hits(
     text: str,
     compiled_patterns: dict[str, list[re.Pattern[str]]],
+    keyword_pattern_labels: dict[str, str] | None = None,
 ) -> tuple[int, set[str], Counter[str], Counter[str]]:
     """Return hit count, keyword groups, term counts, and group hit counts."""
+    if keyword_pattern_labels is None:
+        keyword_pattern_labels = {}
+
     total_hits = 0
     matched_groups = set()
     term_counts: Counter[str] = Counter()
@@ -110,7 +114,8 @@ def find_keyword_hits(
     for keyword_group, patterns in compiled_patterns.items():
         for pattern in patterns:
             for match in pattern.finditer(text):
-                term = re.sub(r"\s+", " ", match.group(0).lower()).strip()
+                matched_text = re.sub(r"\s+", " ", match.group(0).lower()).strip()
+                term = keyword_pattern_labels.get(pattern.pattern, matched_text)
                 total_hits += 1
                 matched_groups.add(keyword_group)
                 term_counts[term] += 1
@@ -124,6 +129,7 @@ def scan_keyword_family(
     section_columns: list[str],
     keyword_family: str,
     compiled_patterns: dict[str, list[re.Pattern[str]]],
+    keyword_pattern_labels: dict[str, str] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Scan one keyword family and return note, term, and group summaries."""
     note_rows = []
@@ -142,6 +148,7 @@ def scan_keyword_family(
         total_hits, matched_groups, term_counts, group_counts = find_keyword_hits(
             text,
             compiled_patterns,
+            keyword_pattern_labels,
         )
 
         note_rows.append(
@@ -263,11 +270,17 @@ def main() -> None:
         ("psych", psych_keywords.KEYWORD_PATTERNS),
         ("SL", sl_keywords.KEYWORD_PATTERNS),
     ]:
+        keyword_pattern_labels = getattr(
+            sl_keywords,
+            "KEYWORD_PATTERN_LABELS",
+            {},
+        ) if keyword_family == "SL" else {}
         note_hits, top_terms, group_summary = scan_keyword_family(
             df,
             section_columns,
             keyword_family,
             compile_keyword_patterns(keyword_patterns),
+            keyword_pattern_labels,
         )
         all_note_hits.append(note_hits)
         all_top_terms.append(top_terms)
