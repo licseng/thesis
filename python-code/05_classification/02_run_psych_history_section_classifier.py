@@ -15,6 +15,7 @@ Pilot behavior:
 
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import os
 import re
@@ -50,6 +51,26 @@ MAX_NOTES: int | None = 10
 MAX_NOTES_OVERRIDE = os.environ.get("PSYCH_HISTORY_MAX_NOTES")
 if MAX_NOTES_OVERRIDE:
     MAX_NOTES = None if MAX_NOTES_OVERRIDE.lower() == "none" else int(MAX_NOTES_OVERRIDE)
+
+
+def format_duration(seconds: float) -> str:
+    """Format elapsed seconds as h:mm:ss."""
+    seconds = max(0, int(seconds))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes}:{seconds:02d}"
+
+
+def estimate_remaining(elapsed_seconds: float, completed: int, total: int) -> str:
+    """Estimate remaining time from completed units."""
+    if completed <= 0 or total <= completed:
+        return "0:00" if total <= completed else "unknown"
+    rate = completed / elapsed_seconds if elapsed_seconds > 0 else 0
+    if rate <= 0:
+        return "unknown"
+    return format_duration((total - completed) / rate)
 
 METADATA_COLUMNS = [
     "cohort",
@@ -357,10 +378,25 @@ def classify_sections(
     output_rows = []
     chunk_output_rows = []
     total = len(section_rows)
+    section_start_time = time.monotonic()
+    total_chunks = int(
+        section_rows["section_text"].map(lambda text: len(split_text_into_chunks(str(text)))).sum()
+    )
+    completed_chunks = 0
 
     for index, row in section_rows.iterrows():
         if index == 0 or (index + 1) % 10 == 0 or (index + 1) == total:
-            print(f"Classifying section {index + 1}/{total}", flush=True)
+            completed_sections = index
+            elapsed = time.monotonic() - section_start_time
+            section_rate = 60.0 * completed_sections / elapsed if elapsed > 0 else 0.0
+            print(
+                f"Classifying section {index + 1}/{total} | "
+                f"elapsed {format_duration(elapsed)} | "
+                f"rate {section_rate:.2f} sections/min | "
+                f"ETA {estimate_remaining(elapsed, completed_sections, total)} | "
+                f"chunks {completed_chunks}/{total_chunks}",
+                flush=True,
+            )
 
         chunks = split_text_into_chunks(row["section_text"])
         chunk_results = []
@@ -395,6 +431,7 @@ def classify_sections(
                 }
             )
             time.sleep(SLEEP_BETWEEN_REQUESTS_SECONDS)
+            completed_chunks += 1
 
         section_result = combine_chunk_results(chunk_results)
 
@@ -416,10 +453,22 @@ def classify_sections(
         }
         output_rows.append(output_row)
 
+    elapsed = time.monotonic() - section_start_time
+    print(
+        f"Finished classifying {total} sections and {completed_chunks} chunks "
+        f"in {format_duration(elapsed)} "
+        f"({60.0 * total / elapsed:.2f} sections/min).",
+        flush=True,
+    )
+
     return pd.DataFrame(output_rows), pd.DataFrame(chunk_output_rows)
 
 
-def write_outputs(results: pd.DataFrame, chunk_results: pd.DataFrame) -> None:
+def write_outputs(
+    results: pd.DataFrame,
+    chunk_results: pd.DataFrame,
+    run_metadata: dict[str, Any],
+) -> None:
     """Write section-level classifier results and compact summaries."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     results.to_parquet(OUTPUT_DIR / "psych_history_section_classifier_results.parquet", index=False)
@@ -434,6 +483,9 @@ def write_outputs(results: pd.DataFrame, chunk_results: pd.DataFrame) -> None:
     with (OUTPUT_DIR / "psych_history_section_classifier_results.jsonl").open("w") as handle:
         for row in results.to_dict(orient="records"):
             handle.write(json.dumps(row, default=str, ensure_ascii=True) + "\n")
+
+    with (OUTPUT_DIR / "psych_history_run_metadata.json").open("w") as handle:
+        json.dump(run_metadata, handle, indent=2, default=str)
 
     label_summary = (
         results.groupby(
@@ -487,14 +539,34 @@ def write_outputs(results: pd.DataFrame, chunk_results: pd.DataFrame) -> None:
 
 def main() -> None:
     """Run the local Ollama classifier over parsed note sections."""
+    run_started_at = datetime.now().isoformat(timespec="seconds")
+    run_start_time = time.monotonic()
     validate_input_path()
     section_rows = load_section_rows()
     print(f"Loaded {len(section_rows)} non-empty section rows from: {INPUT_PATH}")
     print(f"Using local Ollama model: {MODEL_NAME}")
     print(f"Chunking sections at {CHUNK_WORDS} words with {CHUNK_OVERLAP_WORDS} word overlap")
+    print(f"Run started at: {run_started_at}")
     check_ollama_available()
     results, chunk_results = classify_sections(section_rows)
-    write_outputs(results, chunk_results)
+    elapsed_seconds = time.monotonic() - run_start_time
+    run_metadata = {
+        "run_started_at": run_started_at,
+        "run_finished_at": datetime.now().isoformat(timespec="seconds"),
+        "elapsed_seconds": round(elapsed_seconds, 3),
+        "elapsed": format_duration(elapsed_seconds),
+        "model_name": MODEL_NAME,
+        "input_path": str(INPUT_PATH),
+        "output_dir": str(OUTPUT_DIR),
+        "max_notes": MAX_NOTES,
+        "chunk_words": CHUNK_WORDS,
+        "chunk_overlap_words": CHUNK_OVERLAP_WORDS,
+        "n_section_rows": len(results),
+        "n_chunk_rows": len(chunk_results),
+        "n_admissions": int(results[["cohort", "subject_id", "hadm_id"]].drop_duplicates().shape[0]),
+    }
+    write_outputs(results, chunk_results, run_metadata)
+    print(f"Total runtime: {run_metadata['elapsed']}")
 
 
 if __name__ == "__main__":
