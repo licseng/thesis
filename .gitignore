@@ -2,6 +2,8 @@
 .DS_Store
 **/.DS_Store
 
+run.sbatch
+
 # Python cache files
 __pycache__/
 **/__pycache__/
