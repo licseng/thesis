@@ -5,8 +5,11 @@ psychotic disorder history for the exposed group. This script asks a different
 question: whether that history is surfaced/documented in the current index
 admission discharge note.
 
-The classifier runs locally through Ollama. It calls the local Ollama HTTP
-server only; it does not send note text to an external API.
+The classifier can run with two backends:
+    - local Ollama, for laptop runs
+    - local Hugging Face transformers, for GPU-cluster runs without Ollama
+
+Neither backend sends note text to an external API.
 
 Pilot behavior:
     `MAX_NOTES = 10` limits the number of discharge notes in the pilot. Set it
@@ -37,9 +40,12 @@ INPUT_PATH = (
 )
 OUTPUT_DIR = SCRIPT_DIR / "psych_history_classifier_output"
 
-# Ollama model settings
+# Model/backend settings
+BACKEND = os.environ.get("PSYCH_HISTORY_BACKEND", "ollama").lower()
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
 MODEL_NAME = os.environ.get("PSYCH_HISTORY_MODEL_NAME", "qwen3:4b")
+HF_MODEL_ID = os.environ.get("PSYCH_HISTORY_HF_MODEL_ID", "Qwen/Qwen3-4B")
+HF_DEVICE_MAP = os.environ.get("PSYCH_HISTORY_HF_DEVICE_MAP", "auto")
 REQUEST_TIMEOUT_SECONDS = int(os.environ.get("PSYCH_HISTORY_REQUEST_TIMEOUT_SECONDS", "180"))
 MAX_NEW_TOKENS = int(os.environ.get("PSYCH_HISTORY_MAX_NEW_TOKENS", "384"))
 CHUNK_WORDS = int(os.environ.get("PSYCH_HISTORY_CHUNK_WORDS", "600"))
@@ -51,6 +57,9 @@ MAX_NOTES: int | None = 10
 MAX_NOTES_OVERRIDE = os.environ.get("PSYCH_HISTORY_MAX_NOTES")
 if MAX_NOTES_OVERRIDE:
     MAX_NOTES = None if MAX_NOTES_OVERRIDE.lower() == "none" else int(MAX_NOTES_OVERRIDE)
+
+_TRANSFORMERS_MODEL: Any | None = None
+_TRANSFORMERS_TOKENIZER: Any | None = None
 
 
 def format_duration(seconds: float) -> str:
@@ -244,8 +253,15 @@ Section chunk text:
     ]
 
 
-def check_ollama_available() -> None:
-    """Fail early if the local Ollama server/model is not reachable."""
+def check_model_available() -> None:
+    """Fail early if the configured local model backend is not reachable."""
+    if BACKEND == "transformers":
+        load_transformers_model()
+        return
+
+    if BACKEND != "ollama":
+        raise ValueError("PSYCH_HISTORY_BACKEND must be 'ollama' or 'transformers'.")
+
     payload = {
         "model": MODEL_NAME,
         "messages": [{"role": "user", "content": "Return JSON only: {\"ok\": true}"}],
@@ -279,8 +295,60 @@ def call_ollama(payload: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError(f"Ollama request failed with HTTP {exc.code}: {body}") from exc
 
 
+def load_transformers_model() -> tuple[Any, Any]:
+    """Lazy-load the local Hugging Face model for GPU-cluster runs."""
+    global _TRANSFORMERS_MODEL, _TRANSFORMERS_TOKENIZER
+    if _TRANSFORMERS_MODEL is not None and _TRANSFORMERS_TOKENIZER is not None:
+        return _TRANSFORMERS_MODEL, _TRANSFORMERS_TOKENIZER
+
+    try:
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+    except ImportError as exc:
+        raise RuntimeError(
+            "The transformers backend requires `transformers` and a working "
+            "PyTorch install in the cluster environment."
+        ) from exc
+
+    print(f"Loading Hugging Face model: {HF_MODEL_ID}", flush=True)
+    _TRANSFORMERS_TOKENIZER = AutoTokenizer.from_pretrained(HF_MODEL_ID)
+    _TRANSFORMERS_MODEL = AutoModelForCausalLM.from_pretrained(
+        HF_MODEL_ID,
+        device_map=HF_DEVICE_MAP,
+        torch_dtype="auto",
+    )
+    _TRANSFORMERS_MODEL.eval()
+    return _TRANSFORMERS_MODEL, _TRANSFORMERS_TOKENIZER
+
+
+def generate_transformers_response(messages: list[dict[str, str]]) -> str:
+    """Generate one JSON response with a local Hugging Face model."""
+    model, tokenizer = load_transformers_model()
+    prompt = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+    inputs = tokenizer([prompt], return_tensors="pt")
+    model_device = next(model.parameters()).device
+    inputs = {
+        key: value.to(model_device)
+        for key, value in inputs.items()
+    }
+    output_ids = model.generate(
+        **inputs,
+        max_new_tokens=MAX_NEW_TOKENS,
+        do_sample=False,
+        pad_token_id=tokenizer.eos_token_id,
+    )
+    generated_ids = output_ids[0][inputs["input_ids"].shape[-1] :]
+    return tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+
+
 def generate_response(messages: list[dict[str, str]]) -> str:
-    """Generate a JSON response for one section with the local Ollama model."""
+    """Generate a JSON response for one section with the configured backend."""
+    if BACKEND == "transformers":
+        return generate_transformers_response(messages)
+
     payload = {
         "model": MODEL_NAME,
         "messages": messages,
@@ -538,16 +606,21 @@ def write_outputs(
 
 
 def main() -> None:
-    """Run the local Ollama classifier over parsed note sections."""
+    """Run the local classifier over parsed note sections."""
     run_started_at = datetime.now().isoformat(timespec="seconds")
     run_start_time = time.monotonic()
     validate_input_path()
     section_rows = load_section_rows()
     print(f"Loaded {len(section_rows)} non-empty section rows from: {INPUT_PATH}")
-    print(f"Using local Ollama model: {MODEL_NAME}")
+    print(f"Using psych-history backend: {BACKEND}")
+    if BACKEND == "transformers":
+        print(f"Using Hugging Face model: {HF_MODEL_ID}")
+        print(f"Using Hugging Face device_map: {HF_DEVICE_MAP}")
+    else:
+        print(f"Using local Ollama model: {MODEL_NAME}")
     print(f"Chunking sections at {CHUNK_WORDS} words with {CHUNK_OVERLAP_WORDS} word overlap")
     print(f"Run started at: {run_started_at}")
-    check_ollama_available()
+    check_model_available()
     results, chunk_results = classify_sections(section_rows)
     elapsed_seconds = time.monotonic() - run_start_time
     run_metadata = {
@@ -555,7 +628,10 @@ def main() -> None:
         "run_finished_at": datetime.now().isoformat(timespec="seconds"),
         "elapsed_seconds": round(elapsed_seconds, 3),
         "elapsed": format_duration(elapsed_seconds),
+        "backend": BACKEND,
         "model_name": MODEL_NAME,
+        "hf_model_id": HF_MODEL_ID,
+        "hf_device_map": HF_DEVICE_MAP,
         "input_path": str(INPUT_PATH),
         "output_dir": str(OUTPUT_DIR),
         "max_notes": MAX_NOTES,
