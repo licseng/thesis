@@ -1,0 +1,1431 @@
+pair_id,mhh_subject_id,mhh_hadm_id,mhh_bert_cluster,mhh_chief_complaint_normalized,mhc0_subject_id,mhc0_hadm_id,mhc0_bert_cluster,mhc0_chief_complaint_normalized,bert_both_noise
+1,10115586,26390855,-1,recurrent emesis,15709543,27095012,-1,emesis,True
+2,11619714,20941468,-1,diarrhea,16409086,27962123,-1,diarrhea,True
+4,15170418,23559800,-1,hyperglycemia,15856547,27155002,-1,hyperglycemia,True
+5,10731206,28299045,-1,dka,10716966,20650882,-1,dka,True
+6,17800426,22874643,-1,confusion lethargy fever,18063480,26427701,-1,headache nausea vomiting fever chills lethargy,True
+7,12147981,21737693,-1,abnormal labs,10506015,25917982,-1,abnormal labs,True
+9,11619714,26461174,-1,seizure,11748229,27749647,-1,seizure,True
+10,12532930,23618604,-1,episode of confusion with associated urinary incontinence,19832055,25610933,-1,urinary incontinence fever,True
+11,15050676,21619253,10,re-admission for worsening of right lower extremity degloving wound,10326528,20703134,-1,right lower extremity pain swelling erythema with fevers,False
+12,15170418,21715501,-1,hypoglycemia,17539855,27159905,-1,hypoglycemia,True
+19,11054618,27644284,13,nausea vomiting concern for norovirus,13435200,20694289,-1,abdominal pain vomiting x1day,False
+22,12532930,22423831,-1,neck pain,10481042,22622713,-1,neck pain,True
+23,12660975,26161765,-1,r tibia fracture,13681012,23362982,-1,r tibia fracture,True
+30,15551867,24275801,-1,left 5 digit fracture/dislocation,18825524,23050525,-1,right wrist fracture/dislocation,True
+31,16115563,28711901,-1,dka,11272763,21270179,-1,dka,True
+36,17808988,22171434,-1,scrotal pain and swelling five days after right orchiectomy and left orchiopexy,15536735,21653899,-1,syncope and post-op bleed scrotal hematoma right radical orchiectomy,True
+37,17814781,22494330,-1,arm pain,12446357,23769750,-1,l arm pain,True
+39,17814781,28916931,-1,arm pain,13312391,22731009,-1,l arm pain,True
+41,17517983,24877859,-1,nausea vomiting abdominal/back pain,18785066,21554646,-1,abdominal pain nausea vomiting,True
+42,17517983,25731211,-1,left lower extremity edema and pain,19288647,21494903,-1,left lower extremity edema pain,True
+43,15149227,24731614,-1,sepsis,14847413,25843756,-1,sepsis,True
+46,10659023,24025361,-1,headache,16557766,24429338,-1,headache,True
+47,10816811,22785449,-1,seizures,14940823,27350528,-1,seizures,True
+48,10816811,25685438,-1,epilepsy,18652498,29706328,-1,epilepsy,True
+49,10045318,27824581,-1,hypotension,19015092,27756572,-1,hypotension,True
+50,17517983,22372968,-1,nausea/diarrhea hyperglycemia,11572757,25297539,-1,hyperglycemia nausea vomiting,True
+55,11339520,20831386,-1,fever,17296899,26244193,-1,fever,True
+56,13264941,21712026,-1,seizure,18945317,29230723,-1,seizure,True
+58,13542676,21821635,-1,abdominal pain fever,19435301,24968711,-1,abdominal pain fever,True
+61,14383604,28673234,-1,vaginal discharge,16372428,21066672,-1,increased vaginal discharge,True
+62,16560732,22460327,-1,bilateral upper extremity numbness and tingling,11506086,28221801,-1,right upper extremity numbness,True
+63,17630642,20556450,-1,syncope,12697316,22722242,-1,syncope,True
+64,19785129,20031176,-1,labor,14005535,21957136,-1,labor,True
+66,15355703,24747906,-1,abdominal pain chest pain nausea+vomiting,15621011,24361315,-1,nausea vomiting abdominal pain,True
+67,15355703,27408682,-1,nausea vomiting and abdominal pain,17291186,27680040,-1,nausea and vomiting abdominal pain,True
+72,15355703,26964650,-1,nausea and vomiting,17291186,26020600,-1,nausea and vomiting,True
+73,15935768,20494494,-1,vomiting blood,11046447,28846014,-1,abdominal pain vomiting blood,True
+75,10952678,29669406,-1,weakness,11403650,26414136,-1,weakness,True
+76,11315075,20335680,-1,diarrhea,19563074,29956039,-1,diarrhea,True
+77,11315075,21221109,-1,c5 da-epoch,13953554,21191292,-1,c3 da-epoch,True
+81,15355703,21217449,-1,nausea vomiting,10651959,29590663,-1,nausea vomiting,True
+82,15355703,22949676,-1,nausea/vomiting,16123839,23787163,-1,nausea/vomiting,True
+83,15355703,23812383,-1,abdominal pain nausea vomiting,13313833,23405131,-1,abdominal pain nausea vomiting,True
+86,11691882,25120131,-1,seizures,19923488,21051024,-1,seizures,True
+87,11691882,25666687,-1,fall encephalopathy,15984185,24024201,-1,encephalopathy,True
+90,19572730,27445653,-1,abdominal pain anemia,18749714,22680617,-1,anemia,True
+91,10964702,22230153,-1,hematemesis,10884076,23420413,-1,hematemesis,True
+92,11315075,24879251,-1,c4 of epoch,17627627,29758345,-1,c6 of epoch,True
+93,11315075,28548145,-1,c6 da-epoch,17627627,27917700,-1,da-epoch,True
+94,11315075,29410204,-1,c3 of epoch,17774003,21504054,-1,c2 epoch,True
+95,12052932,20461230,-1,symptomatic bradycardia,10405444,21465768,8,syncope bradycardia,False
+96,13133129,21951085,-1,seizures,10577538,28864514,-1,seizures,True
+98,11225197,26636592,15,abdominal pain nos scrotal pain cut and bruise on forehead,19660133,27486620,-1,fever right upper extremity swelling pain redness,False
+102,15355703,23193531,-1,nausea vomiting,13117944,23955047,-1,nausea vomiting,True
+104,11315075,24496029,-1,diarrhea,13459286,20863434,-1,diarrhea,True
+107,15355703,23084520,-1,nausea vomitting abdominal pain,11750272,25902161,-1,nausea vomiting abdominal pain,True
+108,15355703,24000632,-1,gastroparesis vomiting abdominal pain hyperglycemia,14962059,20209626,-1,hyperglycemia epigastric pain,True
+114,12427255,27652676,-1,possible hematemesis,12105778,27707256,-1,hematemesis,True
+118,16751417,24670205,-1,seizure,18535729,25100393,-1,seizure,True
+120,11315075,23068117,-1,scheduled chemotherapy,14982438,21760870,-1,scheduled chemotherapy,True
+122,15355703,22097697,-1,nausea/vomiting,14196016,20328437,-1,nausea/vomiting,True
+125,11225197,21823396,-1,vomiting with blood,14252138,26508652,-1,nausea vomiting increased bm with blood,True
+126,11225197,29185454,-1,seizure,17837345,29251540,-1,seizure,True
+129,10893121,26446598,-1,seizure,12022338,24974800,-1,seizure,True
+130,15002645,24137258,-1,abdominal pain/slow hr,12199830,28306189,-1,uoq abdominal pain a/w nausea vomiting,True
+132,16834871,23380724,-1,seizure,13777803,23855176,-1,seizure,True
+133,16834871,25920057,-1,seizures,15050125,26803539,-1,seizures,True
+142,16981027,23507329,-1,fever difficulty breathing,12909415,28137261,15,throat pain difficulty breathing,False
+143,18751419,24707917,-1,elevated lfts nausea vomiting,10944771,22361275,-1,nausea vomiting elevated blood sugars,True
+147,10670236,21721028,-1,left eye swelling,14988019,27666631,-1,right eye swelling,True
+149,10836861,26571955,-1,rash,10466687,26694485,-1,rash,True
+151,11225197,26035833,-1,hand pain,16279325,26642420,-1,hand pain,True
+153,13133129,24509527,-1,seizures,16074025,22720053,-1,seizures,True
+154,13133129,24636199,-1,seizures,13346788,22638757,-1,seizures,True
+155,13433123,24647068,-1,right hip pain,11997016,25315413,-1,right hip pain,True
+156,13433123,26747235,-1,rash,10204703,21340771,-1,rash,True
+157,13696823,27688512,-1,fatigue,17737493,20810369,-1,fatigue,True
+158,13896148,20730428,-1,nausea and vomiting,13117944,20159066,-1,nausea and vomiting,True
+168,17280445,21459324,-1,confusion agitation,17019493,23859742,-1,confusion,True
+170,17868595,28716898,-1,nausea vomiting/abdom pain,12885823,25547004,-1,nausea vomiting/abdominal pain,True
+171,17868595,28760836,-1,nausea/vomitting and hematemesis,14304821,28568430,-1,melena and hematemesis,True
+172,18385734,27695157,-1,fever,18979427,20129644,-1,fever,True
+173,18751419,21863313,-1,headache nausea,15848356,26882626,-1,headache nausea,True
+174,18957332,20941115,-1,diarrhea,10639069,28711371,-1,diarrhea,True
+177,19572730,25347351,-1,diarrhea,14586446,23055759,-1,diarrhea,True
+178,19572730,26722957,-1,diarrhea,15112967,20640384,-1,diarrhea,True
+179,19472721,29103840,-1,seizure,15674889,26451139,-1,seizure,True
+180,14982471,23229021,9,fever and hypotension,18605648,27951997,-1,hypotension,False
+181,12399776,24182166,9,hematemsis hematochezia abdominal pain,12604285,27879632,-1,hematemesis abdominal pain,False
+183,14982471,27070580,-1,hematemesis,16898560,29416357,-1,hematemesis,True
+189,17517983,28829035,-1,r wrist pain,19786784,25944405,-1,nausea wrist pain,True
+190,13241970,25686270,-1,hyponatremia,10174744,25809876,-1,hyponatremia,True
+192,15988441,22948695,-1,seizures,17624170,20484823,-1,seizures,True
+195,18042666,22412086,-1,feeling hypoglycemic,13313653,20969783,-1,hypoglycemic induced seizure,True
+199,17517983,25571675,-1,nausea vomiting abdominal pain,19344809,20972115,-1,nausea vomiting abdominal pain,True
+200,17517983,25609062,-1,abdominal pain hyperglycemia,19114391,28697281,-1,nausea vomiting hyperglycemia,True
+201,17517983,29353174,-1,nausea/vomiting,12586808,29603090,-1,nausea/vomiting,True
+207,17517983,24291274,-1,hypoglycemia nausea emesis,17906440,23412960,-1,hypoglycemia fever,True
+208,17517983,25603478,-1,nausea vomiting abdominal pain,17747104,29297630,-1,nausea vomiting flank pain,True
+211,15099554,24189294,-1,hypoxemia,15684743,26157784,9,hypoxemia anaphylaxis,False
+214,16498330,23658688,-1,bilateral lower extremity swelling,12488220,29427169,-1,left lower extremity swelling,True
+215,17517983,22691810,-1,hyperglycemia acute on chronic abdominal pain acute on chronic nausea/vomiting,10194191,28356224,-1,low grade fevers nausea/vomiting abdominal pain persistent urinary tract infection/pyelonephritis,True
+216,17517983,23094753,-1,hypoglycemia with nausea and vomiting,11572757,22173801,-1,hypoglycemia,True
+218,17517983,23411823,-1,abdominal pain coffee ground emesis,15036111,21544236,-1,coffee ground emesis,True
+219,17517983,25617754,-1,epigastric/chest pain,17281207,23652949,8,arthralgia and chest pain,False
+220,17517983,26763148,-1,r leg pain,11454901,22626302,15,bilateral leg pain,False
+221,17517983,28431082,-1,abdominal pain nausea,11746915,24050483,-1,abdominal pain nausea,True
+222,17517983,29209868,-1,hematemesis,18945414,29395905,-1,hematemesis,True
+224,18399899,23936026,-1,chest numbness dyspnea on exertion,10472551,21675677,-1,dyspnea on exertion chest pain,True
+225,10816811,23261805,-1,seizures,13729294,28673446,-1,seizures,True
+226,10816811,24032913,-1,epilepsy,18936846,28705896,-1,epilepsy,True
+227,12399776,20749225,-1,cough fever,12247581,29546926,-1,cough fever,True
+228,13492618,25339917,-1,abdominal pain / coffee ground emesis,17866736,27540141,13,vomiting/diarrhea abdominal pain,False
+231,15988441,21284462,10,wound infection and hardware exposure,15762053,22303791,-1,wound infection,False
+234,14982471,24562669,-1,anemia,14221023,26947652,-1,anemia,True
+236,17517983,22914694,-1,abdominal pain nausea,15631841,27256957,-1,abdominal pain nausea,True
+238,17517983,28526628,-1,throat tightness,15424221,28934879,15,pain/throat tightness,False
+239,17517983,29670705,-1,dka,13155216,29596633,-1,dka,True
+246,15988441,26069694,-1,seizures,14913055,24427646,-1,seizures,True
+247,13492618,20569572,-1,headache vaginal bleeding preterm contractions,15139159,21894401,-1,vaginal bleeding contractions,True
+248,13492618,24001680,-1,vaginal bleeding,15606055,23267049,-1,vaginal bleeding,True
+249,15571449,20683383,-1,left leg pain,10970238,25756044,-1,left leg pain,True
+252,13951325,22567549,-1,lower extremity swelling,17888343,26059218,-1,lower extremity swelling,True
+255,17517983,20194759,-1,nausea vomiting hematemesis vs hemoptysis,11621470,27682375,-1,nausea/vomiting hematemesis,True
+256,17517983,20614944,-1,abdominal pain nausea and vomiting,13521317,21789419,-1,abdominal pain nausea and vomiting,True
+259,17517983,21188343,-1,dka,14020710,26146977,-1,dka,True
+260,17517983,21598972,-1,nausea vomiting abdominal pain hematemesis,11249485,25504586,-1,nausea vomiting hematemesis,True
+262,17517983,22108471,-1,abdominal pain/nausea and vomiting,19800909,21685167,-1,abdominal pain and vomiting,True
+266,17517983,24237487,-1,nausea and vomiting,18086004,22200553,-1,nausea and vomiting,True
+268,17517983,24640222,-1,abdominal pain nausea,15631841,20102362,-1,abdominal pain nausea,True
+269,17517983,26162472,-1,nausea and vomiting,19752908,28751937,-1,nausea and vomiting,True
+270,17517983,27724830,-1,dka,14020710,24483212,-1,dka,True
+271,17517983,28116050,-1,hypoglycemia,11572757,23835224,-1,hypoglycemia,True
+272,17517983,28696865,-1,hyperglycemia,10133075,26236167,-1,hyperglycemia,True
+274,17280328,21915352,-1,syncope,14639594,22930829,-1,syncope,True
+276,10893880,21072574,-1,nausea,15806767,25592749,-1,nausea,True
+277,10893880,23686366,-1,intractable vomiting,17530252,27838192,-1,severe nausea/vomiting,True
+279,11121690,23228298,-1,syncope,12807740,24659915,-1,syncope,True
+280,11121690,29525944,-1,syncope,11929472,22851832,-1,syncope,True
+281,11325427,24812891,-1,stomach pain vomiting,10065035,25423982,-1,abdominal pain nausea vomiting,True
+282,11657354,22257588,-1,positive blood cultures,17791179,26058210,-1,positive blood cultures,True
+283,11657354,29957704,-1,sore throat fever chills,11705157,20613813,-1,fever chills back pain,True
+286,13492618,24394750,-1,headache,18069102,26285862,-1,headache,True
+289,14115044,24353945,-1,glycemic control,13177791,26768682,-1,glycemic control,True
+291,15149227,21031716,12,reason for consultation nmda-receptor autoimmune encephalitis with severe behavioral disturbances transferred from for evaluation of recurrence because of failure to progress despite multiple therapies,12549374,21207718,-1,pt is a y/o female w/ a h/o hiatal hernia and severe gerd who presented for a fundoplication to alleviate her symptoms related to her hiatal hernia and gerd,False
+292,15960369,28740708,-1,seizure,18319326,20891516,-1,seizure,True
+294,16197074,25363824,-1,anemia,11136730,23861196,-1,anemia,True
+295,17269391,22735752,-1,dysphagia,18966908,27062597,-1,dysphagia,True
+296,17517983,26600891,-1,hyperglycemia,14020710,21071607,-1,hyperglycemia,True
+306,17232733,27344041,-1,abdominal pain gastrointestinal bleed,15337872,27929497,-1,gastrointestinal bleed,True
+308,14908173,23935696,-1,fever abdominal pain,19212039,24411907,-1,fever abdominal pain,True
+309,14908173,24135915,-1,positive tb culture,12732629,28543504,-1,positive blood culture,True
+312,18314104,23632008,-1,lower extremity edema,17445359,20854700,-1,lower extremity edema,True
+317,17896016,21459665,-1,seizure,15879615,22614591,-1,seizure,True
+318,10578325,28014657,-1,chills,10242846,24978660,-1,chills nausea,True
+319,10730160,26402903,8,chest pain syncope,14312560,25390983,-1,syncope,False
+322,17292606,28292911,13,fever chills cough with nbnb sputum nausea vomitting,14272616,23248852,-1,headache nausea vomiting and amnestic events,False
+326,19572730,25140661,-1,c5 da-epoch/bortezomib,18891796,20240333,-1,c3 da-epoch,True
+327,10578325,25935314,-1,hypoxemia,15143785,29808063,-1,hypoxemia,True
+329,12994357,29880458,-1,gastrointestinal bleed,15385146,27897035,-1,gastrointestinal bleed,True
+330,13696823,29083278,-1,rash,14047385,21063209,-1,rash,True
+331,13889025,27867024,-1,dyspnea weight gain lower extremity edema orthopnea,13364025,25994820,-1,dyspnea lower extremity swelling,True
+334,17292606,22649434,-1,hyponatremia,12323168,24274734,-1,hyponatremia,True
+338,10578325,20206823,-1,left lower extremity pain,10113036,21746949,-1,right lower extremity pain,True
+340,14619006,22363096,-1,gastrointestinal bleed and hypotension,16658409,29008689,-1,gastrointestinal bleed hypotension,True
+342,18264198,20025790,-1,respiratory distress and somnolence,14723793,27292599,-1,somnolence and fevers,True
+343,12892024,23613357,-1,confusion,19988493,25600709,-1,confusion,True
+349,12650779,27365505,-1,seizure,16898066,28955778,-1,seizure,True
+352,13855527,22624353,-1,hyperglycemia,12538246,25892836,-1,hyperglycemia,True
+357,18264198,26679889,-1,trouble breathing,15419160,26855941,-1,trouble breathing,True
+361,13889025,21135197,-1,scrotal swelling dyspnea on exertion,18389709,27334428,-1,chest pressure dyspnea on exertion,True
+363,14622418,29359895,-1,dyspnea on exertion abdominal pain,16382445,25813261,-1,chest discomfort dyspnea on exertion,True
+366,17610997,25671495,-1,low urine output,10592564,28481570,-1,high blood pressure,True
+367,17838879,24000990,-1,hyperglycemia,13821382,29305970,-1,hyperglycemia,True
+368,18751419,26907984,13,dizziness influenza-like illness nausea vomiting,11601011,21877754,-1,flank pain fevers nausea vomiting,False
+369,19572730,22299417,-1,cough sore throat,19161677,26837342,-1,cough sore throat,True
+372,12892024,25505902,-1,fevers abdominal pain nausea vomiting,16096104,29966513,-1,abdominal pain nausea vomiting,True
+373,13988917,24717618,-1,c2 of hidac,16058794,24436464,-1,c1 of hidac,True
+374,13988917,26184850,-1,cough left eye ptosis,17255376,29964411,-1,leg swelling cough,True
+376,13988917,27546958,-1,chemo,18604060,26737560,-1,scheduled chemo,True
+379,15764628,28074968,-1,syncope,11716259,25789647,-1,syncope,True
+382,19774163,23091773,-1,hematemesis,14986267,24182693,-1,hematemesis,True
+386,12882985,25030948,-1,pus from nephrostomy tube,13776968,20374498,-1,pt admitted for elective nephrostomy tube placement,True
+391,19572730,23565832,-1,admitted with dysphagia,16066838,24108928,-1,who developed dysphagia starting about 6 months ago,True
+393,19887933,22018190,-1,right upper quadrant pain,14697702,26984246,-1,right upper quadrant pain,True
+395,10578325,20812303,-1,generalized weakness,10207149,27295466,15,generalized weakness hematuria,False
+396,10578325,27795021,-1,wound evaluation,13895472,23012294,-1,wound eval,True
+401,14394983,20880913,-1,hematemesis,11738688,25719659,-1,hematemesis,True
+404,17292606,22107273,-1,elevated creatinine,18306686,22951201,-1,elevated creatinine,True
+406,19881755,26848473,-1,seizure,17214577,21907744,-1,seizure,True
+407,10578325,22290456,-1,dr cc left hip pain,13614339,20264225,-1,headache back pain fever,True
+409,10578325,27449768,-1,chest pain chills,18143970,23062941,-1,flank pain chills,True
+412,11468192,27215521,15,bilateral foot pain,19621761,23034699,-1,foot pain,False
+413,12946813,25824410,-1,r leg pain,13746897,29819234,-1,r leg pain,True
+415,15150123,20499032,-1,r hip pain,19950080,26763711,-1,r hip pain,True
+416,17292606,23928542,-1,esrd,10900888,28193005,-1,esrd,True
+418,18675961,23044177,-1,seizures,10511269,22420432,-1,seizures,True
+419,18936570,21319858,-1,right femur fracture,17611445,27455510,-1,right femur fracture,True
+422,19786008,24177175,-1,seizure like events,13019820,20104212,14,new seizure-like events,False
+423,19837286,27831679,-1,seizure,10391340,29583159,-1,seizure,True
+424,12052932,27072442,-1,right hip pain,15337250,28924597,-1,right hip pain,True
+426,12864396,20033013,-1,fatigue and nausea vomiting,17956570,25573476,-1,abdominal pain and nausea vomiting,True
+430,13949181,29982504,10,scalp wound,10840421,22913033,-1,scalp wound infection,False
+432,14622418,25085747,-1,dyspnea on exertion,12635198,20771734,-1,dyspnea on exertion,True
+436,17610997,26429541,-1,increased creatinine,14594934,21105913,-1,increased creatinine,True
+438,17654187,29489921,-1,somnolence,17289771,24023354,-1,somnolence,True
+439,18272110,29162423,-1,hyperglycemia,14047852,27421034,-1,hyperglycemia,True
+443,11468192,29018068,-1,syncope,14634594,20419445,-1,syncope,True
+444,12892024,26052935,-1,fatigue swelling,16040238,21318085,-1,fatigue weakness,True
+445,12892024,29850858,-1,melena,14715243,20811083,-1,melena,True
+446,12994357,26315732,-1,right thigh pain,19400007,24100417,-1,left thigh pain,True
+451,18264198,24146146,-1,somnolence/lethargy,17421995,22659363,-1,somnolence,True
+452,18289359,25279729,-1,syncope,17663396,25552259,-1,syncope,True
+453,19572730,29533640,-1,c4 da-epoch/bortezomib,18367623,20330564,-1,c5 da-epoch,True
+454,19572730,29715313,-1,expedited workup lesion on base of tongue,15901070,22163479,-1,lesion on head and body concerning for abscess hyperglycemia,True
+456,14630939,24065447,-1,left leg pain,16514032,28076210,-1,left leg pain,True
+457,14997781,26463331,-1,refractory epilepsy,12032446,29566424,-1,refractory epilepsy,True
+461,18272110,22837503,-1,hyperglycemia confusion,16034565,22812591,-1,hyperglycemia,True
+463,18936570,21860870,-1,ileus,12147088,25214775,-1,ileus,True
+468,10578325,20730993,-1,syncope,19497408,27046994,-1,syncope,True
+471,13455047,20559874,-1,presyncope,15049685,28798258,-1,presyncope,True
+474,18751419,24935550,-1,nausea,10803622,21339501,-1,nausea,True
+476,10038332,22514900,-1,wound eval,11624688,27116469,-1,wound eval,True
+478,10038332,23550887,-1,syncope,18569995,27008044,-1,syncope,True
+480,10169331,25372149,-1,epigastric pain,10717708,21849575,-1,epigastric pain,True
+481,10398856,22821422,-1,left leg pain,17774182,28926418,-1,left leg pain,True
+482,10398856,29250107,-1,left ankle pain,15031071,25140489,-1,left ankle pain,True
+483,10578325,20241820,-1,right knee pain,13777886,23626152,-1,right knee pain,True
+486,10578325,21696691,-1,foot pain,15360815,29597626,-1,foot pain,True
+489,10578325,24885387,-1,right lower extermity pain,11904257,29835474,-1,left lower extremity pain,True
+490,10578325,25231432,-1,leg swelling,10206740,20098413,-1,leg swelling,True
+495,10578325,27566657,-1,positive blood cultures,11966869,21927289,-1,positive blood cultures,True
+498,10578325,29320025,-1,joint pains lower extremity swelling,14283371,25952562,-1,left lower extremity swelling chest pain,True
+502,10927745,27720492,-1,fever cough,15554479,23166037,-1,fever cough,True
+505,11468192,20654774,15,penis pain groin pain,11335102,27419086,-1,left groin pain,False
+509,12613687,27607118,-1,dizziness,16646744,20496767,-1,dizziness,True
+511,12613687,29730642,-1,headache,12860207,23198479,-1,headache,True
+515,13210714,21705823,-1,abdominal pain fever,18389856,21451530,-1,abdominal pain fever,True
+516,13210714,26192737,-1,ileostomy reversal,15619917,28677958,-1,ileostomy reversal,True
+520,13696823,22937964,-1,fever,16727549,28208723,-1,fever,True
+525,14170015,23452761,-1,nausea/vomiting,11911621,27769594,-1,nausea/vomiting,True
+526,14170015,25572179,-1,bright red blood per rectum,14412195,23344480,-1,bright red blood per rectum,True
+529,14394983,29241336,-1,hematemesis and abdominal pain,14334176,21861719,-1,hematemesis abdominal pain,True
+531,14668389,20758577,-1,year old male who complains of gsw to right lateral neck,13949558,29459404,-1,year old male admitted with 2 day history of constant colicky severe right flank and right upper quadrant pain 2 hours post prandial,True
+533,14689564,29931427,-1,l thumb pain,10456934,20697783,-1,l wrist pain,True
+534,14740889,27909060,-1,left side neck pain,11097480,28937040,-1,left hand pain,True
+537,15764628,25193144,-1,syncope,19053437,29977898,-1,syncope,True
+538,16475789,24031809,-1,right foot pain,11461825,22818710,-1,right foot pain,True
+539,17610997,23398086,-1,fever positive blood cultures,18342732,25197041,-1,fever positive blood culture,True
+540,17610997,23626746,-1,diarrhea,18503817,21077788,-1,diarrhea,True
+545,18255373,20282121,-1,1 increased abdominal pain 2 multiple episodes non-bloody/non-bilious emesis 3 hematemesis 4 leukocytosis,10708287,24728258,-1,intractable vomiting hematemesis,True
+548,18272110,28752717,-1,hyperglycemia diabetic foot ulcer,13566015,24829637,-1,hyperglycemia polyuria,True
+551,18446519,22579735,-1,abdominal pain rectal bleed,13816400,27547108,15,abdominal pain rectal pain,False
+556,18751419,21271118,-1,shoulder pain,11449126,25546044,-1,l shoulder pain,True
+557,18751419,25617930,-1,cough weakness,10071379,23735613,14,bilateral weakness,False
+558,18751419,27756907,-1,right lower extremity weakness/numbness inability to ambulate,11973741,29749721,-1,right lower extremity radiculopathy weakness numbness,True
+563,19572730,28588832,-1,c2 da-epoch/bortezomib,14076889,29474799,-1,c4 of da-epoch,True
+565,19993214,27218318,-1,l shoulder pain,16944352,20616577,-1,l shoulder pain,True
+566,14143688,21077060,-1,hematemesis,18307993,26690584,-1,hematemesis,True
+569,11943854,24070384,12,neck pain rij dvt,14142762,20878536,-1,abdominal pain left lower extremity dvt,False
+571,14360114,24911457,13,diarrhea for 3 weeks,11181757,28703022,-1,diarrhea,False
+572,17978114,22357420,-1,facial swelling,14013810,29856820,-1,facial swelling,True
+576,15582561,23823441,-1,fever lethargy,12306640,20609620,-1,lethargy,True
+577,16083988,21090192,-1,epigastric pain/back pain,19983512,28279474,-1,epigastric pain,True
+579,12560500,21672266,-1,anemia,11154911,25681771,-1,anemia,True
+580,11943854,26007215,-1,weakness dehydration,11274511,23131447,-1,dehydration weakness,True
+587,18252222,20132426,-1,dizziness,13004288,29540568,-1,dizziness,True
+594,12179886,25330171,-1,fatigue weakness,16843122,20288412,-1,weakness fatigue,True
+601,10747238,25971898,-1,presyncope,14982902,21713086,-1,presyncope,True
+604,15149655,24382775,-1,somnolence,15696349,21845305,-1,somnolence,True
+606,19994592,24603431,-1,nausea and vomiting,17248785,25429322,-1,nausea and vomiting,True
+608,11943854,20418153,-1,anemia,13521581,29816384,-1,anemia,True
+612,10582192,21474482,-1,neck pain,16310231,21841956,-1,neck pain,True
+613,12407328,22612304,-1,dizziness,11057183,20913285,-1,dizziness,True
+616,13875316,28398753,-1,hypotension,15666867,21347742,-1,hypotension,True
+617,14145716,23796087,-1,nausea vomiting abdominal pain,13480304,27737897,-1,nausea vomiting abdominal pain,True
+618,16387211,20301255,-1,right ankle pain,11029640,26034040,-1,right knee pain,True
+624,14974839,25280843,-1,stridor,10640410,25898987,-1,stridor,True
+625,15374346,25099281,-1,diarrhea,16886575,28409871,-1,diarrhea,True
+627,18305097,28783601,-1,leg pain,18467080,27077224,-1,leg pain,True
+628,18881576,24381909,-1,nausea vomiting generalized weakness,10902049,28477761,-1,abdominal pain nausea vomiting,True
+629,18881576,25839124,-1,persistent nausea,15082822,21685501,-1,nausea fatigue,True
+632,14012159,22421917,-1,weeks of subjective fevers,15018221,29324186,-1,pain subjective fevers/chills,True
+649,13875316,28226700,-1,fever urinary tract infection,17522034,21727147,-1,urinary tract infection,True
+651,14650506,20279519,-1,wound infection,17239893,23517435,-1,wound infection,True
+660,11018892,21686664,-1,seizures,18410081,26595502,-1,seizures,True
+661,11018892,25065056,-1,seizures,17388800,21408772,-1,seizures,True
+665,12761284,22165325,-1,headache nausea,14487480,29073508,-1,headache nausea,True
+667,14650506,24428741,-1,wound infection,15189218,23752585,-1,wound infection,True
+669,15040139,24546247,-1,tremulousness and confusion,19176845,25386055,-1,confusion and lethargy,True
+674,10110764,20819665,-1,colostomy reversal,11401186,23790141,-1,colostomy reversal,True
+676,10508246,25471599,-1,right upper quadrant pain,16635471,22049139,-1,right upper quadrant pain,True
+678,11132745,25014774,11,inflammatory disease med noncompliance,14866620,23041347,-1,polyuria polydipsia and blurred vision,False
+679,11315392,22623390,-1,bilateral mandibular fracture,13959386,21975414,-1,mandibular fracture,True
+681,11943854,28047407,-1,urinary tract infection,13615258,22619945,-1,urinary tract infection,True
+684,13166511,24911245,-1,nausea,19774071,25035229,-1,nausea,True
+685,13166511,29035936,-1,hypoglycemia,13729702,23057233,-1,hypoglycemia,True
+689,13582085,27990483,-1,lightheadedness,13077337,20595670,-1,lightheadedness,True
+692,13875316,23131554,-1,foul smelling urine homelessness,13653745,25041389,15,foul smelling urine flank pain,False
+696,15226417,29481024,-1,epigastric/flank pain nausea and vomitting,15093264,21878736,-1,epigastric pain nausea vomiting,True
+698,15755784,21811255,-1,neck pain,18462297,24883544,-1,neck pain,True
+700,16131197,22612363,-1,abdominal pain/non-bloody watery stools,16786398,23764631,-1,abdominal pain and bloody stools,True
+702,16354481,28659099,-1,code stroke,13541733,20999217,-1,code stroke,True
+703,17290849,27879314,-1,diarrhea,14539863,23163734,-1,diarrhea,True
+707,17648875,22953798,-1,nausea and vomiting,17526111,28425203,-1,nausea and vomiting,True
+710,18155987,23046396,-1,vaginal bleeding,10130449,25584512,-1,vaginal bleeding,True
+711,18305097,27882908,-1,left lower extremity redness,19838802,23834459,-1,red swollen left lower extremity,True
+712,18746957,21312166,-1,right knee pain,19165905,24675591,-1,right knee pain,True
+720,19989126,22853928,-1,headache,11001267,26332257,-1,headache,True
+724,11431685,29541753,-1,leg swelling,17982428,20143983,-1,leg swelling,True
+728,16003661,20001305,-1,hypoxia,16345916,23364278,-1,hypoxia,True
+738,16547190,25482002,-1,encephalopathy seizure-like activity,10168722,25403630,-1,encephalopathy,True
+741,13610988,24761198,-1,lethargy decreased activity at,16794551,29113840,-1,fatigue lethargy weakness,True
+744,11482500,29820139,-1,nausea weakness,11443713,21150138,-1,weakness nausea,True
+746,17824494,27155089,-1,dizziness,12591968,22088843,-1,dizziness,True
+749,14381700,25850137,-1,dyspnea on exertion,12604366,29317294,-1,dyspnea on exertion,True
+757,12326001,29519311,-1,hypoxia weakness,13650934,25630574,-1,hypoxia cough,True
+767,17824494,29198759,-1,worsened lower extremity swelling increased dyspnea of exertion swollen left breast and increased left upper extremity swelling,11208359,28850824,-1,dyspnea and lower extremity edema,True
+771,18030487,25506569,-1,weakness urinary pressure,15951736,28825784,-1,pelvic pressure/urinary retention,True
+773,18030487,27966190,-1,l hip pain,17079270,29634212,-1,l hip pain,True
+774,18275403,24429124,-1,fever and lethargy,18552311,22342860,-1,fatigue and lethargy,True
+781,10767569,23604447,-1,abnormal labs,18877141,21517331,-1,abnormal labs,True
+783,10767569,24315842,-1,left lower extremity pain -- left multipart intertrochanteric hip fracture,16901671,26122834,-1,left intertrochanteric hip fracture,True
+790,17482988,24428815,-1,seizure,13293583,27756559,-1,seizure,True
+793,18750487,27243757,-1,fatigue,16891942,22860356,-1,fatigue,True
+794,10236661,21590908,-1,watery diarrhea,12317276,21136324,-1,watery diarrhea,True
+798,15264766,22949646,-1,left sided pain,15520884,22825882,15,left leg swelling and pain,False
+799,16003661,24158316,-1,urinary tract infection fever,12317276,24418053,-1,fever diarrhea urinary tract infection,True
+804,11859945,24422528,-1,nausea fatigue,15905568,27475329,-1,nausea headache,True
+805,13405890,29034128,-1,syncope,16254023,22106239,-1,syncope,True
+806,15633118,29556073,-1,confusion,14064788,22926112,-1,confusion,True
+811,13622907,27755365,-1,altered mental status/urinary tract infection,10417160,29833923,-1,urinary tract infection and altered mental status,True
+813,16551775,22983254,15,abdominal pain lethargy back pain,18356938,29452298,-1,fever lethargy abdominal pain,False
+816,10410752,24721261,-1,lightheadedness,17854225,29783716,-1,lightheadedness,True
+817,11405839,21196541,-1,hypoxia,18132636,20466169,-1,hypoxia,True
+818,11854304,29756670,-1,nausea abdominal pain,11708364,25810035,-1,nausea abdominal pain,True
+819,13622907,28562263,-1,altered mental status/urinary tract infection,14723297,28158965,-1,fall/urinary tract infection,True
+822,17481329,25362393,-1,nausea and vomiting,12889874,22691688,-1,nausea and vomiting,True
+824,17824494,24480672,-1,dyspnea on exertion,19014190,26493598,-1,dyspnea on exertion,True
+827,10074282,21824345,-1,vomiting failure to thrive,10423865,20092300,-1,failure to thrive,True
+830,12391240,29383303,-1,lower extremity edema shortness of breath,18809506,28843010,-1,shortness of breath lower extremity edema,True
+831,12500505,29355453,-1,fatigue,10747985,24109318,-1,fatigue,True
+837,10543877,21408998,-1,left hip pain,13391979,27785266,-1,left hip pain,True
+838,11955908,21292936,-1,shoulder pain gastrointestinal bleed,13829256,28961068,-1,abdominal pain gastrointestinal bleed,True
+843,13622907,28267179,8,pyuria groin pain,10147782,26174094,-1,right groin pain,False
+844,15376482,26837611,-1,fevers rigors,15798128,28609482,-1,fevers rigors confusion,True
+845,15667769,24056235,9,hypotension confusion,16617465,23355822,-1,hypotension,False
+847,18292095,22951190,14,vomiting altered mental status,14261387,22332097,-1,altered mental status nausea vomiting,False
+850,18751336,20636177,-1,syncope,17984169,23133801,-1,syncope,True
+851,18751336,22328264,-1,femur fracture,11475238,26269185,-1,right femur fracture,True
+856,12307852,23591400,-1,vomiting/regurgitating after eating nausea,18768461,24874196,13,vomiting and diarrhea,False
+857,12780990,25043126,-1,light headedness and falls x 3 days,17712765,20401798,15,weakness lightheadedness recent falls,False
+858,13496178,26850757,-1,found down,16421647,22765622,-1,found down,True
+859,14583397,27497667,-1,code stroke,15666713,29656432,-1,code stroke,True
+861,15667769,20442348,-1,neck pain,10718726,26625494,-1,neck pain,True
+862,15667769,20476346,-1,sore throat,18813207,24297587,-1,sore throat,True
+867,10518021,29437804,-1,dyspnea on exertion,13210124,26392859,-1,dyspnea on exertion,True
+871,18292095,20156439,-1,lethargy,13104650,22099245,-1,lethargy,True
+872,18292095,20844097,-1,nausea coffee-ground emesis,15586214,29387418,-1,coffee-ground emesis,True
+873,18292095,28777491,-1,hematemesis,17409910,25913533,-1,hematemesis,True
+880,16003661,29903642,-1,l intertrochanteric hip fracture,14776642,22895030,-1,left intertrochanteric hip fracture,True
+882,17481329,27532263,-1,abdominal pain with nausea and vomiting,11423201,29022900,-1,abdominal pain and vomiting,True
+886,12500505,20936529,-1,weakness,11770024,24688231,-1,weakness,True
+890,18750487,20742729,-1,anemia,10600714,28341298,-1,anemia,True
+891,10543877,22374409,-1,left foot pain,17903820,23728970,-1,left foot pain,True
+894,10674823,23833654,-1,left foot pain,14898109,28594783,-1,left foot pain,True
+896,12075729,22396082,-1,weakness,14345759,29644848,-1,weakness,True
+897,12075729,26485097,-1,emesis and nausea,19987071,26995396,-1,nausea vomiting,True
+901,13122237,24328154,-1,somnolence,17139674,23225005,-1,somnolence,True
+906,14451193,21414720,-1,cough confusion,13724493,24053387,-1,cough congestion,True
+907,14653611,26509843,-1,lower extremity swelling/erythema,16753630,24606096,-1,lower extremity swelling and erythema,True
+913,18292095,22949503,-1,wound evaluation,11999982,20011679,-1,wound eval,True
+917,18751336,22286972,-1,syncope,19125737,21015658,-1,syncope,True
+918,18751336,27783413,-1,seizure like activity,10577827,26527923,14,confusion seizure,False
+921,19394671,23927530,-1,rectal bleeding,14346314,24249619,-1,rectal bleeding,True
+923,13622907,22874881,-1,altered mental status urinary tract infection,18899658,20862338,-1,hypotension urinary tract infection,True
+926,10721207,27240839,-1,left hip pain,14913896,29575200,-1,left hip pain,True
+930,15764352,26704134,-1,weakness severe anemia,10710902,22217269,-1,anemia weakness,True
+935,16551775,20101115,-1,l hip pain,12997545,26095988,-1,l hip pain,True
+937,18862717,20841394,-1,right hand swelling,12240038,23437086,-1,hand swelling,True
+941,13260670,23503428,-1,presyncope somnolence,18194315,25585244,-1,somnolence,True
+945,17917166,20432741,-1,lightheadedness urinary tract infection,13947746,28257589,-1,bacterial urinary tract infection lightheaded,True
+949,10119391,25770503,-1,confusion,10172560,29982019,-1,confusion,True
+952,10674823,20523816,-1,right toe pain,12201482,23074506,-1,right toe pain,True
+953,10674823,20695328,-1,left foot pain,17682648,24430584,-1,left foot pain,True
+954,11210100,25178226,-1,anemia,15583900,26951799,-1,anemia,True
+960,12666683,24529612,-1,mechanical fall left hip fracture,14763276,25792719,-1,left hip fracture,True
+964,12973912,23881630,-1,staghorn calculus recurring urinary tract infection,15187253,23769886,-1,urinary tract infection,True
+966,13260670,29701139,-1,fever cough weakness confusion,11568515,28921291,-1,fatigue fever cough,True
+967,13277660,22826216,-1,rectal bleeding,13947434,23757303,-1,rectal bleeding,True
+971,14213634,29008910,-1,right upper quadrant pain,14440465,23702789,-1,right upper quadrant pain,True
+973,14849280,28713582,8,cough and hypoxia,13459374,23729239,-1,fall hypoxia,False
+974,15376482,24284369,-1,bright red blood per rectum,15220098,26215336,-1,bright red blood per rectum,True
+975,16027768,22165563,-1,nausea vomiting,14362645,27468067,-1,nausea vomiting,True
+976,16027768,24796803,-1,left lower extremity redness,14191990,28704302,-1,left lower extremity redness,True
+977,16027768,27133735,-1,fall knee pain urinary frequency,11217521,27945105,-1,urinary frequency dizziness hyperglycemia chills,True
+978,16857974,24701486,-1,left hip fracture,16721854,29370035,-1,left hip fracture,True
+981,18475329,25249379,-1,left hip pain,10134600,28703803,-1,left hip pain,True
+983,15430388,23908277,-1,hypersomnolence,12325110,26884482,-1,somnolence,True
+987,15430388,25557662,-1,y/o m with hx of prostate cancer and hx aus replacement who also has lymphoma and had a foley catheter placed and left in for several weeks leading to erosion of his artificial urinary sphincter cuff,13558101,26566456,11,anasarca nephrotic syndrome and membranous nephropathy dyspnea on exertion prostate cancer,False
+988,19532801,25804876,-1,diarrhea,13578125,26199593,-1,diarrhea,True
+989,11112302,25656479,-1,diarrhea,17158427,26591411,-1,diarrhea,True
+993,13627620,23086961,-1,diarrhea,18953342,21864492,-1,diarrhea,True
+995,16893042,28189717,-1,found down,10271367,24962829,-1,found down,True
+997,19046487,22099439,-1,weakness,18087161,26163203,-1,weakness,True
+999,10519618,21134403,-1,epistaxis aspiration,10681957,29456646,-1,epistaxis,True
+1004,14349467,20892349,-1,abdominal pain elevated lfts,17504013,24706779,15,abdominal pain bruising,False
+1006,16749509,27506631,-1,seizures,16138521,23436383,-1,seizures,True
+1009,15233026,26857369,-1,headache,14618462,26329920,-1,headache,True
+1010,15430388,24827383,-1,cycle 3 r-epoch,10462312,24474526,-1,cycle 1 epoch,True
+1011,16466609,22189142,-1,weakness cough,11192888,21439184,-1,weakness cough,True
+1012,16466609,28462991,-1,lethargy productive cough,19918413,29029646,-1,fever cough lethargy,True
+1013,17633890,27571693,-1,hyperglycemia,10468541,24150912,-1,hyperglycemia,True
+1015,12266695,20554609,-1,hypoxemia,18990664,25449969,-1,hypoxemia,True
+1016,13454205,23107729,-1,bright red blood per rectum,13214457,20898580,-1,bright red blood per rectum,True
+1021,18234816,21933093,-1,nausea and vomiting,18198790,20725180,-1,nausea and vomiting,True
+1026,18694024,27905176,-1,fevers chills,18344615,20459704,-1,fevers chills,True
+1028,14822347,29596404,-1,bright red blood per rectum,17908281,28926097,-1,bright red blood per rectum,True
+1030,15599271,25386395,-1,dysphagia,14147907,20935059,-1,dysphagia,True
+1032,17563163,24538544,-1,gastrointestinal bleeding,19063438,24216690,-1,gastrointestinal bleeding,True
+1033,18930554,26913829,-1,mouth pain,12310099,26014804,-1,fever mouth pain,True
+1036,13627620,26824211,-1,fever,15571899,28768636,-1,fever,True
+1041,15783638,27714276,-1,urethral tear pneumonia,13266836,20564754,11,benign prostatic hypertrophy urinary retention requiring chronic indwelling urethral catheter hematuria,False
+1042,17633890,26358474,-1,confusion hyperglycemia,14128950,25898115,-1,fall hyperglycemia,True
+1043,18692227,24822741,-1,agitation urinary tract infection,10968253,26716103,-1,urinary tract infection,True
+1044,18694024,26294420,-1,abdominal pain chills and confusion,15872093,20712362,-1,chills chest pain,True
+1046,19046487,28582147,-1,hypotension,12660496,20693469,-1,hypotension,True
+1048,17633890,20114936,-1,weakness,12430823,23586196,-1,weakness,True
+1050,17967763,29908738,9,hypotension scalp bleeding,14782819,23644995,-1,hypotension,False
+1057,10017492,27417763,-1,fall right hip fracture,15692254,21312324,-1,right hip fracture,True
+1058,14349467,23815972,-1,anemia,17577670,26822848,-1,anemia,True
+1060,13799448,25804496,-1,weakness flu positive,13889335,22119989,-1,positive blood culture,True
+1062,17710466,20376522,-1,cold right leg,10572581,28722937,-1,cold right foot,True
+1065,18930933,23315643,-1,hypotension,15330926,28587759,-1,hypotension,True
+1067,12790812,29404160,-1,femur fracture fall,13103137,28247826,-1,femur fracture,True
+1068,13945665,25441418,-1,confusion,12054384,24682590,-1,confusion,True
+1072,11541551,23090186,-1,dehydration ftt,12461334,27708241,-1,dehydration,True
+1074,12790812,24658628,-1,failure to thrive,16911115,20426901,-1,failure to thrive,True
+1076,13799448,23724997,-1,headache,19209223,28688673,-1,headache,True
+1078,17633890,28893271,-1,ankle pain,11392293,26240503,-1,l ankle pain,True
+1080,17967763,29084381,-1,hematemesis,18922738,26122261,-1,hematemesis,True
+1081,19176283,28558041,13,i need to get my head straight,15571899,20468017,-1,my head hurts,False
+1083,19630679,26506615,-1,bright red blood per rectum,10315295,26656186,-1,bright red blood per rectum,True
+1084,18556041,21868175,-1,right foot pain,16579716,25050105,-1,right foot pain,True
+1085,18556041,23919796,-1,right leg swelling,12137727,29178216,-1,right leg swelling,True
+1088,12115127,24156148,-1,pneumonia,17122884,26021122,-1,pneumonia,True
+1093,19630679,26067387,-1,bloody stool,15187951,27386020,-1,bloody stool,True
+1094,18696678,21787977,-1,r knee pain,17214156,22676724,-1,r knee pain,True
+1095,11254914,27983294,-1,left hip pain,14276958,20443466,-1,left hip pain,True
+1096,12115127,24845934,-1,r foot pain,19875679,20972420,-1,r foot pain,True
+1097,12134006,28419095,-1,hypotension,10570398,23147435,-1,hypotension,True
+1098,13799448,29118623,-1,r flank pain,19077916,22606681,-1,r flank pain,True
+1099,13799448,29142899,-1,r hip pain,13662443,25970144,-1,r hip pain,True
+1102,18556041,27393712,-1,fever emesis,16938559,22127849,-1,fever abdominal pain,True
+1104,11953078,22535583,-1,lethargy,11259141,25963696,-1,lethargy,True
+1106,17745354,23663754,-1,scheduled chemotherapy,10617087,27650624,12,planned admission for chemotherapy,False
+1107,17745354,25763794,-1,scheduled chemotherapy,17612019,28336913,-1,scheduled chemotherapy,True
+1110,14321890,26898621,-1,diarrhea,18468009,22176962,-1,diarrhea,True
+1111,15965213,21757651,-1,head/neck pain,14637324,20019482,-1,neck pain,True
+1112,17745354,23633700,-1,dyspnea on exertion altered mental status,13774759,23494931,-1,dyspnea on exertion,True
+1114,17729814,29872268,-1,encephalopathy,11667512,23361469,-1,encephalopathy,True
+1115,17745354,22496051,-1,scheduled chemotherapy,19362502,23814778,-1,routine chemotherapy,True
+1116,15687528,28120239,-1,confusion,17892170,25455443,-1,confusion,True
+1117,17729814,29005897,14,altered mental status status post fall,13281088,20155937,-1,altered mental status dehydration,False
+1121,12431768,22935584,-1,diarrhea,12298953,29712709,-1,diarrhea,True
+1122,12431768,23720628,-1,urinary retention right lower quadrant pain,12412776,21684668,-1,right lower quadrant pain hypertensive urgency,True
+1124,14360114,29883611,-1,and fatigue,12677040,23292925,-1,fatigue cough,True
+1125,16059088,27486132,8,vertigo dysarthria repiratory distress,16879447,20974096,-1,dysarthria,False
+1127,17656146,24492778,-1,fever,15663860,25859252,-1,fever,True
+1131,17745354,29366299,-1,scheduled chemotherapy,16880728,24715471,-1,scheduled chemotherapy,True
+1134,16251537,20914956,-1,back and lower extremity pain,17202697,26895007,15,back and leg pain,False
+1137,11582633,26705855,13,diarrhea weight loss,15863420,27109446,-1,diarrhea,False
+1138,14360114,20454629,-1,hyponatremia,16643081,27182200,-1,hyponatremia,True
+1139,14360114,21104278,-1,abnormal labs,17643481,25936703,-1,abnormal labs,True
+1140,14360114,22463524,-1,hyperglycemia,11343910,20757069,-1,hyperglycemia,True
+1142,14360114,28392674,9,hypotension weakness,16386570,25487119,-1,hypotension,False
+1144,17745354,20054522,-1,scheduled chemotherapy,13175313,26061231,-1,scheduled chemotherapy,True
+1146,17745354,21480535,-1,scheduled chemotherapy,16911517,23610063,-1,scheduled chemotherapy,True
+1149,11498197,23588823,-1,abdominal pain nausea vomiting,10224753,29671345,-1,abdominal pain nausea vomiting,True
+1150,12431768,21964305,-1,bloating,15475029,26501545,13,abdominal distension and bloating,False
+1151,13073377,21986879,-1,seizures hyponatremia,10670705,29329010,-1,hyponatremia,True
+1154,17441977,28426333,15,stroke symptoms,19329862,21772957,-1,stroke,False
+1157,11582633,25206766,-1,dyspnea on exertion,11515132,20454489,-1,dyspnea on exertion,True
+1158,12024744,26071189,-1,fever,13977407,27570783,-1,fever,True
+1161,12431768,29703772,-1,shoulder pain,14753037,22992487,-1,shoulder pain,True
+1164,13918057,22765394,-1,bright red blood per rectum,10615900,28267222,-1,bright red blood per rectum,True
+1165,16476072,27846188,-1,nausea epigastric pain,18856939,27824287,-1,epigastric pain vomiting,True
+1166,17745354,25228407,-1,scheduled chemotherapy,11354762,20358779,12,elective chemotherapy,False
+1167,19917153,27795890,-1,abdominal pain nausea vomiting,12656657,20849433,-1,abdominal pain nausea vomiting,True
+1171,10683325,29812411,-1,dizziness hematemesis,15239510,28536000,-1,hematemesis weakness,True
+1172,14360114,21702433,-1,hyponatremia,12108578,29220571,-1,hyponatremia,True
+1173,14360114,27889999,-1,syncope,12072280,26099743,-1,syncope,True
+1175,17374087,21883934,-1,urinary tract infection,13423793,25111726,-1,urinary tract infection,True
+1177,11376122,29948046,-1,nausea abdominal pain,18289248,22638658,-1,nausea abdominal pain,True
+1178,14404878,20444738,-1,weakness/ cough/ fever,12017586,20793536,-1,fever/cough/weakness,True
+1180,16251537,24424619,-1,confusion,10741696,28567790,-1,confusion,True
+1183,17745354,25624794,-1,scheduled chemotherapy,15844411,29506523,-1,scheduled chemotherapy,True
+1184,17745354,28614139,-1,scheduled chemotherapy,13175313,28302312,12,elective chemotherapy,False
+1185,17748455,28030380,-1,right cold leg,19426947,26322674,15,ischemic pain and cold left foot,False
+1187,13073377,28608703,-1,weakness,13938103,27347009,-1,weakness,True
+1190,17059606,25713977,-1,hyperglycemia,19986183,28820683,-1,hyperglycemia,True
+1191,17374087,29556571,-1,black bowel movements,12776401,21736252,13,abdominal cramps with bowel movements,False
+1193,10683325,20161453,-1,syncope,15409272,23293655,-1,syncope,True
+1196,12431768,27054559,3,groin pain,11261679,26869358,-1,left groin pain,False
+1197,13889150,23927899,-1,fever fall cough,12200646,20376324,-1,fever chills cough,True
+1198,16088020,29934372,-1,abdominal pain nausea and vomiting,18202323,24235045,-1,abdominal pain nausea and vomiting,True
+1199,16775055,24612577,-1,abdominal distention nausea vomiting,18416632,26361013,-1,nausea vomiting fatigue abdominal distention,True
+1203,17745354,22564894,-1,scheduled chemotherapy,17612019,21359881,-1,scheduled chemotherapy,True
+1207,10232271,21107704,-1,sepsis,11676215,21168894,-1,sepsis,True
+1211,11582633,28392532,-1,syncope,12375412,21124217,-1,syncope,True
+1212,12024744,21231657,-1,fever,16964222,27694935,-1,fever,True
+1213,12024744,21526044,-1,c6 da-epoch,10617087,21480820,-1,c6 da-epoch,True
+1215,12024744,28819357,-1,c3 da-epoch level 2,10617087,21718336,-1,c3 da-epoch,True
+1218,10683325,27378495,-1,confusion,10670705,20496945,-1,confusion,True
+1219,12431768,25881619,-1,fever,13675529,29627072,-1,fever,True
+1225,10683325,27941860,-1,confusion,15002062,26931972,-1,confusion,True
+1227,11582633,25279368,-1,hyperglycemia,13044775,20877787,-1,hyperglycemia,True
+1228,12024744,21052275,-1,fever,16255318,24607734,-1,fever,True
+1231,12024744,28889569,-1,fever,15449221,28177824,-1,fever,True
+1233,14404878,21427993,-1,dvt,19685641,28283580,-1,dvt,True
+1234,14404878,23614469,-1,hyperglycemia,17785329,23815691,-1,hyperglycemia,True
+1238,16868422,27130917,-1,fever cough,10758869,23382792,-1,fever cough,True
+1239,17059606,25379455,-1,vaginal bleeding abdominal pain,12851582,24210218,-1,abdominal pain vaginal bleeding,True
+1242,19152929,29767176,-1,hypoxia,19478261,23451711,-1,hypoxia,True
+1249,13448204,24480863,-1,right lower quadrant pain and decreased appetite since her surgery last month,13606720,26879584,-1,right lower quadrant pain and nausea,True
+1252,13653377,25728690,-1,hypoglycemia,15899780,24743816,-1,hypoglycemia,True
+1258,14360114,23168177,-1,hyponatremia,12108578,20292231,-1,hyponatremia,True
+1260,14360114,25935898,-1,nausea/vomiting,16814115,26149099,-1,nausea/vomiting,True
+1262,14394962,28514821,-1,nausea vomiting and abdominal pain,11624559,21142923,-1,nausea vomiting and abdominal pain,True
+1265,15765403,22415592,-1,nausea/vomiting,14261567,26412273,-1,nausea/vomiting,True
+1269,17748455,28590338,10,right groin wound infection,14709018,27389978,-1,wound infection,False
+1272,13073377,21040669,-1,right arm pain,13486903,26987480,-1,right arm pain,True
+1274,13653377,25598840,-1,hyperglycemia,10313110,28463602,-1,hyperglycemia,True
+1276,15765403,24148068,-1,lethargy,13439409,24996053,-1,lethargy,True
+1279,15765403,27625477,-1,nausea vomiting abdominal pain,14435725,23100315,-1,nausea vomiting abdominal pain,True
+1283,17826428,25556089,-1,r hip fracture fall,18148920,21665660,-1,hip fracture fall,True
+1284,10232271,29556605,-1,confusion incontinence,12668021,26655891,-1,weakness sensory changes and incontinence,True
+1287,11376122,26356924,-1,nausea and vomiting,10547178,26058172,-1,nausea and vomiting,True
+1288,12024744,20667357,-1,fever,11624559,22477002,-1,fever,True
+1289,12024744,21533383,-1,fever,11456133,22541619,-1,fever,True
+1293,12024744,25597505,-1,da-epoch,13588419,25549860,-1,da-epoch,True
+1295,12024744,27499751,-1,fever,17736979,23065813,-1,fever,True
+1302,15925315,26674528,-1,hypoxia,12606543,23540560,-1,hypoxia,True
+1303,16474473,28833866,-1,agitation,13368091,20523108,-1,agitation,True
+1309,17531182,27155918,-1,gastroesophageal reflux disease,11266940,21499537,11,hiatal hernia with persistent gastroesophageal reflux disease,False
+1313,10151713,26744691,-1,hyponatremia,18889933,29857641,-1,hyponatremia,True
+1315,10737233,23994268,-1,high blood sugars,10012942,25710228,-1,elevated blood sugars,True
+1319,13448204,28798063,-1,malaise x 2 weeks referred by ecf for increasing pain and new fever of 101 4f,16192850,23534550,-1,lightheadedness/ transfer from osh with new colon lesion,True
+1321,14146667,25515564,-1,anemia,12411890,25354006,-1,anemia,True
+1324,16186331,28397775,-1,hyponatremia,12413842,29969488,-1,hyponatremia,True
+1327,10136368,22259435,-1,hypoxia,14925523,23916954,-1,hypoxia,True
+1333,14360114,20694663,-1,hyponatremia,19613414,20576443,-1,hyponatremia,True
+1338,18937159,25194938,-1,right upper extremity numbness,15512838,21116912,-1,right upper extremity numbness,True
+1339,18937159,25252974,-1,nausea and vomiting x3days,14006414,23591085,-1,nausea and vomiting for 3 days,True
+1348,12284877,24943884,-1,seizure,16577794,28110943,-1,seizure,True
+1349,13007957,24140426,-1,seizure,18395998,27565762,-1,seizure,True
+1350,13007957,26580736,-1,seizure cluster,17752581,21062599,-1,seizure activity,True
+1353,13376901,20844968,-1,vomiting,14228894,25849972,-1,vomiting,True
+1357,14441717,24014218,-1,ble pain,16050160,27272726,-1,dr pain,True
+1358,14713993,22188769,-1,positive blood cultures,17126702,26008014,-1,positive blood cultures,True
+1359,17059606,24100793,-1,difficulty breathing,11984852,26568826,-1,difficulty breathing,True
+1363,17531182,27321227,-1,vomitting fever cough,14711758,27368358,-1,fever cough chest pain,True
+1364,17541404,28325911,11,here for left partial mastectomy bilateral mastopexy has atypical ductal hyperplasia on the left,18467080,20873717,-1,elective left partial mastectomy w/tram flap reconstruction,False
+1370,18610064,20652683,-1,syncope,10844468,29064085,-1,syncope,True
+1372,18610064,29484235,-1,syncope,13869152,20632233,-1,syncope,True
+1373,19326978,22983959,-1,seizure,10140296,20823889,-1,seizure,True
+1378,10928135,26912627,-1,left arm pain,11296394,25596536,-1,left arm pain,True
+1379,11266920,23335631,-1,nausea and vomiting,14900918,28552435,-1,nausea and vomiting,True
+1380,11582633,23001734,-1,hyperglycemia,15261136,25460074,-1,hyperglycemia,True
+1381,12502204,29674962,-1,weakness and hyponatremia,10377744,27366727,-1,weakness hyponatremia,True
+1382,13653377,25864486,-1,hypoglycemia,18406178,28087149,-1,hypoglycemia,True
+1385,14876071,29058962,-1,recurrent epigastric pain,15549604,29748802,-1,persistent epigastric pain,True
+1390,16435402,24449120,-1,pain everywhere,17802315,22615176,-1,pain nausea,True
+1391,16435402,24742175,8,self reported fevers dyspnea dizziness chest pain,14061701,21444968,-1,dyspnea on exertion dizziness chest pain,False
+1395,17374087,23734471,-1,foot pain,15461505,28644062,-1,foot pain,True
+1397,17374087,29481998,-1,transfer from osh with urinary tract infection,16440658,25489934,-1,urinary tract infection septic shock transfer from micu,True
+1398,17648875,29362651,-1,screening colonoscopy,13139336,23667068,-1,screening colonoscopy,True
+1400,19130435,24011556,-1,hyponatremia,13589399,25236764,-1,hyponatremia,True
+1410,15925315,29834753,-1,hypoxia,12518491,22305767,-1,hypoxia,True
+1415,10797056,23519397,-1,right lower quadrant abdominal pain,12661647,24787432,-1,right lower quadrant abdominal pain,True
+1417,10797056,27347093,-1,appendicitis,19955582,26593491,-1,appendicitis,True
+1420,10956699,23135943,-1,left lower extremity edema,14146792,22518251,-1,left lower extremity edema,True
+1428,15876666,29662873,-1,fever chills difficulty breathing,17338413,28063660,-1,fever chills abdominal pain,True
+1429,16131197,24871521,-1,chest pain cough fevers and chills,16464225,26833974,-1,back pain fevers chills,True
+1430,16435402,26281483,-1,gastroparesis,14239579,24506984,-1,gastroenteritis,True
+1437,19612206,21121819,-1,fever,14007589,21401146,-1,fever,True
+1439,10928135,24639974,-1,left leg pain,18958738,23727149,-1,left leg pain,True
+1444,15869025,28089637,-1,confusion,11361381,21412232,-1,confusion,True
+1460,11049760,21834317,-1,altered mental status urosepsis,17123010,26738740,14,altered mental status acute kidney injury,False
+1462,11172358,24131724,-1,right upper quadrant pain post-ercp,17189461,23490423,-1,right upper quadrant pain elevated lft s,True
+1464,11582633,26534734,-1,diarrhea,10575413,29326381,-1,diarrhea,True
+1470,12917983,21668128,-1,urinary incontinence and vaginal prolapse,18827710,23722563,-1,urinary incontinence and vaginal prolapse,True
+1471,13146075,28796027,-1,dizziness,11006601,22005130,-1,dizziness,True
+1472,13279713,25483870,-1,left tibial shaft fracture distal fibular fracture,15249509,29886039,-1,left distal tibia and fibula fracture,True
+1474,13814530,27831195,-1,right hip pain,11259141,27212728,-1,right hip pain,True
+1476,14222958,21693700,-1,foot pain,17417942,24816869,-1,foot pain,True
+1479,14394962,20188722,-1,vomiting,18465853,26479199,-1,vomiting,True
+1483,14394962,23192368,-1,for evaluation of anemia and abdominal pain,15147091,25250526,15,transfer for abdominal pain and fever,False
+1489,14394962,29605802,-1,hematemesis,15375926,23139557,-1,hematemesis,True
+1490,14470268,28201756,-1,l ankle pain,12973352,29935928,-1,l ankle pain,True
+1491,14513439,25985689,-1,colonoscopy prep,16425162,23933049,-1,colonoscopy prep,True
+1493,14513439,29287184,-1,urinary hesitency back pain recent falls,12115117,20791981,10,left knee pain/arthritis,False
+1495,14653003,21413680,-1,nausea vomiting,10388903,23541796,-1,nausea vomiting,True
+1496,14653003,25320697,15,abdominal pain left leg pain,12578633,26400386,-1,left leg pain,False
+1499,14653003,26985767,13,nausea/vomiting worsening cellulitis,12306640,24599291,-1,post-op nausea/vomiting fever,False
+1500,14653003,27723795,-1,pain,10729116,24481173,-1,pain,True
+1507,14876071,22932154,-1,epigastric pain,12125978,22913387,-1,epigastric pain,True
+1510,14928414,20131778,-1,colonoscopy preparation,10314601,22136612,-1,elective colonoscopy prep,True
+1511,14950605,29822661,14,witnessed seizure / syncopal event,16319633,23132262,-1,presyncopal event,False
+1519,16435402,24651604,-1,fever hemoptysis fatigue on exertion,13126730,21010539,8,fever cough hemoptysis,False
+1520,17348845,25697186,-1,fever,11416353,23606622,-1,fever,True
+1524,18404315,21622042,-1,fever,15756811,25529191,-1,fever,True
+1526,18404315,29187597,-1,fever positive blood cultures,17347489,29261610,-1,fevers with positive blood cultures,True
+1528,18937159,25855107,-1,nausea vomiting abdominal pain,14672802,27428865,-1,nausea vomiting abdominal pain,True
+1532,19612206,22427076,-1,fevers cough,16482395,28790421,-1,fevers cough,True
+1538,19509694,26596303,13,nausea vomiting diarrhea fever,10923636,23736119,-1,nausea vomiting abdominal pain,False
+1540,10902714,26193590,-1,lethargy,18957225,22878551,-1,lethargy,True
+1542,17838879,21474025,-1,esrd,14913310,28332784,-1,esrd,True
+1548,12294892,24072386,-1,syncope,19042464,22176949,-1,syncope,True
+1551,11462863,22106219,8,dyspnea palpitations,12546139,25086184,-1,dyspnea on exertion palpitations,False
+1552,14786549,27582656,-1,cough fatigue,18230428,29627566,-1,fatigue cough,True
+1554,16112699,24054617,-1,failure to thrive,19983009,27741621,-1,failure to thrive,True
+1555,16112699,27121758,-1,failure to thrive weakness fall with rib fracture,19622936,26725440,-1,fall leukocytosis failure to thrive,True
+1556,16131676,21885344,-1,hypotension,13108883,20500026,-1,hypotension,True
+1557,19273540,26562366,-1,failure to thrive,17803964,23156868,-1,failure to thrive,True
+1561,12077996,27039102,-1,dizziness,16921333,24944649,-1,dizziness,True
+1564,12077996,21533022,12,dr cc syncope,16383343,27839945,-1,syncope rp bleed,False
+1568,13322229,29489911,-1,encephalopathy,14873817,22639118,-1,encephalopathy,True
+1572,12294892,27128893,-1,urinary retention acute on chronic pain,19109713,25798590,15,acute on chronic pain,False
+1574,16007214,26022069,-1,weakness,18708539,23163375,-1,weakness,True
+1575,16007214,29394106,-1,syncope,14318562,22710462,-1,syncope,True
+1576,17838879,29861542,-1,cough w/ fever,19016010,22335267,-1,cough/fever,True
+1579,13323674,24309759,-1,fatigue,17714334,29117183,-1,fatigue,True
+1590,16007214,20477268,-1,syncope,13572771,29312928,-1,syncope,True
+1594,16007214,24859701,-1,syncope,11563009,21809004,-1,syncope,True
+1597,16007214,25814785,-1,recurrent syncope,11984647,25667646,-1,syncope,True
+1598,16007214,26632337,-1,syncope,11984647,27163907,-1,syncope,True
+1602,16112699,23495987,-1,elevated bilirubin,16892963,29240139,-1,elevated bilirubin,True
+1603,16491621,25585183,-1,nausea vomiting abdominal pain,18571488,22749930,-1,nausea vomiting abdominal pain,True
+1604,17058328,24883505,-1,malignant hypertension and worsening of lower extremity edema,16445293,20654577,-1,worsening left lower extremity edema and erythema,True
+1606,12892024,29504506,-1,hyponatremia on lab results,17195628,22809038,-1,hyponatremia,True
+1620,14500585,28670366,-1,r foot pain,13940306,27183359,-1,r foot pain,True
+1630,11259047,23493677,-1,weakness,17364867,29803062,-1,weakness,True
+1631,11553072,22299696,-1,confusion,15956700,21800902,-1,confusion,True
+1632,12294892,24268674,-1,pain,10782997,29095157,-1,pain,True
+1634,15462466,27317569,-1,hyponatremia,15108801,23964629,-1,hyponatremia,True
+1635,16007214,29664191,-1,dizziness,15024914,21181203,-1,dizziness,True
+1637,16112699,21946021,-1,failure to thrive displaced dobhoff,19326096,25192530,-1,obstructive jaundice wound dehiscence failure to thrive,True
+1639,16112699,23452373,-1,failure to thrive facility issue,10331875,27596965,-1,failure to thrive,True
+1640,16112699,25714327,-1,inpatient colonoscopy,16771137,28028606,-1,colonoscopy prep,True
+1648,13752084,24621479,-1,left leg pain,14580343,23498684,-1,left leg pain,True
+1649,14500585,28285290,-1,hypoglycemia,19306731,20213842,-1,hypoglycemia,True
+1650,15057419,21463460,-1,vision changes,12210749,22829594,15,headache vision changes,False
+1653,17139582,21914123,-1,lower extremity pain cramping,12840942,25247629,-1,lower extremity pain,True
+1656,17838879,26767302,-1,confusion,13108883,20111892,-1,confusion,True
+1668,10122297,20383912,-1,lightheadedness,19847229,20086567,-1,lightheadedness,True
+1672,12817683,20164462,-1,fever/chills,17464078,23221095,-1,fever/chills,True
+1678,15957914,21307864,-1,foot pain,10793407,21089345,-1,foot pain,True
+1679,16007214,22164996,-1,rectal bleeding,18570152,29929831,-1,rectal bleeding,True
+1681,16007214,23521138,-1,syncope,12010389,20273505,-1,syncope,True
+1682,16007214,23887794,-1,syncope,14652418,25594178,-1,syncope,True
+1684,16007214,26200793,-1,syncope,13850557,23260880,-1,syncope,True
+1685,16007214,28135724,-1,syncope,13149331,24572813,-1,syncope,True
+1692,11019317,28280157,-1,vomiting hyponatremia,10209056,22246020,-1,flank pain hyponatremia,True
+1696,11663663,25338074,-1,vomiting,17263533,21085692,-1,vomiting,True
+1699,12077996,24709523,-1,hypoglycemia,12707997,24293188,-1,hypoglycemia,True
+1700,12650779,23438688,-1,tongue swelling,19397765,21264826,-1,tongue swelling,True
+1702,12650779,25002896,-1,seizure,12166030,27315086,-1,seizure,True
+1703,12650779,25720281,-1,seizure,16353431,23903222,-1,seizure,True
+1711,16230666,20177003,-1,headache,12091055,23967928,-1,headache,True
+1715,17900973,26621547,-1,hyperglycemia and cough,14813857,27655416,-1,hyperglycemia,True
+1718,19159236,22274859,-1,lethargy,19388963,26498440,-1,lethargy,True
+1720,19822093,29448307,-1,right foot pain,17800148,24637453,-1,right foot pain,True
+1725,11784692,23685070,-1,abdominal pain nausea vomiting x 3 days,12445696,25109447,-1,headache nausea vomiting x 2 weeks,True
+1726,12294892,24332367,-1,fever weakness,13383131,22320941,-1,fever weakness,True
+1728,12817683,26676551,9,transplant rejection,11984647,21361023,-1,cardiac rejection,False
+1731,13852412,29361737,15,neck and chest pain,12431876,23109695,-1,head and neck pain,False
+1732,14222176,26053531,-1,lightheadedness,12607853,20767366,-1,lightheadedness,True
+1733,14643398,24236153,-1,cough fever,11079785,25762169,-1,cough fever,True
+1735,17343455,21857598,-1,flank pain and vertigo,16057734,20552832,-1,nausea vomiting and vertigo,True
+1738,19159236,28271067,-1,dyspnea on exertion leg swelling,14278018,21097273,-1,dyspnea on exertion chest pain,True
+1740,19926727,21367380,-1,presyncope,17618741,27558183,-1,presyncope,True
+1741,19931382,22393287,-1,fatigue fevers weakness,18165055,22133907,-1,fevers fatigue,True
+1742,19931382,27111446,-1,found down,18773525,28665780,-1,found down,True
+1744,12294892,24406528,-1,pain fever,12342909,27070048,-1,flank pain fever,True
+1750,16709771,23288469,-1,weakness,13448089,27079379,-1,weakness,True
+1752,17343455,20437246,-1,blood in stool,17300437,29331365,-1,abdominal pain blood in stool,True
+1754,17900973,25538071,-1,feet swelling,10706968,22874888,-1,leg swelling,True
+1756,19822093,25670709,-1,failure to thrive difficulty with ambulation and concern for unsafe living environment,18264778,20128760,-1,failure to thrive poor oral intake back pain,True
+1758,10070330,26321646,-1,fever sore throat,17176827,24849741,-1,fevers sore throat,True
+1764,15462466,23905442,12,transfer to medicine for hyponatremia superinfected candidiasis,10224374,28232517,-1,transfer for hyperkalemia hyponatremia fatigue,False
+1765,15957914,29080450,-1,foot pain,14154307,22319278,-1,foot pain,True
+1777,19509694,23575375,-1,syncope,10207668,28683466,-1,syncope,True
+1783,11784692,27175816,-1,nausea/vomiting/abdominal pain,15439881,29088645,-1,nausea/vomiting/abdominal pain,True
+1788,13232661,23669751,-1,seizure,19795275,25486572,-1,seizure,True
+1792,14500585,21558751,-1,chills rigors,14214341,23259944,-1,fevers rigors,True
+1794,15609215,24849709,-1,cough failure to thrive left upper quadrant abdominal pain,12356115,29958635,-1,right upper quadrant abdominal pain,True
+1795,16007214,20475358,-1,palpable left upper quadrant mass,17015268,29777370,11,right upper lobe 3cm mass,False
+1796,16007214,29138605,-1,vomiting blood,17643697,28480462,-1,vomiting blood,True
+1800,11020337,25309539,-1,this patient is a year old male who complains being a pedestrian struck and refused treatment at scene now c/o lt uq pain abrasion lt elbow presented to ed,12074140,27155217,-1,old male with longstanding crohn s with enterocutaneous fistula presents with fever to 104 chills malaise vomiting x 1,True
+1801,11020337,27537225,-1,seizure,10103795,25579029,-1,seizure,True
+1802,11020337,29036674,-1,seizure jaw fracture,16747968,24792917,-1,seizure headache,True
+1805,12650779,24623581,-1,seizure,18995719,21946744,-1,seizure,True
+1807,13455047,25443007,-1,headache fatigue,11362933,29483560,-1,headache fever,True
+1810,14500585,26806760,-1,syncope,10086710,28382103,-1,syncope,True
+1815,16914402,23726765,-1,increasing confusion,13918841,24430906,-1,vomiting confusion,True
+1816,17343455,22451815,-1,body pain,12859052,26989169,-1,whole body pain,True
+1823,19509694,24812065,-1,syncope,16068848,20144833,-1,syncope,True
+1826,19528617,21890450,-1,body aches cough,14343222,25672023,-1,fever cough body aches,True
+1827,19926727,25228652,-1,arm swelling,14360457,23810016,-1,left arm swelling,True
+1828,10868254,21721673,-1,lethargy,18280103,24933786,-1,confusion lethargy,True
+1830,11784692,27493594,-1,abdominal pain nausea vomiting,14690624,28305938,-1,abdominal pain nausea vomiting,True
+1831,11784692,29971581,14,severe progressive headache,12962386,21070410,-1,worsening headache,False
+1832,12159860,23893074,-1,weakness,15260754,20801455,-1,weakness,True
+1834,12817683,23429843,-1,missed dialysis session due to gastrointestinal symptoms,18650767,23416103,12,multiple missed dialysis sessions,False
+1835,13427502,29004425,-1,esrd,14594934,22194064,-1,esrd,True
+1836,14082885,23897967,12,transfer from deac 4 for hypernatremia,19978596,24940137,-1,hypernatremia,False
+1837,14591184,23586797,-1,hypoxemia,14375191,28775818,-1,hypoxemia,True
+1839,16110190,26689371,-1,bright red blood per rectum,14067176,22817576,-1,bright red blood per rectum,True
+1844,17058328,22788594,-1,dysarthria,16557374,24664445,-1,dysarthria,True
+1852,18654207,29546012,-1,colonoscopy prep,15415986,25599085,-1,colonoscopy prep,True
+1856,19926727,29182633,-1,weakness,10010231,25499227,-1,weakness,True
+1859,12892024,29254338,-1,leg swelling,14879795,20621982,-1,leg swelling,True
+1860,13323674,24480983,-1,weakness,19341004,23360791,-1,weakness,True
+1861,15390152,27796598,-1,somnolence,15770122,21732373,-1,somnolence fever tachypnea,True
+1864,18044553,21423162,8,lethargy persistent sinus tachycardia,16510199,27113715,-1,lethargy back spasms,False
+1865,18055599,28405041,-1,weakness,14812304,28454108,-1,weakness,True
+1866,18918437,23737848,-1,diarrhea,17054801,21010554,-1,diarrhea,True
+1867,18918437,27004664,-1,fevers abdominal pain,14147591,28743345,-1,fevers abdominal pain,True
+1869,19822093,26930126,-1,gastrointestinal bleeding,11660800,26239433,-1,gastrointestinal bleeding,True
+1872,11020337,23038798,-1,syncope i seem to have fainted,10931748,21352836,14,vergigo and syncope,False
+1874,11468192,22617260,-1,skin lesions,16685223,28129644,-1,skin lesions,True
+1875,11468192,23474718,-1,neck pain,13587179,23500066,-1,neck pain,True
+1876,11784692,20861602,9,abdominal pain hypercalcemia acute kidney injury,19698560,21115092,-1,hyperglycemia abdominal pain,False
+1878,12607710,22923031,-1,hypotension,19768542,23814040,-1,hypotension,True
+1885,17343455,20747725,-1,urinary tract infection and incision fluid collection,17842578,27867861,-1,urinary tract infection/heamturia,True
+1886,17343455,24844572,-1,fever,11681682,22535156,-1,fever,True
+1888,17365964,27182409,-1,hypoxia,19821816,29880291,-1,hypoxia,True
+1892,18055599,20111364,-1,cough and dyspnea on exertion,17687625,26423095,-1,dyspnea on exertion,True
+1902,19774163,24598558,-1,confusion,16386563,27210902,-1,confusion,True
+1904,19837286,23161012,-1,acute bilateral upper and lower extremity pain,12846864,20325907,-1,lower extremity pain and weakness,True
+1906,11784692,27351192,-1,headache,18495027,29275102,-1,headache,True
+1908,14528218,28657185,-1,lightheadedness,16952572,21773133,-1,lightheadedness,True
+1914,17139582,29006952,-1,positive blood cultures,17446540,22985395,-1,positive blood cultures,True
+1915,17337033,26319975,-1,dehydration c/f dka,15886609,23096626,-1,transfer from osh for pancreatitis dka and renal failure,True
+1918,18311187,29124371,-1,fevers chills nausea,11604799,29311736,-1,fevers chills knee pain,True
+1921,19818258,23039167,-1,right upper quadrant pain hematemesis,15653649,26689711,-1,right upper quadrant pain,True
+1925,16435000,22583134,-1,colonoscopy prep,17058694,24747526,-1,colonoscopy prep,True
+1936,11012637,21215646,-1,progressive r hand pain,19991341,29653523,-1,l hand pain,True
+1937,11012637,22223011,-1,rt hand swelling and pain low grade fever,15404997,26923915,13,hospitalist admission note left knee pain fever dysuria rigors pcp,False
+1938,11012637,23534112,-1,hand swelling,19009472,25506381,-1,hand swelling,True
+1941,11019317,22402310,-1,seizure,17261495,24153851,-1,seizure,True
+1948,11375664,23528159,-1,pancreatitis and gastrointestinal bleed,18108865,23944353,-1,gastrointestinal bleed,True
+1955,11468192,29211760,-1,right toe pain,16349246,27695373,-1,right toe pain,True
+1956,11517525,29204285,-1,hypoxemia,15583017,22388553,9,hypoxemia and tachycardia,False
+1958,11784692,22292438,13,nausea inability to eat insomnia abdominal pain,15346940,27333216,-1,nausea vomiting abdominal pain,False
+1963,13514137,24879976,-1,fever,15877689,21685730,-1,fever,True
+1967,14394983,29263147,-1,hematemesis,15706063,27069412,-1,hematemesis,True
+1968,14394983,29440068,-1,abdominal pain/nausea/vomiting,12053217,20558810,-1,abdominal pain and nausea/vomiting,True
+1971,15035323,23730333,-1,knee pain,15509479,20364702,-1,knee pain,True
+1973,15251002,27078582,-1,nausea/vomiting abdominal pain,18558334,25134155,-1,nausea/vomiting abdominal pain,True
+1975,15491109,26243961,10,abdominal wound,12857218,22141780,-1,abdominal wound infection,False
+1976,15491109,29348158,-1,right elbow pain,12187900,21161251,-1,right elbow pain,True
+1979,15805011,22541663,-1,syncope,12879492,25258160,-1,syncope,True
+1981,15805011,28820978,-1,syncope,17566249,22141911,-1,syncope,True
+1985,16263073,23538140,-1,right long finger pain,13265634,20394774,-1,right long finger pain,True
+1990,16914402,26613934,-1,colonoscopy prep,12156576,25146171,-1,colonoscopy,True
+1991,17016909,28312388,-1,hypotension,14935568,29472919,-1,hypotension,True
+1992,17132282,29063065,-1,headache,18683365,22786372,-1,headache,True
+1993,17343455,21212292,-1,pain,13243048,27779898,-1,pain,True
+1997,17838879,28710948,-1,colonoscopy prep,12904625,25410313,-1,need for colonoscopy,True
+1999,17862236,21887480,-1,a man with diabetes who had a traumatic injury to his right heel which has been slow to heal admitted for angiogram +/- intervention and debridement,15837443,22143583,-1,this patient is a with bilateral lower extremity ischemia and disabling claudication presents electively for is being angiography to further delineation of his anatomy and possible percutaneous intervention,True
+2007,18524902,22088324,-1,fever,17155701,20334464,-1,fever,True
+2010,18636291,20485627,12,transfer from deac 4 re uncontrolled hypertension,11221696,20449550,-1,mr is a year old man with hypertension aortic root dilation who presents with intermittent headache and dyspnea,False
+2011,18725831,26075384,-1,leg swelling,19564979,24793520,-1,leg swelling,True
+2012,18882565,24039555,-1,left hip pain,15897353,20770949,-1,left hip pain,True
+2014,18966964,22540180,-1,cough fevers/chills,13969962,22533643,-1,fevers and chills,True
+2016,19045956,20032996,-1,left acetabular fracture,14405459,25831059,-1,right acetabular fracture,True
+2022,19528617,26777536,-1,dental pain,10854439,22804108,15,dental pain neck swelling,False
+2025,19528617,29406986,-1,hematemesis,13683845,24176511,-1,hematemesis,True
+2030,16442963,24528133,-1,epistaxis,16653153,21498251,-1,epistaxis,True
+2031,11582633,29885170,-1,headache,14948329,21585292,-1,headache,True
+2032,19056923,25419582,-1,abnormal sodium level,13775774,24581183,-1,abnormal labs,True
+2034,18187193,21987551,-1,hypoxia,10350119,22478414,-1,hypoxia,True
+2038,19843082,21440357,-1,hypoxia requiring bipap,11181245,24161606,8,dyspnea bipap requirement transfer,False
+2039,19843082,21504147,3,groin pain,12512141,23830561,-1,left groin pain,False
+2043,18207287,23399661,-1,gastrointestinal bleed,17151152,22716120,-1,gastrointestinal bleed,True
+2050,12016108,23499507,9,confusion hypotension,18483313,21011985,-1,hypotension,False
+2051,13376901,20610021,9,hypotension/bradycardia,19300976,28918527,-1,hypotension,False
+2052,18207287,25423580,-1,lower gastrointestinal bleed,15816738,22195158,-1,lower gastrointestinal bleed,True
+2059,12251785,25260398,-1,dizziness,12567152,29750938,-1,dizziness,True
+2062,18207287,26150899,-1,confusion,18616542,25794405,-1,confusion,True
+2064,19693912,27725864,15,lightheadedness/dizziness/presyncope,10092884,28253766,-1,dizziness presyncope,False
+2071,19056923,29097047,-1,abnormal labs,19683768,27398848,-1,anemia abnormal labs,True
+2072,19597217,23315656,-1,nausea/vomiting,14386842,24661153,-1,nausea/vomiting,True
+2075,13263843,22275704,-1,fever nausea vomiting,12568577,28288272,-1,fever nausea vomiting,True
+2076,17404827,23340676,-1,hyperglycemia palpitations seizures,19116364,22594003,8,shock tachycardia palpitations,False
+2077,18376342,21415932,-1,epigastric pain nausea,10013310,27682188,-1,epigastric pain,True
+2087,19693912,23777443,13,dizziness malaise,16577980,21415634,-1,dizziness nausea,False
+2089,12151259,21595904,-1,wound eval,14113317,22879908,-1,wound eval,True
+2092,17804936,25249670,-1,confusion,13295971,25799713,-1,confusion,True
+2093,17804936,29643211,-1,aspiration event syncope,15862732,28822693,-1,syncope seizure,True
+2097,10254097,22012536,-1,seizure,18155683,23190001,-1,seizure,True
+2100,11582633,23450474,-1,dyspnea on exertion,13040431,28414820,-1,dyspnea on exertion,True
+2101,11582633,26656460,-1,anasarca hyperglycemia,11349432,24577372,-1,seizure hyperglycemia,True
+2104,12537800,25726977,-1,right foot pain,10278097,22809645,-1,right knee pain,True
+2105,12762405,24160049,-1,abdominal pain urinary retention,12925326,26140585,13,abdominal pain diarrhea,False
+2107,13263843,23793921,13,diarrhea/pneumonia,19469336,20690660,-1,diarrhea,False
+2115,16712364,23323390,-1,hypoxia,18483313,25808683,-1,hypoxia,True
+2117,18022328,26442327,-1,altered mental status urinary retention fecal incontinence,18627271,20407154,-1,new onset numbness last 4 days from breast level to feet urinary retention x 4 days + fecal incontinence x 4days,True
+2121,18570563,27038395,-1,gastrointestinal bleed,14950049,23884037,-1,gastrointestinal bleed,True
+2123,18821140,21473326,-1,l hip pain,12395381,25308774,-1,l hip pain,True
+2132,13376901,23661243,-1,altered mental status found down,10899790,27684663,-1,altered mental status found down,True
+2133,13946418,26976906,-1,pelvic mass,18966625,26242955,-1,pelvic mass,True
+2134,15274787,20434738,-1,facial swelling,15012885,24967342,-1,facial swelling,True
+2136,17651711,27977490,-1,hyponatremia,17354620,25965659,-1,hyponatremia,True
+2138,18207287,27785755,-1,gastrointestinal bleed,18944214,25076735,-1,gastrointestinal bleed,True
+2139,18376342,22838766,-1,epigastric pain,11325169,25368066,-1,epigastric pain,True
+2140,19056923,21500770,-1,confusion,16449411,27527620,-1,confusion,True
+2141,19522954,26970324,-1,dehydration,18229367,27060216,-1,dehydration,True
+2143,19826668,24847182,-1,confusion,12341013,28687875,-1,confusion,True
+2146,12151259,22105426,-1,leg swelling,13961294,29417226,-1,leg swelling,True
+2148,12251785,22558904,-1,dizziness,12465820,21769756,-1,dizziness,True
+2149,12762405,21738770,-1,dyspnea on exertion leg swelling,11652443,27367655,-1,chest pain dyspnea on exertion,True
+2150,14189034,24427460,-1,encephalopathy,18478557,23269544,-1,encephalopathy,True
+2156,18376342,22997784,-1,abdominal pain hypoglycemia,13022668,20895020,-1,hypoglycemia leg pain,True
+2158,10685894,29555582,-1,rash,10462639,21472089,-1,rash,True
+2161,12106911,27943344,-1,headache,11821803,22320750,-1,headache,True
+2164,12251785,26989744,-1,poor oral intake failure to thrive,11649876,29879058,-1,failure to thrive,True
+2167,14291446,20945088,-1,fevers abdominal pain,15463827,28646235,-1,fevers abdominal pain,True
+2171,18187193,20563210,-1,anemia,10191106,24387458,-1,anemia,True
+2172,18207287,29306619,-1,hepatic encephalopathy,15032392,22592769,-1,confusion/ hepatic encephalopathy,True
+2173,18376342,20011839,-1,chest pain left lower quadrant abdominal pain,14842397,26785758,-1,chest pain right upper quadrant pain,True
+2179,18376342,28851015,-1,abdominal pain hemetemesis,18772912,28049243,-1,abdominal pain emesis,True
+2185,19693912,27875877,-1,fever,14878942,22228580,-1,fever,True
+2188,10685894,26772496,-1,r hip pain r back pain,16298641,25248682,-1,r hip pain,True
+2189,11582633,21628497,-1,dyspnea lower extremity edema weight gain,18624005,22681143,-1,weight gain lower extremity edema dyspnea,True
+2190,11582633,22629477,-1,hyperglycemia mild nausea,14208778,29865553,-1,hyperglycemia,True
+2197,16522884,24327385,-1,altered mental status urinary tract infection,11649876,21900714,-1,urinary tract infection,True
+2201,18022328,27899136,-1,hypotension,14310616,29466631,-1,hypotension,True
+2202,18187193,26605795,-1,weakness,17790795,21345364,-1,weakness,True
+2204,18207287,26130934,-1,confusion,11521042,23033165,-1,confusion,True
+2205,18207287,26136510,-1,confusion,15456009,23881817,-1,confusion,True
+2206,18207287,28311487,-1,confusion,13389633,23380763,-1,confusion,True
+2207,18570563,27204655,-1,gastrointestinal bleed,12418080,22824853,-1,gastrointestinal bleed,True
+2209,12016108,22578730,-1,confusion difficulty breathing,13801559,29176085,-1,difficulty breathing,True
+2211,12251785,26377383,-1,epistaxis,11629056,20915610,-1,epistaxis,True
+2212,12319389,24336432,-1,anal pain,18258883,25330038,-1,mouth pain,True
+2215,13443228,24976797,-1,agitation,15476489,20790944,-1,confusion agitation,True
+2219,15318971,23736813,-1,left hip pain,11405442,28569531,-1,left hip pain,True
+2222,16712364,20006108,-1,found down,19736034,23460141,-1,found down,True
+2226,18137472,26902793,-1,weakness,12452029,27976036,-1,weakness,True
+2236,18754359,20639734,-1,nausea vomiting coffee ground emesis,11265098,28581683,-1,nausea vomiting abdominal pain,True
+2237,18754359,26044732,-1,coffee ground emesis,16450721,29622279,-1,coffee ground emesis,True
+2241,10685894,20460059,-1,right hip pain,13907036,23700342,-1,right hip pain,True
+2242,10685894,29319625,-1,right hip pain,12606543,28322519,-1,right hip pain,True
+2245,12024744,27069003,-1,pneumonia urinary tract infection igg deficiency,18769833,24261045,-1,abdominal pain bacterial urinary tract infection,True
+2246,12151259,29137730,-1,severe lower extremity edema,12606543,26425985,-1,lower extremity edema,True
+2251,12373624,29448636,-1,fatigue chills,11432850,23452800,-1,chills,True
+2255,16186331,23457396,-1,inpatient colonoscopy,10924949,26030545,-1,inpatient colonoscopy prep,True
+2256,16839169,25524085,-1,confusion,13668847,24509931,-1,confusion,True
+2257,17561788,25894857,-1,lower extremity swelling shortness of breath,10758777,21429597,-1,shortness of breath lower extremity swelling,True
+2265,18797768,27738513,-1,neck swelling,10588464,27958936,-1,neck swelling,True
+2266,18821140,29986367,-1,right arm swelling,15012885,24753155,-1,right arm swelling,True
+2268,19658727,25924035,-1,seizure,14435915,27405952,-1,seizure,True
+2269,19693912,26162852,10,primary diagnosis 1 lower extremity weakness 2 orthostatic hypotension,12395651,25797426,-1,left sided headache bilateral lower extremity weakness,False
+2276,11637434,29573359,-1,difficulty breathing,11252447,21893555,-1,difficulty breathing,True
+2279,15713148,27916586,-1,weakness,16936008,28625422,-1,weakness,True
+2282,16712364,28195894,-1,hyponatremia rash,18416632,25751633,-1,fatigue hyponatremia,True
+2283,17561788,25581595,-1,fever,17908843,26381818,-1,fever,True
+2284,18207287,27126536,-1,gastrointestinal bleed,12156411,21811900,-1,gastrointestinal bleed,True
+2286,18754359,22770159,-1,hematemesis and tachycardia,18274895,20696516,8,fever and tachycardia,False
+2287,18754359,28033237,-1,hypotension,10496705,25669401,-1,hypotension,True
+2290,18874154,26541108,-1,l flank pain,13746628,23784462,-1,r flank pain,True
+2291,18951962,20763791,15,falls dizziness,18383482,26899706,-1,dizziness,False
+2294,12151259,24327973,-1,bilateral lower extremity swelling,17760836,20274841,-1,bilateral lower extremity swelling,True
+2295,12151259,24532218,-1,acute on chronic lower extremity edema,12606543,25061235,-1,lower extremity edema,True
+2296,12151259,28991460,-1,lower right extremity pain erythema and edema,17005338,21822950,15,- left wrist erythema/edema right hip pain,False
+2300,13263843,20003563,-1,edema dyspnea on exertion,14138854,28617776,-1,ascites dyspnea on exertion,True
+2301,13376901,29607949,-1,right humerus fracture,18938512,26430262,-1,left humerus fracture,True
+2307,16842320,22636538,-1,lower extremity swelling,10989799,26965674,-1,lower extremity swelling,True
+2310,18040878,29401626,-1,syncope,17510313,29785348,-1,syncope,True
+2311,18049351,21916814,-1,fall left lower extremity pain,17821459,27282444,-1,right lower extremity pain,True
+2315,18821140,23184224,-1,fall rash,10413870,25819045,-1,rash fall,True
+2323,10685894,26379847,-1,weakness,13950224,23352692,-1,weakness,True
+2324,10685894,27175179,-1,left acetabular fracture urinary tract infection,13061536,24157421,-1,dysuria fevers ureteral stone urinary tract infection,True
+2329,12024744,21148930,-1,nausea vomiting slurred speech x 1 day,11851678,22405052,-1,nausea vomiting x2 days,True
+2330,12151259,27857953,-1,toe pain,14613098,20476876,-1,r toe pain,True
+2335,14358566,28427339,-1,acute kidney injury mechanical fall,11198578,24555506,-1,fall acute kidney injury,True
+2340,15941661,25629728,-1,seizure,18128311,24786747,-1,seizure,True
+2342,16522884,29213519,-1,seizures,11127357,24235586,-1,seizures,True
+2347,19522954,24498853,-1,confusion,14146995,25126490,-1,confusion,True
+2348,19557807,21005850,-1,dyspnea on exertion edema,10013569,29149051,-1,malaise dyspnea on exertion edema,True
+2350,10393607,24832669,-1,intermittent confusion,18920032,29557497,-1,confusion nausea,True
+2351,11582633,22474252,-1,high blood glucose,17711204,26919054,-1,elevated blood glucose,True
+2354,13263843,22718460,-1,weakness,14757759,23740898,-1,weakness,True
+2357,16712364,24178725,-1,epistaxis,12993844,24931017,-1,epistaxis,True
+2358,16717658,23648533,-1,fall presyncope,19434973,26027194,-1,presyncope,True
+2359,17404827,22994914,-1,seizures,19609454,24188515,-1,seizures,True
+2364,18754359,20390005,-1,hyperglycemia,17592008,27388139,-1,hyperglycemia,True
+2365,18754359,20852816,-1,nausea vomiting,15817721,26444559,-1,nausea vomiting,True
+2367,18754359,22296494,-1,hematemesis,15946488,26696785,-1,hematemesis,True
+2368,18754359,26661169,-1,dizzy,19477376,27288300,15,dizzy headache,False
+2371,18874154,27645500,10,foul-smelling urine obstructed pcn tube,13402788,21191731,-1,right lower abdominal incision with cloudy foul smelling drainage,False
+2372,19292206,20175415,-1,fever cough,10203383,21087991,-1,fever cough,True
+2377,12024744,20412585,-1,right hip pain,17285710,23325725,-1,right hip pain,True
+2378,12151259,20817389,-1,lower extremity swelling pain,18185020,23288249,-1,lower extremity swelling,True
+2380,12151259,26867547,-1,increased pain redness and swelling in her lower extremities bilaterally,13042610,26465388,-1,fevers with redness and swelling in left lower extremity,True
+2381,12151259,27625981,-1,lower extremity swelling,16619603,21727079,-1,lower extremity swelling,True
+2382,12224638,28133980,-1,bright red blood per rectum,17409194,23087895,-1,bright red blood per rectum,True
+2384,12618932,21036712,-1,seizure,18786429,23968064,-1,seizure,True
+2386,14291446,26834208,-1,abdominal pain/vomiting,13492207,25369047,-1,abdominal pain/vomiting,True
+2391,15876666,28295427,-1,diarrhea,12313209,24208970,-1,diarrhea,True
+2397,18207287,24245051,-1,right upper quadrant pain,15945381,25937888,-1,right upper quadrant pain,True
+2398,18207287,25551464,-1,right arm pain,18341323,27764516,-1,right arm pain,True
+2400,19693912,29834788,-1,mixed urinary incontinence,11900345,23944465,-1,leg weakness and urinary incontinence,True
+2402,19826668,25159781,-1,malaise urinary incontinence,11855535,29365675,-1,seizures lethargy urinary incontinence,True
+2410,11637434,20547512,-1,presyncope,10912778,29663282,-1,presyncope,True
+2420,12224638,27918130,-1,bright red blood per rectum,10695963,26451411,-1,bright red blood per rectum,True
+2423,13263843,22918033,-1,fever,17155082,25721226,-1,fever,True
+2428,13376901,21330418,-1,frequent falls hyperglycemia,17221586,28715066,-1,fatigue polyuria hyperglycemia,True
+2435,16476072,27550702,-1,pain,16553733,22543963,-1,pain,True
+2436,16712364,20992104,15,back pain fall,13667298,29292678,-1,back pain fever,False
+2440,16712364,26469600,14,fall vomiting,13136745,24810629,-1,nausea vomiting fall,False
+2441,18207287,21502930,-1,weakness confusion,15023694,21812267,-1,weakness fatigue,True
+2445,18874154,29347103,-1,altered mental status / urinary tract infection,11113612,25204201,-1,urinary tract infection,True
+2446,19597217,21951463,-1,nausea and emesis x 2 months,10997073,29910956,13,nausea vomiting diarrhea and extreme fatigue for the past week,False
+2447,10151713,25092907,-1,diarrhea,15077620,22571324,-1,diarrhea,True
+2451,12151259,20476013,-1,lower extremity swelling,14696672,27271753,-1,lower extremity swelling,True
+2453,12151259,25704911,-1,leg swelling pain chills,18012237,27354003,15,fever back pain difficulty walking,False
+2456,13146075,29780996,-1,dizziness,13699859,28516028,-1,dizziness,True
+2459,14291446,26533071,-1,wound infection,17496338,25628719,-1,wound infection,True
+2460,15765403,23474333,-1,hypoglycemia,17659582,27697840,-1,hypoglycemia,True
+2461,15876666,27072458,-1,vomiting,17326113,25452036,-1,vomiting,True
+2462,16290150,28886467,-1,foot pain,14789229,22828402,-1,foot pain,True
+2467,19292206,28648460,-1,weakness falls confusion,14519712,29396846,15,generalized weakness falls,False
+2468,19522954,25662638,-1,confusion,14263174,28005137,-1,confusion,True
+2469,19658243,25289920,-1,weakness,18691992,23659007,-1,weakness,True
+2479,15941661,29189168,-1,seizure fevers,16482395,27459536,-1,fevers cough,True
+2482,16522884,23181797,-1,seizure,16180947,26032942,-1,seizure,True
+2485,16522884,27224196,-1,seizure,15309387,27540901,-1,seizure,True
+2486,16522884,28990831,-1,seizure,18358306,22846168,-1,seizure,True
+2489,18404315,28059743,-1,nausea vomiting abdominal pain,11204526,24341923,-1,nausea vomiting abdominal pain,True
+2490,18754359,24809229,-1,hyperglycemia,13492931,24526342,-1,hyperglycemia,True
+2491,18780800,22559280,-1,nausea and head pain fall,11836928,22034285,15,nausea and abdominal pain,False
+2493,19418948,22060807,-1,seizures,18140658,26817968,-1,seizures,True
+2495,19418948,28748809,-1,seizures,12282188,20514502,-1,seizures,True
+2496,10485057,27498586,-1,coffee ground emesis,19696636,29860981,-1,coffee ground emesis,True
+2499,11118166,22582830,10,l ankle hardware failure,12746688,28568280,-1,l trimal ankle fracture-dislocation,False
+2500,11172358,29509689,-1,persistent left leg pain,11374460,20710132,-1,left leg pain,True
+2504,12151259,24629837,-1,worsening lower extremity edema,13001524,25193429,-1,worsening fatigue dependent lower extremity edema,True
+2505,12151259,29536781,-1,cellulitis and worsening lower extremity edema,17128970,20437133,10,right lower extremity cellulitis/phlebitis,False
+2507,13415410,28542521,-1,hyponatremia,16146275,21308650,-1,hyponatremia,True
+2508,13415410,29800014,-1,leg swelling mild confusion,15906662,26372699,-1,leg swelling fatigue,True
+2509,13653377,27633727,-1,hypoglycemia,14830324,22578480,-1,hypoglycemia,True
+2512,14046452,22397151,-1,pneumonia,19023306,20217969,-1,pneumonia,True
+2516,16113457,28289443,-1,dizziness,19846911,27441953,-1,dizziness,True
+2524,18754359,28150129,-1,acute kidney injury,19697746,24519312,-1,acute kidney injury,True
+2525,18797768,20927684,15,dizziness/weakness,18976887,24126072,-1,headache/dizziness,False
+2529,19763506,29515039,-1,septicemia urinary tract infection c diff colitis,11482516,29959759,-1,urinary tract infection/gnr bacteremia,True
+2531,10240593,21249643,-1,urinary tract infection,15234042,21646338,-1,urinary tract infection,True
+2532,10935371,29513046,-1,headache,17878943,22509970,-1,headache,True
+2533,13946418,26856874,-1,abdominal pain nausea,10995091,29740199,-1,abdominal pain nausea,True
+2537,16839169,22185422,-1,fatigue,16159386,25128517,-1,fatigue,True
+2542,18874154,23244029,-1,hyperparathyroidism,12335564,24578673,-1,hyperparathyroidism,True
+2544,10532326,27460409,-1,hypotension asymptomatic,13305101,27350843,-1,asymptomatic,True
+2545,10547443,23126741,-1,respiratory distress hypoxia,12905506,26484608,-1,hypoxia,True
+2552,11999837,24294884,-1,bright red blood per rectum,10170733,25609092,-1,bright red blood per rectum,True
+2557,14470268,26923195,14,breakthrough seizures,14177436,26413336,-1,seizures,False
+2562,15876666,21378048,-1,fever vomiting,12500913,25068572,-1,fever vomiting,True
+2565,15876666,27911243,-1,pneumonia,17586874,27990631,-1,pneumonia,True
+2567,15876666,29868410,-1,fever cough,11905074,26888325,-1,fever cough,True
+2573,18605191,28088201,-1,dyspnea on exertion leg swelling,18812967,21057585,-1,upper back pain dyspnea on exertion,True
+2576,18874154,22467802,-1,fever,15463827,23561752,-1,fever,True
+2577,18874154,22708000,-1,weakness encephalopathy,15440269,28001225,-1,cellulitis encephalopathy,True
+2578,19418948,20037934,-1,seizure,16964429,22119208,-1,seizure,True
+2579,19418948,25484979,-1,seizures,14342881,29800975,-1,seizures,True
+2580,19462953,27789443,-1,staghorn calculus recurrent urinary tract infections,15688005,22058580,-1,urinary incontinence and recurrent urinary tract infections,True
+2583,12151259,22984960,-1,altered mental status bilateral lower extremity pain,18870405,22615143,-1,bilateral lower extremity pain,True
+2586,15876666,27057553,-1,pneumonia,16063920,24591162,-1,pneumonia,True
+2589,18294605,27236905,-1,right distal femur fracture,17264044,22206896,-1,right distal femur fracture,True
+2595,13415410,20104322,-1,confusion dizziness,11478474,20148188,-1,dizziness confusion,True
+2602,18754359,21009162,-1,hypotension,18332492,20871483,-1,hypotension,True
+2604,10851976,20068292,-1,rectal bleeding,19460152,20648764,-1,rectal bleeding,True
+2608,11118166,28393988,-1,left open ankle fracture,13155644,23036986,-1,right open ankle fracture,True
+2617,12151259,24804948,-1,leg pain,14022440,24825486,-1,leg pain,True
+2618,12151259,29145073,-1,leg swelling,10411562,23040018,-1,leg swelling,True
+2620,12600024,21107119,-1,right shoulder instability pain,18319785,21633648,-1,right ankle pain,True
+2621,12600024,22893320,-1,ili,12929406,23355758,-1,dvt,True
+2627,12921133,21452254,-1,dysphagia,10867400,26088603,-1,dysphagia,True
+2628,12921133,24439883,-1,failure to thrive fall,15474097,27458830,-1,failure to thrive,True
+2632,13189172,28447512,-1,nausea vomiting abdominal pain,13158876,27303188,-1,nausea vomiting abdominal pain,True
+2633,13415410,20630185,-1,dyspnea on exertion,18972736,29946053,-1,dyspnea on exertion,True
+2635,13415410,21852889,-1,left hip pain,17614262,23967464,-1,left hip pain,True
+2636,13415410,22926386,-1,left hip dislocation,14660072,22266033,-1,right hip dislocation,True
+2639,13946418,22409905,-1,pelvic mass,11331400,29712167,-1,pelvic mass,True
+2640,14189034,28482266,-1,hypoglycemia,10423166,24248042,-1,hypoglycemia,True
+2641,14231575,23149735,-1,rash,15860781,29902591,-1,rash,True
+2647,14492639,29011757,-1,left hip pain,17557825,23614330,-1,left hip pain,True
+2648,14626328,26689445,-1,abdominal pain nausea vomiting,10334639,21109565,-1,abdominal pain nausea vomiting,True
+2649,14626328,28493067,-1,gastrointestinal bleed bright red blood per rectum,13466577,29351058,-1,gastrointestinal bleed bright red blood per rectum,True
+2652,14924200,23489385,-1,left knee pain,17090238,27717215,-1,left knee pain,True
+2665,16800398,26787851,-1,right hip pain right greater trochanter fracture status post right total hip replacement,16840244,21887039,-1,right prosthetic hip dislocation right greater trochanter fracture,True
+2668,17201369,20625428,9,admission note date of admission pcp pcp listed in cc confusion and lethargy,19265106,22558058,-1,attending hospitalist admission h+p cc abdominal bloating pcp at,False
+2673,17416494,22029835,-1,altered mental status urinary tract infection vp shunt assessment,12522646,24801622,-1,urinary tract infection requiring iv antibiotics and access,True
+2677,17963931,21636044,-1,l knee pain,10278097,21105636,-1,l knee pain,True
+2678,18187193,24949262,-1,lower extremity weakness and falls,16045081,29985742,-1,right lower extremity weakness and vertigo,True
+2679,18207287,24463797,-1,nausea fatigue poor apetite mdr e coli urinary tract infection,13373105,29332009,-1,syncope flank pain urinary tract infection,True
+2680,18207287,25487506,-1,urinary tract infection,12031068,27010597,-1,urinary tract infection,True
+2681,18207287,26973470,-1,positive urine culture,13321017,26617020,-1,positive urine culture,True
+2682,18207287,28030638,-1,gastrointestinal bleed,15184918,29910806,-1,gastrointestinal bleed,True
+2688,18433974,22744309,-1,neck pain and l triceps weakness after c7 superior articular facet fracture sustained in motor vehicle collision also with c2 anterior ring fracture,14161808,24534953,-1,motor vehicle collision with associated l1 burst fracture,True
+2689,18754359,24790181,-1,weakness urinary tract infection,18628502,29066363,-1,urinary tract infection,True
+2690,19530134,25490574,-1,dizziness vomiting,11371820,23337656,-1,dizziness vomiting,True
+2693,13014961,25896405,-1,lethargy,18382061,23994083,8,lethargy dyspnea,False
+2697,18570563,21183364,-1,anemia,11171260,20920997,-1,anemia,True
+2698,19693912,21779490,-1,failure to thrive,16903202,22308744,-1,failure to thrive,True
+2699,12828031,20447052,-1,dizziness,12468914,27091787,-1,dizziness,True
+2703,19693912,28414312,-1,dehydration,10216153,27467921,-1,dehydration,True
+2706,17804936,20162735,-1,fever wheezing abdominal pain,12715419,24942116,13,abdominal pain diarrhea,False
+2707,19731136,22265350,-1,seizure,19970078,20638216,-1,seizure,True
+2708,11431685,22207884,-1,fall l rib fracture,14718466,27697843,-1,fall/humerus fracture,True
+2710,12828031,22875214,-1,weakness,13909714,21313500,-1,weakness,True
+2711,13014961,28454968,-1,shortness of breath lower extremity edema,16899828,24185390,-1,shortness of breath lower extremity edema,True
+2712,14493463,24493717,-1,weakness dyspnea on exertion,10510839,20853488,-1,dyspnea on exertion,True
+2713,16348164,29899388,-1,anemia,11634175,29207403,-1,anemia,True
+2717,19939039,23922210,-1,pain,16972064,20049406,-1,pain,True
+2721,14345906,28444452,-1,scheduled chemotherapy mtx,15018327,28021262,12,planned admission for ice chemotherapy,False
+2723,14835486,25464451,-1,altered mental status urinary tract infection,19622090,23987817,-1,urinary tract infection,True
+2724,14992874,23580850,-1,anemia melena,10878442,24177559,8,chest pain anemia,False
+2728,19693912,21784234,-1,l hip pain,16449411,27306665,-1,l hip pain,True
+2742,14493463,21695505,-1,fever,11261880,24825798,-1,fever,True
+2743,14887741,26203779,-1,abdominal pain nausea,12832167,25855673,-1,abdominal pain nausea,True
+2748,13014961,26282032,-1,weakness,17521831,25602869,-1,weakness,True
+2750,14835486,22753476,-1,urinary tract infection,12361977,25089766,-1,urinary tract infection,True
+2751,16202148,29505299,-1,fatigue polyuria and polydipsia,15741808,24805981,9,fatigue anorexia hypotension,False
+2754,10698312,25133537,-1,nausea vomiting,11558717,20077204,-1,nausea vomiting,True
+2756,17610015,23264344,-1,hypernatremia,17941883,27580976,-1,hypernatremia,True
+2761,19693912,26373945,15,right flank pain recent falls,17452187,27357534,-1,right lower extremity swelling chest pain and recent falls,False
+2763,13014961,20481647,-1,hypoxemia,11993325,21469197,-1,hypoxemia,True
+2765,13977966,23661305,-1,fevers generalized weakness,19936204,22910934,-1,fevers chills,True
+2766,13977966,23837964,-1,vomiting,11577001,22422862,-1,vomiting,True
+2769,14345906,21795319,-1,scheduled chemotherapy,14324540,26753898,-1,scheduled chemotherapy,True
+2770,14345906,22468958,-1,chemo,19220926,27048949,-1,chemo,True
+2777,16568863,22312077,-1,right upper extremity weakness dyspnea,18810660,20000694,-1,dyspnea lower extremity edema,True
+2786,18570563,22312799,-1,gastrointestinal bleeding,16061352,23142047,-1,gastrointestinal bleeding,True
+2794,13014961,28771627,-1,leg swelling,15425638,25202635,-1,leg swelling,True
+2800,11431685,22775116,-1,generalized weakness,17990893,29323765,-1,generalized weakness,True
+2802,12344089,22858898,-1,nausea vomiting fever,17255998,22179603,-1,nausea vomiting fever,True
+2808,14345906,24601630,-1,scheduled chemotherapy,19663680,20950158,-1,scheduled chemotherapy,True
+2809,14835486,23895432,-1,fever emesis,14137137,27532941,-1,fever vomiting,True
+2810,15531419,24154269,-1,weakness,16586875,26622098,-1,weakness,True
+2812,16348164,22557294,9,lethargy at rehab,12729030,27155836,-1,lethargy dka,False
+2817,10674823,24666794,-1,weakness,15811722,24222674,-1,weakness,True
+2821,16265635,25178025,-1,tachycardia and lethargy,14462350,26244256,-1,hypoxia lethargy and somnolence,True
+2822,16348164,20479549,-1,positive blood culture,19365519,23601681,-1,positive blood culture,True
+2828,12354894,22930463,-1,nausea,11201942,23262906,-1,nausea,True
+2829,12828031,22858034,-1,epigastric pain,10096391,26251990,-1,epigastric pain,True
+2830,12973912,22192869,-1,dysphagia,19346611,22969182,-1,dysphagia,True
+2849,18570563,27677849,-1,weakness,15753262,25711423,-1,weakness,True
+2851,10674823,21929863,-1,hyperglycemia,17077306,23376243,-1,hyperglycemia,True
+2853,11956852,26593159,-1,fatigue,14084551,20617064,-1,fatigue,True
+2854,12720451,21194932,-1,confusion/urinary tract infection,17282266,20926768,-1,urinary tract infection,True
+2858,16313531,25607949,-1,hypoxemia,13985594,28772403,-1,hypoxemia,True
+2859,16348164,25339857,-1,hip fracture,16666777,23604340,-1,hip fracture,True
+2861,16391403,21029491,-1,rectal bleeding,17569639,24815184,-1,rectal bleeding,True
+2862,17513267,27112106,-1,urinary tract infection,16613727,20556360,-1,urinary tract infection,True
+2866,10032409,26423972,-1,face swelling,18152462,26535798,15,face swelling and dental pain,False
+2870,14102375,25134556,-1,bright red blood per rectum,15325930,29703150,-1,bright red blood per rectum,True
+2879,17513267,21648409,-1,urosepsis,11857739,22896266,-1,urosepsis,True
+2880,17628952,29461318,-1,hip pain,19556039,29941364,-1,hip pain,True
+2883,19161345,26272243,-1,syncope,17750219,25997868,-1,syncope,True
+2888,19693912,29603225,-1,primary hyperparathyroidism,16119309,20759860,-1,primary hyperparathyroidism,True
+2889,10032409,25997537,-1,confusion,16400011,28438471,-1,confusion,True
+2890,12278337,25500857,-1,hypotension,14324494,28210859,-1,hypotension,True
+2891,13647235,24196782,-1,confusion elevated creatinine,13371198,27962804,-1,elevated creatinine,True
+2892,13977966,20696468,-1,fever,12637088,23418411,-1,fever,True
+2896,14493463,26714181,-1,nausea,18797174,25811374,-1,nausea,True
+2897,16280422,27264950,-1,elevated creatinine,16866463,20379552,-1,elevated creatinine,True
+2900,16466737,29927701,-1,right hip fracture,16790562,28026908,-1,right hip fracture,True
+2906,12317014,28359950,-1,hyponatremia,14021326,26453219,-1,hyponatremia,True
+2907,12720451,26920835,-1,weakness,13664206,29213933,-1,weakness,True
+2908,13014961,21639281,-1,nose bleeding elevated troponin,19015076,28739517,-1,elevated troponin,True
+2910,14904046,21024297,-1,confusion,17844906,24018765,-1,confusion,True
+2921,14493463,24753082,-1,chemotherapy,13542274,29832733,-1,chemotherapy,True
+2923,12079698,27208540,-1,hematemesis,19912537,29825378,-1,hematemesis,True
+2924,14090748,21544180,-1,picc displacement urinary retention urinary tract infection,18374033,20641100,-1,urinary tract infection syncope,True
+2927,14102375,21043056,-1,bright red blood per rectum,11162572,26560606,-1,bright red blood per rectum,True
+2929,15052570,25747690,-1,bilateral lower extremity pain,12494394,20424714,-1,bilateral lower extremity pain,True
+2930,15497723,20358506,-1,headache vomiting,14266995,22290004,-1,headache vomiting,True
+2932,15732133,21384210,-1,seizure and c5 fracture,12957994,28289900,-1,c2 fracture with cord compression,True
+2933,16478763,29683087,-1,left hip pain,14894305,29124988,-1,left hip pain,True
+2937,19244673,27647077,-1,left low anterior column acetabular fracture,12386098,20539428,-1,left acetabular fracture,True
+2938,10032409,20679361,-1,right upper extremity swelling,16799758,26352312,-1,right upper extremity swelling,True
+2939,10032409,26795619,-1,syncope,15944141,29721551,-1,syncope,True
+2944,13500734,20295574,-1,fever,11958913,22818477,-1,fever,True
+2945,14102375,25023851,-1,bright red blood per rectum,18814778,23351510,-1,bright red blood per rectum,True
+2946,14102375,25540286,-1,rectal bleeding,11958726,21970576,-1,rectal bleeding,True
+2947,15291664,27556924,-1,syncope,13779779,29726873,-1,syncope,True
+2954,19161345,20896304,-1,aockd failure to thrive,10328470,23274202,-1,failure to thrive,True
+2955,19465940,25089018,-1,nausea,17255998,27559726,-1,nausea,True
+2958,14102375,25888196,-1,left lower extremity swelling,16060087,25678016,-1,left lower extremity swelling,True
+2964,17966195,26153552,-1,encephalopathy,10420630,29944886,-1,encephalopathy,True
+2965,10032409,20612017,-1,wrist fracture,17877469,21544774,-1,left wrist fracture,True
+2966,12712263,24089657,-1,lower extremity pain and difficulty walking,19016704,24607530,-1,back and lower extremity pain and difficulty walking,True
+2968,15291664,20260285,-1,seizure,12354916,21238653,-1,seizure,True
+2972,15497723,28017501,-1,dizziness,13455228,22734695,-1,dizziness,True
+2974,15527717,24149182,-1,headache,11567158,29651256,-1,headache,True
+2975,15732133,20206894,-1,seizure,19641331,23649829,-1,seizure,True
+2979,15877362,26542571,-1,agitation,13718490,27430212,-1,agitation,True
+2980,15877362,26564068,-1,rash,15648434,23600858,-1,rash,True
+2982,16265635,21270988,-1,lethargy confusion,14482239,24985685,-1,lethargy,True
+2984,16810798,22443943,-1,left ankle swelling,18179783,22524389,-1,right ankle swelling,True
+2985,16935244,21078956,-1,symptomatic anemia,14938134,20689180,-1,symptomatic anemia,True
+2988,19454512,23476344,-1,bright red blood per rectum,15147683,26935008,-1,bright red blood per rectum,True
+2992,19454512,22994215,-1,bright red blood per rectum,18351216,28953026,-1,bright red blood per rectum,True
+2999,10032409,24053571,-1,hyperglycemia,12916923,22244055,-1,hyperglycemia,True
+3000,10674823,28325495,-1,hyperglycemia,12889874,28409425,-1,hyperglycemia,True
+3001,10674823,28859535,-1,abdominal pain after colonoscopy,18210689,23420188,-1,abdominal pain after colonoscopy,True
+3004,11452604,29786618,-1,fever,18565914,21729557,-1,fever,True
+3005,11590157,25950708,-1,found down,12095221,26418243,-1,found down,True
+3011,13935431,21458495,-1,right arm pain,10792141,29835462,-1,right arm pain,True
+3023,16391403,27349827,-1,urinary tract infection/buttock pain,17169763,20082508,-1,right buttocks pain urinary retention urinary tract infection,True
+3024,16601330,27740155,-1,lethargy,13188808,22489904,-1,lethargy,True
+3026,17540438,21516301,-1,pain,11520801,21092918,-1,pain,True
+3027,18257430,20794717,-1,hypoxia,11019502,29853657,-1,hypoxia,True
+3030,18586276,25523699,-1,left foot pain,16721536,21516819,-1,left foot pain,True
+3032,19225366,23015979,-1,shoulder pain right,18397403,28714455,-1,right shoulder pain,True
+3034,19454512,28314313,-1,left elbow pain,12338397,25177420,-1,left elbow pain,True
+3035,11941770,23582658,-1,dysphagia,13372200,26628430,-1,dysphagia,True
+3043,16311983,21890558,-1,weakness,17681159,23316013,-1,weakness,True
+3044,10938464,24264222,-1,weight gain lower extremity edema dyspnea on exertion,18206648,28624257,-1,dyspnea on exertion lower extremity edema,True
+3045,19631559,27777427,-1,confusion,11593763,25880852,-1,confusion,True
+3046,15286481,23753712,-1,acute kidney injury confusion,11736405,23596389,9,confusion acute renal failure,False
+3051,16311983,27910285,-1,mechanical fall,18529885,27521168,-1,mechanical fall,True
+3056,19028690,27387551,-1,confusion,14569141,23312338,-1,confusion,True
+3058,11164537,24089499,-1,confusion,15895770,22085823,-1,confusion,True
+3060,16372148,20146001,-1,failure to thrive,13788454,23852164,-1,failure to thrive,True
+3063,19151064,27346542,-1,wheezing and somnolence,15484986,26525611,8,tachypnea hypoxia somnolence,False
+3064,14873634,23441000,-1,hypoxia,19545081,27006324,-1,hypoxia,True
+3071,16514111,20601153,-1,fevers fatigue cough,14602927,20786647,-1,fevers chills cough,True
+3073,17672672,20631199,-1,syncope,18568321,29634611,-1,syncope,True
+3076,11941770,20995924,-1,anemia,17546051,21454552,-1,anemia,True
+3078,13427502,22071657,-1,epigastric pain emesis,15367414,27923051,-1,epigastric pain,True
+3079,16102281,28683697,-1,hyperglycemia weight loss,11106524,20437704,-1,hyperglycemia,True
+3081,17096102,20953238,-1,found down,16682527,22323197,-1,found down,True
+3091,15286481,22763995,-1,nausea headache,17749423,24049686,-1,nausea fatigue,True
+3097,19562787,28448757,-1,failure to thrive,16367634,28665279,-1,failure to thrive,True
+3101,14717765,27249818,15,bilateral leg swelling,14214341,23077596,-1,right leg swelling,False
+3107,10079700,24239751,-1,seizures,19571223,25065682,-1,seizures,True
+3110,13501962,24365671,-1,coffee ground emesis,18074451,28729019,-1,coffee ground emesis,True
+3112,14952802,20253188,-1,transferred from for nausea vomiting,11469342,22543368,-1,left sided chest pain and nausea vomiting,True
+3113,14952802,26828150,-1,hyperglycemia,13834529,20912170,-1,hyperglycemia,True
+3116,17250375,28292133,-1,fever,11264499,22111758,-1,fever,True
+3117,17703741,28094179,-1,sepsis,14328661,27497471,-1,sepsis,True
+3118,19376749,21611116,-1,hypotension,18893199,23964100,-1,hypotension,True
+3119,10411160,20168442,-1,right upper extremity swelling pain,18985055,25695282,-1,left upper extremity swelling,True
+3121,13294541,21375064,-1,cough fatigue,13673554,26057979,-1,cough fatigue,True
+3122,16548967,23678739,-1,hyponatremia,12015226,23427322,-1,hyponatremia,True
+3125,19028690,21177831,-1,weakness,15482878,24496563,-1,weakness,True
+3127,19151064,24465313,9,urgent hd hypotension,14236258,28604823,-1,hypotension,False
+3130,14873634,20466602,-1,chemo,14634633,28387252,-1,chemo,True
+3133,16514111,28347166,-1,abnormal labs,15190257,27428134,-1,abnormal labs,True
+3141,10108435,28681267,-1,abdominal pain hematemesis,16960594,27322254,-1,melena hematemesis,True
+3143,10646745,29232299,-1,screening colonoscopy,15523946,24466498,-1,colonoscopy,True
+3150,12936926,25522224,-1,lethargy,17807297,20018993,-1,lethargy,True
+3151,12940767,23330292,-1,exertional chest pain and dyspnea,15403852,25008069,-1,exertional chest tightness and dyspnea,True
+3152,16102281,27448561,-1,found down,14106925,21357748,-1,found down,True
+3156,16514111,23612474,-1,confusion,18273833,25546587,-1,confusion,True
+3162,12526273,23663905,-1,hypoxemia,10213803,26255243,-1,hypoxemia,True
+3166,16867899,22877944,-1,encephalopathy leukocytosis,14470944,25389698,-1,encephalopathy,True
+3167,16949443,23033487,-1,hypotension,19926045,26625424,-1,hypotension,True
+3169,17275231,24536166,-1,abdominal pain chills,15866824,28493213,-1,abdominal pain fevers chills,True
+3172,17868309,23064810,-1,encephalopathy,17790933,22307011,-1,encephalopathy,True
+3176,10317857,23527671,-1,fall hip fracture,18046279,25821622,-1,r hip fracture,True
+3178,10506842,28694998,-1,confusion,16053379,29468597,-1,confusion,True
+3179,10685605,23530087,-1,hypotension,18273833,28614554,-1,hypotension,True
+3182,12636917,27815591,-1,fever and vomiting,15854724,29244521,-1,fever nausea and vomiting,True
+3184,13050816,21680409,-1,nausea vomiting flank pain,16185428,25523132,-1,abdominal pain nausea vomiting,True
+3187,13501962,22952382,-1,nausea and vomiting,18281196,28632984,-1,nausea and vomiting,True
+3188,13501962,26996563,-1,hypotension,19173988,25006971,-1,hypotension,True
+3192,16548967,29402761,-1,hyponatremia,18798806,26696180,-1,hyponatremia,True
+3194,16780307,25876434,-1,anemia weakness,16937222,20608423,-1,anemia fatigue,True
+3196,17337033,29655470,14,right leg weakness slowed speech,14664994,21753051,-1,left leg weakness,False
+3197,17672672,26185103,-1,sepsis,15684348,27992705,-1,sepsis,True
+3198,17672672,29832193,-1,fever nausea vomiting,16833001,24235431,-1,fever nausea vomiting,True
+3200,19151064,28503805,-1,lower extremity leg swelling,15946806,26687754,-1,lower extremity and abdominal swelling,True
+3201,19376749,21298588,-1,left lower quadrant pain,15954616,22214833,-1,left lower quadrant pain,True
+3204,10014354,29600294,-1,fever/cough,17091926,24247081,-1,cough/fever,True
+3206,13427502,29242487,-1,nausea,17542845,22119641,-1,nausea,True
+3207,13699064,23168384,-1,difficulty breathing,12265028,24575263,-1,difficulty breathing,True
+3209,14091099,21589389,15,clotted fistula l arm swelling,16462601,23557177,-1,right arm swelling,False
+3211,16288689,24028891,-1,mutism,14666151,26936302,10,nstemi,False
+3213,16514111,28339991,-1,elevated creatinine,14785160,22132748,-1,elevated creatinine,True
+3218,19020115,27173624,-1,coffee ground emesis epigastric pain,17905654,27840821,13,epigastric pain diarrhea,False
+3219,19151064,25255183,-1,chills,14178815,21229468,-1,chills,True
+3228,14717765,26344180,-1,fever,16370759,23754818,-1,fever,True
+3231,14873634,26714158,-1,confusion urinary retention,10138785,26041336,-1,confusion urinary retention pain,True
+3234,15886636,22006301,-1,gastrointestinal bleed,15414696,25359148,-1,gastrointestinal bleed,True
+3235,16288689,21895277,-1,weakness,16803635,27722856,-1,weakness,True
+3236,16288689,22254553,-1,abnormal labs,12156576,22106250,-1,abnormal labs,True
+3237,16548967,27748074,-1,dizziness,13364025,25685359,-1,dizziness,True
+3240,10525647,21782262,-1,left arm pain,11389352,23014890,-1,left arm pain,True
+3243,12011149,25077853,-1,transfer from for concern of increasing abdominal girth,18878737,20897162,13,increased abdominal girth malaise,False
+3248,16333368,28872264,-1,confusion,17009417,24913451,-1,confusion,True
+3249,16780307,26777805,-1,right lower quadrant pain,13136352,20390846,-1,right lower quadrant pain,True
+3250,16867899,21640833,-1,encephalopathy,17886916,26233998,-1,encephalopathy,True
+3252,17107885,20455802,-1,confusion,15956700,20010366,-1,confusion,True
+3253,17107885,21436460,-1,confusion,14093901,25412713,-1,confusion,True
+3259,19066887,29409085,12,ecchymoses in hands supratheurapeutic inr,14755254,22200916,-1,lower extremity ecchymoses swelling,False
+3260,19962126,20526677,-1,hypoxia failure to thrive,12878814,26017735,-1,diarrhea failure to thrive,True
+3262,10014354,29757856,-1,epigastric pain,12658509,27543800,-1,epigastric pain,True
+3264,12518811,20287163,-1,confusion,18298823,23884484,-1,confusion,True
+3267,14693488,21655843,-1,colonoscopy prep,12142402,22746492,-1,colonoscopy prep,True
+3270,16288689,24595297,-1,chest pain cough fever,19103590,28908057,-1,fever cough chest pain,True
+3274,16797123,25974359,-1,weakness,15708020,25298709,-1,weakness,True
+3276,17096102,28432108,-1,acute kidney injury,14338363,20899150,-1,acute kidney injury,True
+3281,19562787,26945465,-1,bronchoscopy with lul biopsy,12035507,27245321,-1,abdominal mass biopsy,True
+3282,10497097,21769520,-1,confusion,16684582,28148923,-1,confusion,True
+3284,10497097,28483352,-1,fever,18298823,22855375,-1,fever,True
+3286,13050816,26791636,-1,bright red blood per rectum,11693588,23665315,-1,bright red blood per rectum,True
+3288,14717765,26994280,-1,chest pain volume overload,18650767,28172543,-1,low back pain volume overload,True
+3290,14806642,22441162,-1,acute renal failure urinary tract infection ileus,17548321,21179081,-1,urinary tract infection acute renal failure,True
+3291,14813293,24399264,-1,seizures,14251011,25927382,-1,seizures,True
+3295,15534164,26303260,-1,cough fever,14178815,25183993,-1,cough fever,True
+3302,17107885,26934443,-1,watery diarrhea,19609358,22792109,-1,watery diarrhea,True
+3308,10497097,20142150,-1,nausea and vomiting,11166922,20212507,-1,nausea and vomiting,True
+3310,12085193,23224032,-1,right leg swelling,16153064,21561463,-1,right leg swelling,True
+3324,17107885,28910869,-1,weakness lightheadedness,12442481,22868876,-1,weakness lightheadedness,True
+3325,17262521,28085836,-1,colonoscopy prep,18893199,22579790,-1,colonoscopy prep,True
+3329,19151064,20013426,-1,weakness,17175999,26487900,-1,weakness,True
+3334,14717765,29079858,-1,chest pain volume overload,16728286,26052879,8,chest pain near syncope,False
+3335,15184709,26137001,-1,lower extremity swelling,10226756,27093523,-1,lower extremity swelling,True
+3337,15957914,20310778,-1,left lower extremity pain,12739154,20606692,-1,right lower extremity pain,True
+3341,16548967,26261617,-1,hyperglycemia,16529096,21655129,-1,hyperglycemia,True
+3346,17359276,25590407,-1,left shoulder pain,17471592,22993426,-1,left shoulder pain,True
+3347,17900973,26438629,-1,right foot pain,14154307,26871539,-1,right foot pain,True
+3348,18539655,24376575,-1,found down,18396476,24264004,-1,found down,True
+3350,19020115,22826511,-1,confusion,14101206,21270220,-1,confusion,True
+3351,11101951,29050645,-1,weakness,11813349,24902595,-1,weakness,True
+3352,12085193,24660506,-1,leg pain swelling fevers,12389173,27738982,-1,back pain fevers,True
+3355,13294541,26083359,-1,weakness fatigue fever,12328691,28380243,-1,fever nausea weakness,True
+3357,15550489,23892362,-1,neck pain,19345129,20985997,-1,neck pain,True
+3360,16021221,27892088,-1,diarrhea,18244600,21924157,-1,diarrhea,True
+3363,16867899,27852618,-1,disorientation,10310173,23982429,14,weakness disorientation,False
+3364,16899163,20015872,-1,fever,10629685,28627166,-1,fever,True
+3366,17275231,23654078,-1,fever,13998001,20565123,-1,fever,True
+3370,18049978,28569585,10,coffee ground emesis j-tube malfunction,10846062,25790032,-1,coffee ground emesis,False
+3371,18049978,28734880,10,severed j-tube,16169896,21502414,-1,ileostomy following j-pouch,False
+3374,19151064,21394199,-1,somnolence,13833729,21363518,14,somnolence and unsteady gait,False
+3379,13294541,24350123,-1,fever,13755199,28076904,-1,fever,True
+3380,13427502,23094994,-1,anemia,17225669,21178173,-1,anemia,True
+3390,15988376,21465092,-1,right foot pain,19438923,29994670,-1,right foot pain,True
+3391,16288689,24565349,-1,cough right chest pain right upper quadrant abdominal pain,19326312,28630926,-1,cough right upper quadrant pain,True
+3393,16680217,26603719,-1,found down,11288013,21287757,-1,found down,True
+3395,17347135,28148623,-1,left knee pain,15215197,27923250,-1,left knee pain,True
+3396,17366913,20966296,14,fall vomiting,15822576,20123097,-1,headache vomiting,False
+3402,18876079,28509274,-1,anemia,12889413,22160813,-1,anemia,True
+3404,10014354,26228185,-1,abdominal,16427652,21226233,-1,abdominal,True
+3409,14644430,26582612,-1,headache,13048619,21782068,-1,headache,True
+3413,17107885,21879236,-1,confusion,16281644,22133397,-1,confusion,True
+3420,17868309,21166409,-1,rash,13551101,22363124,-1,rash,True
+3423,10004322,22602599,-1,weakness,14426475,29504732,-1,weakness,True
+3424,11634090,23050826,-1,neck pain/c2 fracture,14132391,25612344,-1,neck pain c2 and c5 fracture,True
+3429,12115320,20943279,10,thoracic spine fracture,16689906,28494101,-1,unstable thoracic fracture fall,False
+3431,12640988,23576183,-1,weakness,17451029,24775887,-1,weakness,True
+3439,16110190,22973124,-1,prep for planned colonoscopy,10909743,26624626,-1,prep for colonoscopy,True
+3440,16288689,25110338,-1,rash,19650626,28547082,-1,rash,True
+3455,17275231,21647166,15,abdominal pain with fever,18859120,21668686,-1,abdominal pain fever,False
+3464,12115320,28135584,-1,r knee swelling,12450789,27240792,15,knee swelling/pain,False
+3468,13427502,22010766,-1,fever,19230229,29029126,-1,fever,True
+3470,14644430,28563155,-1,seizure,13498233,21453456,-1,seizure,True
+3483,11634090,23177369,-1,fever weakness,15942968,25209916,-1,fever weakness,True
+3484,11634090,27250714,-1,hypoxia,18685819,23801170,-1,hypoxia,True
+3487,18218394,25682226,-1,left midfoot fracture-dislocation,11498107,25924586,-1,l transolecranon elbow fracture-dislocation,True
+3493,10108435,26222407,-1,headache high blood pressure,16141152,24769463,-1,headache high blood pressure,True
+3497,10274866,23488422,-1,tongue swelling,19184820,26167129,-1,tongue swelling,True
+3502,11634090,21541852,-1,hypoxia falls,17846027,22614625,-1,hypoxia,True
+3504,11834165,25636035,-1,exertional chest pain,15239801,26874943,-1,exertional chest pain,True
+3506,11945588,25676640,-1,hematemesis,18766606,24875959,-1,hematemesis,True
+3508,12115320,25397415,-1,right lower extremity transient numbness,19832679,22464275,-1,transient right lower extremity weakness/numbness,True
+3516,12873096,21814528,-1,fever,18585076,28625695,-1,fever,True
+3517,12873096,29974011,-1,fever and chills,14519272,20311428,-1,fever and chills,True
+3521,14644430,28008203,-1,weakness,19288202,29186950,-1,weakness,True
+3522,14806642,25078474,-1,confusion,18153705,22670174,-1,confusion,True
+3523,15101279,20982521,-1,vomiting blood,19329252,24588884,-1,vomiting blood,True
+3527,16333368,27758669,-1,left shoulder chronic dislocation,18728235,26923456,-1,left ankle fracture/dislocation,True
+3528,16420745,20154830,-1,redness swelling and pain in left lower extremity,17721884,22185337,-1,pain and swelling left lower extremity,True
+3533,16420745,24829047,-1,left hip pain,14796451,20393140,-1,left hip pain,True
+3536,16420745,27605549,-1,left lower extremity pain and redness,10070614,26433982,-1,left lower extremity redness and pain,True
+3538,16511521,29537034,-1,prep,13173458,21469254,-1,prep,True
+3542,16709771,25602198,-1,colonoscopy prep,18814995,23757444,-1,scheduled colonoscopy,True
+3543,16709771,27405934,10,melena bright red blood per rectum,15908723,21060499,-1,bright red blood per rectum,False
+3546,17107885,22639401,-1,diarrhea,17587395,20367781,-1,diarrhea,True
+3553,17716953,25172987,-1,pain,19096530,25756003,-1,pain,True
+3554,17716953,25459305,-1,colonoscopy prep,14968985,20044485,-1,colonoscopy screening,True
+3556,17862236,21887104,-1,lower extremity wound and erythema,12115279,20864772,-1,right lower extremity pain erythema and swelling,True
+3557,17900973,27531920,-1,right lower extremity pain,15401647,21590290,-1,right lower extremity pain,True
+3558,18508098,23273604,-1,abdominal pain fever,19537408,29161580,-1,abdominal pain fever,True
+3562,18557723,29290653,-1,left leg pain,15575770,20517490,-1,left leg pain,True
+3564,18581630,26075543,-1,right femoral neck fracture,10110742,25989257,-1,right femoral neck fracture,True
+3566,13483060,24027617,-1,fever,18780736,28816463,-1,fever,True
+3568,13483060,29548075,-1,fever confusion,18498541,25261715,-1,fever,True
+3569,13483060,29029853,-1,fever confusion,16517178,24648025,-1,fever weakness,True
+3572,11028216,26604900,-1,dyspnea and lower-extremity edema,16006682,27604485,-1,dyspnea lower extremity edema,True
+3573,11302785,23602521,-1,lethargy,14247006,29604210,-1,lethargy,True
+3576,11028216,22979042,9,hmed admission note cc petechiae,16055697,21479039,-1,jaundice abdominal pain of pancreatic cancer based on osh ct report/findings,False
+3579,15854896,20602482,-1,lethargy hyperglycemia,13892385,27040228,-1,hyperglycemia confusion,True
+3583,13483060,29210162,-1,right upper quadrant pain,10237082,29406226,-1,right upper quadrant pain,True
+3589,17523078,25454657,-1,coffee-ground emesis,16184374,27619588,10,coffee-ground emesis bright red blood per rectum,False
+3590,15550489,28594454,-1,hematemesis,17078350,27499435,-1,hematemesis,True
+3592,19532801,23823454,-1,hypotension,14073981,23922603,-1,hypotension,True
+3595,13483060,25481036,-1,fever,12843558,26342696,-1,fever,True
+3603,16502195,27986053,-1,nausea and vomiting,14146319,24742465,-1,nausea and vomiting,True
+3606,15347460,27895844,-1,seizure,14028461,29784524,-1,seizure,True
+3611,10108435,23827733,-1,leg swelling,14755254,23368447,-1,leg swelling,True
+3614,13079917,27969398,-1,hypotension,16092373,22488250,-1,hypotension,True
+3615,15550489,22207878,-1,confusion,17528401,25638231,-1,confusion,True
+3627,11830275,23112599,-1,mechanical fall,18728446,28541092,-1,mechanical fall,True
+3631,19410985,24387261,-1,lower extremity edema and chest pain,10191971,25592786,-1,shortness of breath and lower extremity edema,True
+3632,19700168,20958916,-1,hypotension,13799949,20781053,-1,hypotension,True
+3633,19700168,28010538,11,bph and weak detrusor requiring chronic foley,19584529,28375888,-1,bph with lower urinary tract symptoms,False
+3634,10047587,22203792,-1,hip fracture,18638599,28090720,-1,hip fracture,True
+3638,19431075,20257095,-1,confusion cough,15100095,21216149,-1,confusion headache,True
+3641,13545353,23504169,-1,dyspnea on exertion,15610631,26091202,-1,dyspnea on exertion,True
+3644,16839550,29635404,-1,weakness,19442084,24505471,-1,weakness,True
+3645,16936839,24966826,-1,nausea vomiting abdominal pain,14258949,22980311,-1,nausea vomiting abdominal pain,True
+3646,17828546,28997184,-1,non-functional nephrostomy tube,15209372,21505045,-1,nephrostomy tube leakage,True
+3647,18234816,21922171,-1,vomiting,13689731,28725761,-1,vomiting,True
+3650,19631559,23321451,-1,hematemesis/ugib,16137431,28287784,-1,hematemesis,True
+3651,10108435,21056565,-1,difficulty ambulating with bilateral lower extremity edema,11941003,29358935,-1,difficulty ambulating / lower extremity weakness,True
+3653,11673731,22734471,-1,lethargy and cough,11317682,23958579,-1,lethargy and weakness,True
+3659,17280245,27817338,-1,transfer from osh for feculent emesis and arf,16958087,23894899,15,fever and arf,False
+3660,17297209,29088706,-1,left upper quadrant pain,11424467,28423223,-1,left upper quadrant pain lymphadenopathy,True
+3661,19431075,27159315,-1,pneumonia,10959054,22224110,-1,pneumonia,True
+3662,10047587,20927995,-1,fever generalized weakness,17927113,20531446,-1,fever weakness,True
+3665,15872502,24055967,-1,aaa,16148295,22547615,-1,aaa,True
+3672,17475607,24286927,-1,dyspnea on exertion,19359798,25190591,-1,dyspnea on exertion,True
+3677,17976305,21253778,-1,hyperglycemia,12657189,29075687,-1,hyperglycemia,True
+3680,18673777,28881990,-1,lower extremity swelling,13435701,20294876,-1,lower extremity swelling,True
+3682,10108435,26693769,-1,leg swelling,16357339,21534076,-1,leg swelling,True
+3684,11830275,25734981,-1,left hip fracture transfer from osh,19555015,24222817,-1,left hip fracture after mechanical fall,True
+3685,11834165,20887677,-1,confusion,14370483,25212065,-1,confusion,True
+3686,15184709,21780307,-1,abnormal labs,12965943,25880500,-1,abnormal labs,True
+3687,16502195,24391863,-1,hypoxia,17016598,28414548,-1,hypoxia,True
+3695,16515555,20393707,-1,right femoral neck fracture,19797153,26170024,-1,left femoral neck fracture,True
+3696,16515555,20883148,-1,gastrointestinal bleeding,15424006,21574038,-1,gastrointestinal bleeding,True
+3700,19700168,24924502,-1,lightheadedness,17829122,23609219,-1,lightheadedness,True
+3702,12863916,27919450,-1,dyspnea on exertion,14598881,24085637,-1,dyspnea on exertion,True
+3704,15276693,21600683,-1,fever,18864300,28065696,-1,fever,True
+3707,11028216,27121271,-1,vomiting and abdominal pain,18780736,25599917,-1,abdominal pain and vomiting,True
+3708,11527061,26106383,-1,weakness,12192859,23839217,-1,weakness,True
+3713,12089095,20236859,-1,lightheadedness,12436124,29220955,-1,lightheadedness,True
+3714,13483060,29048549,-1,fever abnormal labs,10049723,29946500,-1,abnormal labs,True
+3720,18838105,20847449,-1,cough weakness,15099619,22820549,-1,cough weakness,True
+3722,19431075,24935407,-1,failure to thrive requesting po intake,14921998,20433805,-1,progressive weakness poor po intake failure to thrive,True
+3723,19431075,28570563,-1,anemia,13870141,29453253,-1,anemia,True
+3724,19921864,24741237,-1,right upper quadrant pain,13901084,27314521,-1,right upper quadrant pain,True
+3727,10108435,29061146,-1,shortness of breath and bilateral lower extremity pain,15505239,26970506,-1,shortness of breath and lower extremity edema,True
+3731,11102426,23771412,-1,weakness dysphagia,12957124,28815593,-1,dysphagia,True
+3732,11102426,29740638,-1,failure to thrive inability to eat dysphagia vomit,17771051,20495369,-1,failure to thrive dysphagia,True
+3733,11109718,24978157,-1,confusion,10819567,29038267,-1,confusion,True
+3734,13545353,26034967,-1,nausea vomiting,17228827,24726826,-1,nausea vomiting,True
+3736,14782843,24417608,-1,failure to thrive,10375831,23595417,-1,failure to thrive,True
+3741,19576216,28151147,-1,fever,11934378,20305627,-1,fever,True
+3744,10108435,21001286,-1,diarrhea,10307629,29478496,-1,diarrhea,True
+3747,10108435,23333218,-1,leg pain,11056126,29814328,-1,leg pain,True
+3749,10348351,29289862,-1,broken foley and fevers,17735856,22156709,13,diarrhea and fevers,False
+3750,10456463,22519767,-1,syncope,14244423,21030186,-1,syncope,True
+3753,11927419,25806159,-1,lightheadedness,11856988,23891438,-1,lightheadedness,True
+3755,15347460,21143515,-1,found down,18328548,27560986,-1,found down,True
+3757,16839550,22368938,-1,abdominal pain nausea vomiting,12398600,29416416,-1,abdominal pain nausea vomiting,True
+3759,19431075,23414561,13,weakness fatigue diarrhea,17171575,25372665,-1,weakness diarrhea,False
+3763,10108435,20850610,-1,bilateral leg swelling weakness dehydration,15278506,24274676,13,abdominal pain weakness dehydration,False
+3766,13545353,21506258,-1,prep/colostomy tube placement,16944574,25789013,-1,colostomy reversal,True
+3768,15438386,21324831,-1,headache,15510023,23758669,-1,headache,True
+3769,15447063,24011796,-1,right upper quadrant pain,11424548,25381991,-1,right upper quadrant pain,True
+3773,16333368,26537265,-1,confusion,13726455,25265605,-1,confusion,True
+3774,16515555,27478817,-1,stemi,18989791,25191507,-1,stemi,True
+3776,17275231,25444928,-1,sepsis,18194216,27192491,-1,sepsis,True
+3783,16514481,25693021,-1,fever cough,18853927,20860880,-1,fever cough,True
+3784,16936839,28350762,-1,leg swelling,10276569,25489815,-1,leg swelling,True
+3785,17348831,25822778,-1,weakness,12851314,23438268,-1,weakness,True
+3787,10502984,28996226,-1,cough fever fall,19434955,27689155,-1,fall cough fever,True
+3788,11198939,25264052,-1,hypotension,19662577,27279468,-1,hypotension,True
+3789,11673731,20008865,-1,urinary tract infection,16043625,27240789,-1,urinary tract infection,True
+3793,15447063,21129138,-1,generalized weakness,13966424,21860190,-1,generalized weakness,True
+3801,19347814,28968493,-1,right groin pain,12629437,22023557,-1,right groin pain,True
+3802,19532801,24707655,10,melena bright red blood per rectum,13121825,28896516,-1,bright red blood per rectum,False
+3805,10108435,25239067,-1,chest pain dyspnea lower extremity edema,11287431,21897634,-1,dyspnea on exertion lower extremity edema,True
+3806,10554006,24729061,-1,altered mental status fall urinary incontinence,15870777,24632119,-1,unsteady gait memory deficits urinary incontinence,True
+3810,13545353,20709750,-1,hypoxemia,15642980,22937055,-1,hypoxemia,True
+3812,13545353,29245538,-1,nausea vomiting,12458552,20930091,-1,nausea vomiting,True
+3814,15276067,22624614,-1,syncope,16319117,23537152,-1,syncope,True
+3815,16448755,23847238,-1,hypotension,19851671,28006224,-1,hypotension,True
+3816,16860823,27088940,-1,left hip pain,15058965,29650804,-1,left hip pain,True
+3818,17297209,27134050,-1,right upper quadrant pain,19151347,27783378,-1,right upper quadrant pain,True
+3820,17347135,26686307,-1,left hip pain,14758446,26598434,-1,left hip pain,True
+3823,19576216,22787610,-1,failure to thrive,13216259,22121470,-1,failure to thrive,True
+3824,19576216,27675565,-1,elevated creatinine,17321845,27447537,-1,elevated creatinine fever,True
+3825,19576216,29006947,-1,right great toe pain,12871926,27535041,-1,left great toe pain,True
+3832,11102426,23567941,-1,dysphagia,19764344,23122898,-1,dysphagia,True
+3833,11102426,29263933,-1,fall dysphagia failure to thrive,14028270,26495956,-1,dysphagia nausea vomiting failure to thrive,True
+3835,13568606,28849760,-1,l foot pain,15368959,24000365,-1,l foot pain,True
+3836,17297209,24674390,-1,dysuria chills,12314063,20766274,-1,chills fever dysuria,True
+3837,18696678,28934468,-1,failure to thrive and self-care deficiency,11007087,22381482,-1,failure to thrive anorexia,True
+3839,10108435,27067429,-1,leg pain,14851942,27144552,-1,leg pain,True
+3843,11102426,25269930,-1,fatigue weakness,15224081,20585501,-1,fatigue weakness,True
+3844,11102426,28799017,-1,leg bleeding,12329985,22410687,10,foot bleeding,False
+3848,13545353,22282386,-1,falls anemia,12421071,27983373,-1,fatigue anemia,True
+3849,13545353,27905173,-1,vomiting,14210099,29589878,-1,vomiting,True
+3852,13744924,29224518,-1,hypotension,18464087,20640670,-1,hypotension,True
+3853,15438386,21985382,-1,coffee ground emesis,14822011,27862201,-1,coffee ground emesis and melena,True
+3858,17275231,24821087,-1,right upper quadrant abdominal pain,15979265,27499433,-1,right upper quadrant abdominal pain,True
+3859,17275231,25622783,-1,abdominal pain fever,13589791,20204025,-1,abdominal pain fever,True
+3860,17275231,27442433,13,right upper quadrant abdominal pain rigors nausea diarrhea,14411859,20797966,-1,left lower quadrant abdominal pain diarrhea,False
+3864,17275231,28639676,-1,abdominal pain chills,15020778,25609792,-1,abdominal pain fever chills,True
+3869,12089095,26063199,-1,diarrhea,10568775,25460350,-1,diarrhea,True
+3871,17450975,22701693,-1,nausea vomiting,18332797,24817401,-1,nausea vomiting,True
+3873,17297209,23997542,-1,left knee pain,15991313,24940785,-1,left knee pain,True
+3876,10502984,21821333,-1,right shoulder pain,13229445,27878067,-1,right shoulder pain,True
+3877,11109718,24973851,-1,foot pain,10136711,20017382,-1,foot pain,True
+3884,12616584,26750149,-1,t12 fracture,12479643,20980191,-1,t12 fracture,True
+3894,15649564,26968667,-1,abdominal pain vomiting,17701353,29521795,-1,abdominal pain vomitting,True
+3895,15813980,26426536,-1,right hip fracture,19794955,25247849,-1,right hip fracture,True
+3896,15837096,27910754,-1,lethargy,11639482,21297212,-1,lethargy,True
+3897,17275231,25481851,-1,fever,16846450,27108833,-1,fever,True
+3899,17716953,24760532,-1,colonoscopy preparation,17328340,21409012,-1,colonoscopy w abdominal pain,True
+3901,17976305,22502194,-1,prep for colonoscopy/egd,11539363,22792019,-1,elective egd/colonoscopy,True
+3904,19921471,24047116,-1,r flank pain,17952475,21084332,-1,r flank pain,True

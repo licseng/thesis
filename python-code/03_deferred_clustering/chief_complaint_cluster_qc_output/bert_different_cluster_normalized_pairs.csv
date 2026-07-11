@@ -1,0 +1,100 @@
+pair_id,mhh_subject_id,mhh_hadm_id,mhh_bert_cluster,mhh_chief_complaint_normalized,mhc0_subject_id,mhc0_hadm_id,mhc0_bert_cluster,mhc0_chief_complaint_normalized
+8,15900852,22534291,15,difficulty ambulating hearing loss arm pain,16223904,20384743,14,progressive weakness of facial muscles and difficulty with ambulation
+117,16083444,22628113,15,bilateral leg weakness code cord,19002874,27395184,14,right leg weakness
+188,16620073,21163837,9,hypokalemia/ syncope,11310959,24974319,14,malnutrition and syncope
+191,14982471,20143859,12,transhepatic dialysis catheter displaced,13886221,24006278,10,redness and pain surrounding dialysis catheter
+203,19097725,21634452,13,headache light-headedness dizziness worsening acute on chronic abdominal pain and symptomatic hyponatremia,18474441,27309629,9,dizziness and orthostatic hypotension versus seizure
+213,17517983,29896673,6,unresponsive episode hypoglycemia,15834254,27389151,9,altered mental status hypoglycemia
+254,17280328,28449831,9,tachycardia eating disorder,18868139,22395070,8,tachycardia
+303,14622418,27537888,15,chest and abdominal pain,16271079,23479444,2,abdominal pain
+305,15929503,21014088,15,dizziness shakiness and feeling as though he is going to collapse,14338016,21828758,14,l arm shaking dizziness and slurred speech
+350,12650779,28087825,14,altered mental status/confusion,19389735,25422365,5,altered mental status
+384,19786008,26405162,14,multiple falls,11549127,21843583,0,falls
+394,19887933,28099240,13,fevers and abdominal distension,13647833,23407697,15,fevers and abdominal pain
+402,14657672,29429526,10,right pain and foreign object in rectum,15281693,26463532,13,lower abdominal pain and pain on urination
+411,10973518,22366719,14,called by emergency department to evaluate increased seizure activity,18872597,26379143,12,called by emergency department to evaluate ich
+488,10578325,23081301,10,right foot pruritis,17687665,21945000,15,redness and pruritis
+570,12179886,23555682,15,anemia and chest pain,19279254,24606754,8,pulmonary emboli chest pain
+581,12560500,28525282,12,end stage renal disease need for access for dialysis,14565288,28846510,9,end stage renal disease
+644,10375816,25822133,12,pain inpatient iv abx administration,17742466,23901299,10,pain at right inner thigh wound vac site referral to for plastic surgery consultation and pain management
+646,11132745,20894030,11,microinvasive cervical ca vaginal dysplasia,16792781,27495570,10,persistent endocervical dysplasia
+701,16197074,28012946,14,weakness and anemia,10082640,22930426,15,back pain and anemia
+705,17365311,28125602,14,repeated falls,19011320,26452155,0,falls
+733,13528350,25894717,14,rhythmic shaking and confusion,19680874,24086882,15,abdominal pain and confusion
+791,18018694,24925205,12,dehydration/supratherepeutic digoxin levels/decompensated acute on chronic systolic and diastolic heart failure,18348308,24175616,9,dehydration/orthostatic hypotension
+1063,18694024,26496854,13,increasing abdominal distention and size of hernia,13817720,20048978,11,reducible large abdominal incisional hernia with small bowel obstruction
+1079,17863141,23479959,9,hypotension hypoxia altered mental status,11350072,24195197,14,hypoxia altered mental status
+1119,12431768,22534124,13,fever abdominal pain dysuria malaise,18613232,29202810,8,fever/chills dyspnea back pain
+1141,14360114,25303348,15,back pain/abnormal labs,12974491,28787711,8,abdominal pain abnormal labs tachycardia
+1286,10957110,27642594,14,double vision right cn vi palsy,18090205,20553194,10,cervical stenosis right c5 palsy
+1369,18505185,27638314,10,hanging pannus with intertrigo on the abdomen,16701330,24574485,11,mammary hyperplasia and fatty deposits in abdomen
+1440,11943854,23404999,10,fevers and recurrent fungemia,13989850,25787151,9,fevers breast mass and hyperglycemia
+1468,12502204,21959105,8,dizziness hypoxia,17767437,27481712,14,ataxia dizziness
+1475,13897954,29770358,9,transfer for management of possible sepsis and hypercarbic respiratory failure,14812823,27601899,12,elective admission for iv steroids and cyclophosphamide for possible rapidly progressive or crescentic iga glomerulonephritis
+1478,14318651,24284622,9,transfer for management of hypertension,13814194,25172893,15,chest pain and hypertension
+1622,14591184,27433786,10,drainage from sacral ulcer hypotension fatigue,11875731,26020463,9,clotted fistula hypotension
+1654,17343455,28481914,15,fevers pain at baclofen pump site,18319079,23965571,13,abdonimal pain fever and diarrhea
+1730,12892024,28038833,11,cirrhosis c/b ascites abdominal pain,14727722,29094482,9,abdominal pain a/w diarrhea acute renal failure
+1753,17900973,23708609,13,dizziness blood sugars out of control,15409945,21015972,8,dizziness bradycardia
+1775,19509694,22425269,8,weight gain syncope,14153931,20272125,13,diarrhea syncope
+1806,13232661,20003013,5,abnormal eye movements,19329795,29376441,14,transient visual changes and aphasia
+1840,16402322,27110240,9,febrile neutrapenia,14935983,28547070,8,febrile temp
+1868,19020115,20943849,14,confusion/altered mental status,14214341,23176351,5,altered mental status
+1910,15140950,28302893,14,tremors stiffness,14574740,25918273,15,diffuse stiffness
+1959,11784692,29966536,15,heaviness in leg light-headedness and difficulty with ambulation,18449228,22033809,14,left arm numbness and difficulty producing speech
+1962,13323674,26819931,9,melena low hgb,12810704,26597231,10,melena bright red blood per rectum
+1978,15805011,20577700,15,syncope and chest pain,16029930,26451104,8,pre-syncope chest pain
+1986,16297808,24313072,10,leg abscesses and leg pain,11152432,25104101,15,back buttock and bilateral leg pain
+2027,19056923,24789754,15,fatigue/abdominal pain,19680874,21182544,2,confusion abdominal pain
+2048,19056923,28103785,9,admission post rfa c/b altered mental status,19118734,22880131,14,transfer from for altered mental status nausea and vomiting
+2061,18187193,21580836,14,altered mental status / fall / hyperkalemia,17754442,21907733,9,altered mental status hyponatremia
+2067,16544940,20374365,15,tachycardia-associated chest pain,12690358,27478058,13,tachycardia worsened right sided chest/abdominal pain
+2102,12016108,20049183,14,fever and delirium/ i feel like crap,17088779,22002625,13,dysuria and fever
+2125,18951962,24511320,10,back pain neurogenic claudication,10467237,27923538,15,back pain and syncope
+2131,13338037,21028752,15,right arm pain right hip pain weakness and fever,12390853,27047071,14,left facial numbness pain and neck pain
+2238,18821140,23662609,14,fall struck anterior chest on toilet with resultant sternal pain,11630594,24514846,15,left thigh pain fall down 3 stairs
+2302,14189034,24211319,14,confusion altered mental status,11331671,29220851,5,altered mental status
+2303,14630468,22835507,8,shortness of breath increased secretions,15635880,22710803,7,shortness of breath increasing oxygen requirement
+2320,10685894,22662636,15,pruritic rash,12633317,20493014,9,pruritic rash and transaminitis
+2339,15941661,21404863,14,respiratory distress fevers,19857454,29355998,6,fevers
+2374,10532326,20644814,6,mutism unresponsivess called as code stroke,19290249,28217388,9,left hemiparesis tpa at osh called as code stroke
+2434,15876666,27860560,8,altered mental status dyspnea,10803413,23609319,14,altered mental status hypoxia
+2437,16712364,22960081,14,tachycardia right hand weakness cough,18723410,20665712,8,spasm pain near drain fevers tachycardia
+2484,16522884,26354208,14,episode altered mental status,14789229,25688225,5,altered mental status
+2487,16712364,27497191,4,dyspnea/weakness,12197269,24866389,8,weakness dyspnea
+2492,19047156,25101616,10,self-inflicted stab wound,10406570,22682045,14,fall with scalp laceration
+2494,19418948,28664348,14,tremors difficulty walking,13285655,20460574,15,left hand clumsiness difficulty walking
+2597,15742396,25818443,8,hypotension dyspnea,12995041,21543340,9,hypotension fevers
+2655,15876666,22687420,10,fibular neoplasm,19400323,22789082,11,neoplasm left thyroid uncertain type
+2657,16346753,20313473,12,direct admission for t-tube placement,16927328,22710661,10,t-tube placement
+2674,17416494,23232018,14,altered mental status/ lethargy,10657422,25649292,9,hypotension and lethargy
+2727,17214002,22529988,6,confusion back pain,14008601,26170073,15,weakness back pain
+2783,11931843,22320469,10,orthostasis,15589067,26502997,13,orthostasis diarrhea abdominal crampiness
+2801,11431685,22991397,15,arm pain and weakness,10322361,22057791,14,numbness and weakness
+2823,17693865,24944091,9,cardiac arrest requiring balloon pump for pressure support,11736157,29622174,12,post-cardiac arrest
+2852,11590157,22854345,14,altered mental status fevers,13641998,25046278,9,hypotension altered mental status fever
+2855,13415410,27102423,14,concern for airway compromise,13867315,25814158,10,g tube bleeding / concern for infection
+2881,18768176,28530057,14,acute mental status change and dyspnea,16344094,23459823,5,acute mental status change
+2917,19167364,20854695,2,abdominal wall pain,12862888,28780997,15,abdominal wall pain redness
+2986,18257430,28186796,14,altered mental status respiratory distress,17989781,25817834,5,altered mental status
+3057,10639651,22998718,15,confusion chest pain,18519675,25709465,3,chest pain
+3089,15207909,21049453,10,c diff colitis,12626863,29978132,13,colitis/diarrhea
+3093,16102281,21226902,10,coronary artery disease,16827375,25496941,9,cardiac arrest/coronary artery disease
+3124,16780307,26016431,12,relapsed/ refractory hodgkin lymphoma with hypercalcemia,12145174,25347782,11,hypercalcemia necrotizing pancreatitis
+3215,16702834,20705028,8,tachycardia tachypnea,15846970,22132828,9,hypoxia tachycardia
+3217,17096102,24433106,9,transient tachyardia hypoxemia,14178815,24554584,8,cough hypoxemia
+3392,16560125,21922783,11,history of esophageal leak with stent in place,13639563,23335208,10,history of evar b/l iliac aneurysm repair c/b type ii endoleak
+3400,18562317,26898876,10,left mca stroke,12972832,20571535,12,r mca stroke
+3403,19066887,26350367,3,chest pains,14678566,21783315,15,back and chest pains
+3434,13744924,27352513,14,hypoxia altered mental status,11521532,22787930,9,altered mental status hypoxia hypotension
+3539,16514111,24316068,10,leg and scrotal edema with skin tears,18159376,27028338,15,bilateral leg erythema
+3567,16502195,29885215,8,cough dyspnea,16000561,29698421,4,dyspnea
+3582,15854896,27184034,9,unexplained arrest vs syncope and hypoxemia,15337171,25233059,14,arrest vs syncope
+3621,10348351,29310065,10,pain at foley site,10934084,24466783,13,abomdinal pain/constipation
+3628,11830275,23948520,9,hypoxia during pain clinic procedure,14626429,20898939,8,post procedure dyspnea hypoxia
+3703,13568606,26411050,10,left lower extremity wound with drainage,14531176,28606521,15,left foot wound with redness and drainage
+3748,10348351,21679484,10,pain at foley site,18297033,23454804,15,bilateral knee pain redness and swelling at pacer site
+3791,13744924,21795004,8,chest pain hypoxemia,13795723,23274169,7,chest pain shortness of breath hypoxia
+3792,13744924,26054815,14,hypoxemia and altered mental status,15617803,21785351,9,altered mental status and hypotension
+3799,19347814,21673564,12,elective admission for anemia,13527377,24755897,9,hematuria and anemia
+3854,15438386,29704264,14,aspiration event,15092739,29051546,6,aspiration
