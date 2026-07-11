@@ -38,7 +38,12 @@ INPUT_PATH = (
     / "psych_history_llm_input"
     / "filtered_psych_keyword_section_input.parquet"
 )
-OUTPUT_DIR = SCRIPT_DIR / "psych_history_classifier_output"
+OUTPUT_DIR = Path(
+    os.environ.get(
+        "PSYCH_HISTORY_OUTPUT_DIR",
+        str(SCRIPT_DIR / "psych_history_classifier_output"),
+    )
+)
 
 # Model/backend settings
 BACKEND = os.environ.get("PSYCH_HISTORY_BACKEND", "ollama").lower()
@@ -50,6 +55,7 @@ REQUEST_TIMEOUT_SECONDS = int(os.environ.get("PSYCH_HISTORY_REQUEST_TIMEOUT_SECO
 MAX_NEW_TOKENS = int(os.environ.get("PSYCH_HISTORY_MAX_NEW_TOKENS", "384"))
 CHUNK_WORDS = int(os.environ.get("PSYCH_HISTORY_CHUNK_WORDS", "600"))
 CHUNK_OVERLAP_WORDS = int(os.environ.get("PSYCH_HISTORY_CHUNK_OVERLAP_WORDS", "75"))
+BATCH_SIZE = int(os.environ.get("PSYCH_HISTORY_BATCH_SIZE", "1"))
 SLEEP_BETWEEN_REQUESTS_SECONDS = 0.1
 
 # Pilot limit. Set to None to process every admission in the input table.
@@ -322,13 +328,25 @@ def load_transformers_model() -> tuple[Any, Any]:
 
 def generate_transformers_response(messages: list[dict[str, str]]) -> str:
     """Generate one JSON response with a local Hugging Face model."""
+    return generate_transformers_responses([messages])[0]
+
+
+def generate_transformers_responses(messages_batch: list[list[dict[str, str]]]) -> list[str]:
+    """Generate JSON responses for a batch of prompts with a Hugging Face model."""
     model, tokenizer = load_transformers_model()
-    prompt = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True,
-    )
-    inputs = tokenizer([prompt], return_tensors="pt")
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
+
+    prompts = [
+        tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+        for messages in messages_batch
+    ]
+    inputs = tokenizer(prompts, return_tensors="pt", padding=True)
     model_device = next(model.parameters()).device
     inputs = {
         key: value.to(model_device)
@@ -340,8 +358,11 @@ def generate_transformers_response(messages: list[dict[str, str]]) -> str:
         do_sample=False,
         pad_token_id=tokenizer.eos_token_id,
     )
-    generated_ids = output_ids[0][inputs["input_ids"].shape[-1] :]
-    return tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+    input_width = inputs["input_ids"].shape[-1]
+    return [
+        tokenizer.decode(output_ids[index][input_width:], skip_special_tokens=True).strip()
+        for index in range(len(messages_batch))
+    ]
 
 
 def generate_response(messages: list[dict[str, str]]) -> str:
@@ -363,6 +384,13 @@ def generate_response(messages: list[dict[str, str]]) -> str:
     response = call_ollama(payload)
     message = response.get("message", {})
     return str(message.get("content", "")).strip()
+
+
+def generate_responses(messages_batch: list[list[dict[str, str]]]) -> list[str]:
+    """Generate JSON responses for one or more prompts."""
+    if BACKEND == "transformers" and len(messages_batch) > 1:
+        return generate_transformers_responses(messages_batch)
+    return [generate_response(messages) for messages in messages_batch]
 
 
 def parse_json_response(response_text: str) -> dict[str, Any]:
@@ -439,46 +467,81 @@ def combine_chunk_results(chunk_results: list[dict[str, Any]]) -> dict[str, Any]
     }
 
 
+def effective_model_name() -> str:
+    """Return the model identifier relevant to the active backend."""
+    return HF_MODEL_ID if BACKEND == "transformers" else MODEL_NAME
+
+
 def classify_sections(
     section_rows: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Run the local model over section chunks and return chunk/section labels."""
-    output_rows = []
     chunk_output_rows = []
     total = len(section_rows)
     section_start_time = time.monotonic()
-    total_chunks = int(
-        section_rows["section_text"].map(lambda text: len(split_text_into_chunks(str(text)))).sum()
-    )
-    completed_chunks = 0
+    chunk_tasks = []
+    section_records: dict[int, dict[str, Any]] = {}
+    chunk_results_by_row_id: dict[int, list[dict[str, Any]]] = {}
 
-    for index, row in section_rows.iterrows():
-        if index == 0 or (index + 1) % 10 == 0 or (index + 1) == total:
-            completed_sections = index
-            elapsed = time.monotonic() - section_start_time
-            section_rate = 60.0 * completed_sections / elapsed if elapsed > 0 else 0.0
+    for _, row in section_rows.iterrows():
+        row_id = int(row["classifier_row_id"])
+        row_dict = row.to_dict()
+        chunks = split_text_into_chunks(row["section_text"])
+        section_records[row_id] = {
+            "row": row_dict,
+            "n_chunks": len(chunks),
+        }
+        chunk_results_by_row_id[row_id] = []
+        for chunk_index, chunk_text in enumerate(chunks):
+            chunk_tasks.append(
+                {
+                    "row_id": row_id,
+                    "row": row_dict,
+                    "chunk_index": chunk_index,
+                    "n_chunks": len(chunks),
+                    "chunk_text": chunk_text,
+                    "messages": build_messages(row, chunk_text, chunk_index, len(chunks)),
+                }
+            )
+
+    total_chunks = len(chunk_tasks)
+    completed_chunks = 0
+    batch_size = max(1, BATCH_SIZE if BACKEND == "transformers" else 1)
+
+    for batch_start in range(0, total_chunks, batch_size):
+        batch_tasks = chunk_tasks[batch_start : batch_start + batch_size]
+        completed_sections = sum(
+            1
+            for row_id, results in chunk_results_by_row_id.items()
+            if len(results) == section_records[row_id]["n_chunks"]
+        )
+        elapsed = time.monotonic() - section_start_time
+        section_rate = 60.0 * completed_sections / elapsed if elapsed > 0 else 0.0
+        if batch_start == 0 or completed_chunks % 10 == 0 or completed_chunks + len(batch_tasks) >= total_chunks:
             print(
-                f"Classifying section {index + 1}/{total} | "
+                f"Classifying chunks {completed_chunks + 1}-"
+                f"{completed_chunks + len(batch_tasks)}/{total_chunks} | "
+                f"sections {completed_sections}/{total} | "
                 f"elapsed {format_duration(elapsed)} | "
                 f"rate {section_rate:.2f} sections/min | "
                 f"ETA {estimate_remaining(elapsed, completed_sections, total)} | "
-                f"chunks {completed_chunks}/{total_chunks}",
+                f"batch_size {batch_size}",
                 flush=True,
             )
 
-        chunks = split_text_into_chunks(row["section_text"])
-        chunk_results = []
-        for chunk_index, chunk_text in enumerate(chunks):
+        for task in batch_tasks:
             print(
-                f"  chunk {chunk_index + 1}/{len(chunks)} "
-                f"for {row['section_name']}",
+                f"  chunk {task['chunk_index'] + 1}/{task['n_chunks']} "
+                f"for {task['row']['section_name']}",
                 flush=True,
             )
-            messages = build_messages(row, chunk_text, chunk_index, len(chunks))
-            response_text = generate_response(messages)
+
+        response_texts = generate_responses([task["messages"] for task in batch_tasks])
+        for task, response_text in zip(batch_tasks, response_texts):
             raw_result = parse_json_response(response_text)
             normalized = normalize_model_result(raw_result)
-            chunk_results.append(normalized)
+            chunk_results_by_row_id[task["row_id"]].append(normalized)
+            row = task["row"]
             chunk_output_rows.append(
                 {
                     "classifier_row_id": int(row["classifier_row_id"]),
@@ -491,16 +554,21 @@ def classify_sections(
                     "n_psych_keyword_hits": row.get("n_psych_keyword_hits", None),
                     "psych_keyword_groups": row.get("psych_keyword_groups", ""),
                     "matched_terms": row.get("matched_terms", ""),
-                    "chunk_index": chunk_index,
-                    "n_chunks": len(chunks),
-                    "chunk_word_count": len(chunk_text.split()),
+                    "chunk_index": task["chunk_index"],
+                    "n_chunks": task["n_chunks"],
+                    "chunk_word_count": len(task["chunk_text"].split()),
                     **normalized,
-                    "model_name": MODEL_NAME,
+                    "model_name": effective_model_name(),
                 }
             )
+        if BACKEND != "transformers":
             time.sleep(SLEEP_BETWEEN_REQUESTS_SECONDS)
-            completed_chunks += 1
+        completed_chunks += len(batch_tasks)
 
+    output_rows = []
+    for row_id in section_rows["classifier_row_id"].astype(int):
+        row = section_records[int(row_id)]["row"]
+        chunk_results = chunk_results_by_row_id[int(row_id)]
         section_result = combine_chunk_results(chunk_results)
 
         output_row = {
@@ -517,7 +585,7 @@ def classify_sections(
             "psych_keyword_groups": row.get("psych_keyword_groups", ""),
             "matched_terms": row.get("matched_terms", ""),
             **section_result,
-            "model_name": MODEL_NAME,
+            "model_name": effective_model_name(),
         }
         output_rows.append(output_row)
 
@@ -619,6 +687,7 @@ def main() -> None:
     else:
         print(f"Using local Ollama model: {MODEL_NAME}")
     print(f"Chunking sections at {CHUNK_WORDS} words with {CHUNK_OVERLAP_WORDS} word overlap")
+    print(f"Transformers batch size: {BATCH_SIZE}")
     print(f"Run started at: {run_started_at}")
     check_model_available()
     results, chunk_results = classify_sections(section_rows)
@@ -637,6 +706,7 @@ def main() -> None:
         "max_notes": MAX_NOTES,
         "chunk_words": CHUNK_WORDS,
         "chunk_overlap_words": CHUNK_OVERLAP_WORDS,
+        "batch_size": BATCH_SIZE,
         "n_section_rows": len(results),
         "n_chunk_rows": len(chunk_results),
         "n_admissions": int(results[["cohort", "subject_id", "hadm_id"]].drop_duplicates().shape[0]),
