@@ -35,7 +35,7 @@ python-code/01_admission_notes/02_chief_complaint/01_preprocessing/analysis_outp
 python-code/01_admission_notes/02_chief_complaint/01_preprocessing/chief_complaint_final/
 python-code/01_admission_notes/02_chief_complaint/01_preprocessing/analysis_output_chief_complaint_final/
 python-code/01_admission_notes/02_chief_complaint/02_embedding/chief_complaint_embeddings/
-python-code/03_clustering/chief_complaint_cluster_qc_output/
+python-code/03_deferred_clustering/chief_complaint_cluster_qc_output/
 python-code/02_cohort_matching/01_elixhauser/elixhauser_scores_output/
 python-code/02_cohort_matching/02_matching_variables/matching_variable_tables_output/
 python-code/02_cohort_matching/matched_cohort_output/
