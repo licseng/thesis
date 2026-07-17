@@ -79,6 +79,7 @@ REQUIRED_COLUMNS = {
     "cosine_similarity",
     "embedding_distance",
     "abs_elixhauser_difference",
+    "abs_age_difference",
     "match_type",
     "candidate_pool_size",
 }
@@ -441,7 +442,12 @@ def build_chief_complaint_bigram_counts(matched_pairs: pd.DataFrame) -> pd.DataF
             lowercase=True,
             strip_accents="unicode",
         )
-        matrix = vectorizer.fit_transform(non_empty)
+        try:
+            matrix = vectorizer.fit_transform(non_empty)
+        except ValueError as error:
+            if "empty vocabulary" not in str(error):
+                raise
+            continue
         terms = vectorizer.get_feature_names_out()
         occurrences = matrix.sum(axis=0).A1
         admission_counts = (matrix > 0).sum(axis=0).A1
