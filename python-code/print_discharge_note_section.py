@@ -34,7 +34,7 @@ import pandas as pd
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 FULL_NOTE_SECTION_DIR = (
-    SCRIPT_DIR.parent
+    SCRIPT_DIR
     / "01_discharge_note_preprocessing"
     / "01_discharge_note_parsing"
     / "full_discharge_note_sections"
