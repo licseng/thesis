@@ -51,6 +51,7 @@ OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
 MODEL_NAME = os.environ.get("PSYCH_HISTORY_MODEL_NAME", "qwen3:4b")
 HF_MODEL_ID = os.environ.get("PSYCH_HISTORY_HF_MODEL_ID", "Qwen/Qwen3-4B")
 HF_DEVICE_MAP = os.environ.get("PSYCH_HISTORY_HF_DEVICE_MAP", "auto")
+HF_TORCH_DTYPE = os.environ.get("PSYCH_HISTORY_HF_TORCH_DTYPE", "auto").lower()
 REQUEST_TIMEOUT_SECONDS = int(os.environ.get("PSYCH_HISTORY_REQUEST_TIMEOUT_SECONDS", "180"))
 MAX_NEW_TOKENS = int(os.environ.get("PSYCH_HISTORY_MAX_NEW_TOKENS", "384"))
 CHUNK_WORDS = int(os.environ.get("PSYCH_HISTORY_CHUNK_WORDS", "600"))
@@ -66,6 +67,7 @@ if MAX_NOTES_OVERRIDE:
 
 _TRANSFORMERS_MODEL: Any | None = None
 _TRANSFORMERS_TOKENIZER: Any | None = None
+_TRANSFORMERS_DIAGNOSTICS_PRINTED = False
 
 
 def format_duration(seconds: float) -> str:
@@ -151,15 +153,11 @@ for the patient.
 
 Use two separate flags:
 1. psychosis_related_context:
-   Use "yes" if the section mentions psychosis-related context, such as schizophrenia,
-   schizoaffective disorder, psychotic disorder, hallucinations, delusions, paranoia,
-   or antipsychotic treatment clearly related to psychosis.
+   Use "yes" if the section mentions psychosis-related context. Psychosis related mediaction also counts.
+    Schizophrenia sometimes abbreviated as 'sz'.
 2. other_psychiatric_context:
-   Use "yes" if the section mentions other psychiatric context that is not psychosis-related,
-   such as anxiety, depression, bipolar disorder without psychotic features, PTSD,
-   personality disorder, suicidal ideation, psychiatric admission, psychiatry consult,
-   substance use disorder, withdrawal, behavioral framing, or psychiatric medication
-   not clearly related to psychosis.
+   Use "yes" if the section mentions other psychiatric context that is not psychosis-related. 
+   Medications for other psychiatric disorders also count.
 
 Do NOT count as positive:
 - negated history or symptoms only, e.g. "no history of psychosis", "denies hallucinations"
@@ -178,7 +176,7 @@ Keep reason brief, one sentence maximum.
 
   "psychosis_related_context_label": "positive|negative",
   "other_psychiatric_context_label": "positive|negative",
-  "disorder_type": "schizophrenia|schizoaffective disorder|psychotic disorder|bipolar disorder with psychotic features|other psychiatric|substance use disorder|none|unclear",
+  "disorder_type": "schizophrenia|schizoaffective disorder|psychotic disorder|bipolar disorder with psychotic features|other psychiatric|none|unclear",
   "negated_only": true|false,
   "family_history_only": true|false,
   "patient_specific": true|false,
@@ -301,6 +299,84 @@ def call_ollama(payload: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError(f"Ollama request failed with HTTP {exc.code}: {body}") from exc
 
 
+def print_transformers_diagnostics(stage: str, model: Any | None = None) -> None:
+    """Print CUDA/model placement diagnostics for cluster speed debugging."""
+    global _TRANSFORMERS_DIAGNOSTICS_PRINTED
+    if stage == "after_model_load" and _TRANSFORMERS_DIAGNOSTICS_PRINTED:
+        return
+
+    try:
+        import torch
+    except ImportError:
+        print(f"[transformers diagnostics] {stage}: torch is not installed", flush=True)
+        return
+
+    cuda_available = torch.cuda.is_available()
+    print(f"[transformers diagnostics] {stage}: cuda_available={cuda_available}", flush=True)
+    if cuda_available:
+        device_count = torch.cuda.device_count()
+        print(f"[transformers diagnostics] cuda_device_count={device_count}", flush=True)
+        for device_index in range(device_count):
+            props = torch.cuda.get_device_properties(device_index)
+            allocated_gb = torch.cuda.memory_allocated(device_index) / 1024**3
+            reserved_gb = torch.cuda.memory_reserved(device_index) / 1024**3
+            total_gb = props.total_memory / 1024**3
+            print(
+                "[transformers diagnostics] "
+                f"cuda:{device_index} name={props.name} "
+                f"total_memory_gb={total_gb:.2f} "
+                f"allocated_gb={allocated_gb:.2f} "
+                f"reserved_gb={reserved_gb:.2f}",
+                flush=True,
+            )
+
+    if model is not None:
+        first_parameter = next(model.parameters(), None)
+        if first_parameter is not None:
+            print(
+                "[transformers diagnostics] "
+                f"first_parameter_device={first_parameter.device} "
+                f"first_parameter_dtype={first_parameter.dtype}",
+                flush=True,
+            )
+        device_map = getattr(model, "hf_device_map", None)
+        if device_map is not None:
+            devices = sorted({str(device) for device in device_map.values()})
+            print(f"[transformers diagnostics] hf_device_map_devices={devices}", flush=True)
+
+    if stage == "after_model_load":
+        _TRANSFORMERS_DIAGNOSTICS_PRINTED = True
+
+
+def resolve_hf_torch_dtype() -> Any:
+    """Resolve the configured Hugging Face torch dtype."""
+    if HF_TORCH_DTYPE == "auto":
+        return "auto"
+
+    try:
+        import torch
+    except ImportError as exc:
+        raise RuntimeError(
+            "A non-auto PSYCH_HISTORY_HF_TORCH_DTYPE requires PyTorch."
+        ) from exc
+
+    dtype_by_name = {
+        "float16": torch.float16,
+        "fp16": torch.float16,
+        "bfloat16": torch.bfloat16,
+        "bf16": torch.bfloat16,
+        "float32": torch.float32,
+        "fp32": torch.float32,
+    }
+    if HF_TORCH_DTYPE not in dtype_by_name:
+        allowed = ", ".join(["auto", *sorted(dtype_by_name)])
+        raise ValueError(
+            f"Invalid PSYCH_HISTORY_HF_TORCH_DTYPE={HF_TORCH_DTYPE!r}. "
+            f"Allowed values: {allowed}"
+        )
+    return dtype_by_name[HF_TORCH_DTYPE]
+
+
 def load_transformers_model() -> tuple[Any, Any]:
     """Lazy-load the local Hugging Face model for GPU-cluster runs."""
     global _TRANSFORMERS_MODEL, _TRANSFORMERS_TOKENIZER
@@ -316,13 +392,16 @@ def load_transformers_model() -> tuple[Any, Any]:
         ) from exc
 
     print(f"Loading Hugging Face model: {HF_MODEL_ID}", flush=True)
+    print(f"Using Hugging Face torch dtype: {HF_TORCH_DTYPE}", flush=True)
+    print_transformers_diagnostics("before_model_load")
     _TRANSFORMERS_TOKENIZER = AutoTokenizer.from_pretrained(HF_MODEL_ID)
     _TRANSFORMERS_MODEL = AutoModelForCausalLM.from_pretrained(
         HF_MODEL_ID,
         device_map=HF_DEVICE_MAP,
-        torch_dtype="auto",
+        torch_dtype=resolve_hf_torch_dtype(),
     )
     _TRANSFORMERS_MODEL.eval()
+    print_transformers_diagnostics("after_model_load", _TRANSFORMERS_MODEL)
     return _TRANSFORMERS_MODEL, _TRANSFORMERS_TOKENIZER
 
 
@@ -701,6 +780,7 @@ def main() -> None:
         "model_name": MODEL_NAME,
         "hf_model_id": HF_MODEL_ID,
         "hf_device_map": HF_DEVICE_MAP,
+        "hf_torch_dtype": HF_TORCH_DTYPE,
         "input_path": str(INPUT_PATH),
         "output_dir": str(OUTPUT_DIR),
         "max_notes": MAX_NOTES,
