@@ -1,9 +1,9 @@
-"""Classify psychotic-disorder history mentions in parsed note sections.
+"""Classify psychiatric-context mentions in parsed note sections.
 
 This is WP2 of the thesis. The ICD cohort definition already establishes prior
 psychotic disorder history for the exposed group. This script asks a different
-question: whether that history is surfaced/documented in the current index
-admission discharge note.
+question: whether psychiatric context is surfaced/documented
+in the current index admission discharge note.
 
 The classifier can run with two backends:
     - local Ollama, for laptop runs
@@ -100,41 +100,23 @@ METADATA_COLUMNS = [
 OLLAMA_RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
-        "psychosis_related_context_label": {
+        "psychiatric_context_label": {
             "type": "string",
             "enum": ["positive", "negative"],
         },
-        "other_psychiatric_context_label": {
-            "type": "string",
-            "enum": ["positive", "negative"],
-        },
-        "disorder_type": {
-            "type": "string",
-            "enum": [
-                "schizophrenia",
-                "schizoaffective disorder",
-                "psychotic disorder",
-                "bipolar disorder with psychotic features",
-                "other psychiatric",
-                "none",
-                "unclear",
-            ],
-        },
+        "diagnosis": {"type": "string", "maxLength": 240},
         "medication_only": {"type": "boolean"},
         "negated_only": {"type": "boolean"},
         "family_history_only": {"type": "boolean"},
-        "patient_specific": {"type": "boolean"},
         "evidence_span": {"type": "string", "maxLength": 160},
         "reason": {"type": "string", "maxLength": 240},
     },
     "required": [
-        "psychosis_related_context_label",
-        "other_psychiatric_context_label",
-        "disorder_type",
+        "psychiatric_context_label",
+        "diagnosis",
         "medication_only",
         "negated_only",
         "family_history_only",
-        "patient_specific",
         "evidence_span",
         "reason",
     ],
@@ -143,48 +125,41 @@ OLLAMA_RESPONSE_SCHEMA = {
 SYSTEM_PROMPT = """You are a clinical text classification assistant.
 
 Context:
-The provided discharge-note section has already been selected by keyword matching
-because it contains one or more psychiatry-related terms. Keyword matches can be
+The provided hospital discharge-note section has already been selected by keyword matching
+because it contains one or more psychiatry-related terms. But keyword matches can be
 false positives. 
 
 Task:
-Your role is to decide whether the section truly contains patient-specific psychiatric context. 
+Your role is to decide whether the section truly contains psychiatric context. 
 Context includes either one of the following:
 - diagnosis
 - symptoms
 - medication
-
-
-Use two separate flags:
-1. psychosis_related_context:
-   Use "positive" if the section mentions psychosis-related context.
-    Schizophrenia sometimes abbreviated as 'sz'.
-2. other_psychiatric_context:
-   Use "positive" if the section mentions other psychiatric context that is not psychosis-related. 
-   Medications for other psychiatric disorders also count.
-
-Do NOT count as positive:
-- negated history or symptoms only, e.g. "no history of psychosis", "denies hallucinations"
-- family history only
-- psychiatric words referring only to someone other than the patient
-- keyword matches that are not clinically meaningful psychiatric context
+, with which the label should be positive.
 
 Use label values:
 - positive
 - negative
 
+Do NOT count as positive:
+- negated psychiatric history or negated psychiatric symptoms, e.g. "denies hallucinations", negation of other physical symptoms is not relevant
+- family psychiatric history only
+- psychiatric words referring only to someone other than the patient
+- keyword matches that are not clinically meaningful psychiatric context
+
 Return exactly this JSON schema without including any extra fields or comments.
+If the note contains psychiatric diagnosis, please list them in the relevant section. 
+If only the psychiatric medication is mentioned, set medication_only to true. 
+If negated psychiatric context is mentioned, set negated_only to true.
+If only family history is mentioned, set family_history_only to true. 
 Keep evidence_span short, preferably 15 words or fewer. 
 Keep reason brief, one sentence maximum.
 {
-
-  "psychosis_related_context_label": "positive|negative",
-  "other_psychiatric_context_label": "positive|negative",
-  "disorder_type": "schizophrenia|schizoaffective disorder|psychotic disorder|bipolar disorder with psychotic features|other psychiatric|none|unclear",
+  "psychiatric_context_label": "positive|negative",
+  "diagnosis": "",
   "medication_only": true|false,
   "negated_only": true|false,
   "family_history_only": true|false,
-  "patient_specific": true|false,
   "evidence_span": "",
   "reason": ""
 }
@@ -495,42 +470,17 @@ def parse_json_response(response_text: str) -> dict[str, Any]:
 
 def normalize_model_result(result: dict[str, Any]) -> dict[str, Any]:
     """Normalize optional or malformed model fields into stable output columns."""
-    psychosis_label = str(result.get("psychosis_related_context_label", "")).strip().lower()
-    other_label = str(result.get("other_psychiatric_context_label", "")).strip().lower()
-    if psychosis_label not in {"positive", "negative"}:
-        psychosis_label = "negative"
-    if other_label not in {"positive", "negative"}:
-        other_label = "negative"
-
-    label = (
-        "positive"
-        if psychosis_label == "positive" or other_label == "positive"
-        else "negative"
-    )
-
-    disorder_type = str(result.get("disorder_type", "unclear")).strip().lower()
-    if disorder_type == "substance use disorder":
-        disorder_type = "other psychiatric"
-    if disorder_type not in {
-        "schizophrenia",
-        "schizoaffective disorder",
-        "psychotic disorder",
-        "bipolar disorder with psychotic features",
-        "other psychiatric",
-        "none",
-        "unclear",
-    }:
-        disorder_type = "unclear"
+    psychiatric_label = str(result.get("psychiatric_context_label", "")).strip().lower()
+    if psychiatric_label not in {"positive", "negative"}:
+        psychiatric_label = "negative"
 
     return {
-        "psychosis_related_context_label": psychosis_label,
-        "other_psychiatric_context_label": other_label,
-        "label": label,
-        "disorder_type": disorder_type,
+        "psychiatric_context_label": psychiatric_label,
+        "label": psychiatric_label,
+        "diagnosis": str(result.get("diagnosis", "")).strip(),
         "medication_only": bool(result.get("medication_only", False)),
         "negated_only": bool(result.get("negated_only", False)),
         "family_history_only": bool(result.get("family_history_only", False)),
-        "patient_specific": bool(result.get("patient_specific", True)),
         "evidence_span": str(result.get("evidence_span", "")).strip(),
         "reason": str(result.get("reason", "")).strip(),
     }
@@ -539,8 +489,6 @@ def normalize_model_result(result: dict[str, Any]) -> dict[str, Any]:
 def combine_chunk_results(chunk_results: list[dict[str, Any]]) -> dict[str, Any]:
     """Collapse chunk-level labels into one section-level label."""
     labels = [result["label"] for result in chunk_results]
-    psychosis_labels = [result["psychosis_related_context_label"] for result in chunk_results]
-    other_labels = [result["other_psychiatric_context_label"] for result in chunk_results]
     positive_chunk_results = [
         result for result in chunk_results if result["label"] == "positive"
     ]
@@ -552,15 +500,21 @@ def combine_chunk_results(chunk_results: list[dict[str, Any]]) -> dict[str, Any]
     chosen_result = next(
         result for result in chunk_results if result["label"] == chosen_label
     )
+    positive_diagnoses = sorted(
+        {
+            diagnosis.strip()
+            for result in positive_chunk_results
+            for diagnosis in str(result.get("diagnosis", "")).split("|")
+            if diagnosis.strip()
+        }
+    )
     return {
         **chosen_result,
-        "psychosis_related_context_label": (
-            "positive" if "positive" in psychosis_labels else "negative"
-        ),
-        "other_psychiatric_context_label": (
-            "positive" if "positive" in other_labels else "negative"
-        ),
+        "psychiatric_context_label": chosen_label,
         "label": chosen_label,
+        "diagnosis": " | ".join(positive_diagnoses)
+        if positive_diagnoses
+        else str(chosen_result.get("diagnosis", "")).strip(),
         "medication_only": (
             all(result["medication_only"] for result in positive_chunk_results)
             if positive_chunk_results
@@ -569,8 +523,6 @@ def combine_chunk_results(chunk_results: list[dict[str, Any]]) -> dict[str, Any]
         "n_chunks": len(chunk_results),
         "n_positive_chunks": labels.count("positive"),
         "n_negative_chunks": labels.count("negative"),
-        "n_psychosis_positive_chunks": psychosis_labels.count("positive"),
-        "n_other_psychiatric_positive_chunks": other_labels.count("positive"),
     }
 
 
@@ -735,8 +687,7 @@ def write_outputs(
             [
                 "cohort",
                 "section_name",
-                "psychosis_related_context_label",
-                "other_psychiatric_context_label",
+                "psychiatric_context_label",
                 "label",
             ],
             as_index=False,
@@ -747,8 +698,7 @@ def write_outputs(
             [
                 "cohort",
                 "section_name",
-                "psychosis_related_context_label",
-                "other_psychiatric_context_label",
+                "psychiatric_context_label",
                 "label",
             ]
         )
@@ -758,20 +708,12 @@ def write_outputs(
     admission_summary = (
         results.assign(
             is_positive=results["label"].eq("positive"),
-            is_psychosis_positive=results["psychosis_related_context_label"].eq("positive"),
-            is_other_psychiatric_positive=results[
-                "other_psychiatric_context_label"
-            ].eq("positive"),
         )
         .groupby(["cohort", "subject_id", "hadm_id"], as_index=False)
         .agg(
             n_sections_classified=("section_name", "size"),
             n_positive_sections=("is_positive", "sum"),
-            n_psychosis_positive_sections=("is_psychosis_positive", "sum"),
-            n_other_psychiatric_positive_sections=("is_other_psychiatric_positive", "sum"),
             any_positive=("is_positive", "any"),
-            any_psychosis_positive=("is_psychosis_positive", "any"),
-            any_other_psychiatric_positive=("is_other_psychiatric_positive", "any"),
         )
     )
     admission_summary.to_csv(OUTPUT_DIR / "psych_history_admission_summary.csv", index=False)
