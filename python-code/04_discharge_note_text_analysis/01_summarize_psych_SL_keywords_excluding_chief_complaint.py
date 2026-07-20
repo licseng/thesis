@@ -4,8 +4,8 @@ This script scans the matched full-discharge-note section outputs and counts
 keyword hits across the whole parsed note while excluding the `chief_complaint`
 section. It reuses the keyword lists from:
 
-    01_explore_psych_keywords_by_section.py
-    01_explore_SL_keywords_by_section.py
+    02_explore_psych_keywords_by_section.py
+    02_explore_SL_keywords_by_section.py
 
 The output is intentionally aggregate-only. It does not export raw note text or
 snippets; use the section-level exploration scripts for local manual review.
@@ -49,6 +49,8 @@ FULL_NOTE_FILES = [
 ]
 
 
+# Import keyword/parser scripts as modules so this summary uses the same local
+# section definitions and keyword dictionaries as the upstream analyses.
 def load_module(path: Path, module_name: str) -> Any:
     """Load a Python module from a file path."""
     spec = importlib.util.spec_from_file_location(module_name, path)
@@ -59,6 +61,7 @@ def load_module(path: Path, module_name: str) -> Any:
     return module
 
 
+# Compile the regex strings once before scanning all notes.
 def compile_keyword_patterns(
     keyword_patterns: dict[str, list[str]],
 ) -> dict[str, list[re.Pattern[str]]]:
@@ -69,6 +72,7 @@ def compile_keyword_patterns(
     }
 
 
+# Read the parsed full-note section tables for the matched exposed/control notes.
 def load_full_note_outputs(section_columns: list[str]) -> pd.DataFrame:
     """Load matched full-note section outputs for both cohorts."""
     frames = []
@@ -85,6 +89,7 @@ def load_full_note_outputs(section_columns: list[str]) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
+# Build the keyword-search input for one note, deliberately omitting chief complaint.
 def combined_note_text(row: pd.Series, section_columns: list[str]) -> str:
     """Concatenate all non-chief-complaint parsed sections for one note."""
     parts = []
@@ -97,6 +102,7 @@ def combined_note_text(row: pd.Series, section_columns: list[str]) -> str:
     return "\n".join(parts)
 
 
+# Apply all compiled regexes to one note and return both hit counts and document-level matches.
 def find_keyword_hits(
     text: str,
     compiled_patterns: dict[str, list[re.Pattern[str]]],
@@ -124,6 +130,7 @@ def find_keyword_hits(
     return total_hits, matched_groups, term_counts, group_counts
 
 
+# Scan every note for one keyword family, producing note-level coverage plus aggregate term/group counts.
 def scan_keyword_family(
     df: pd.DataFrame,
     section_columns: list[str],
@@ -180,7 +187,11 @@ def scan_keyword_family(
     note_df = pd.DataFrame(note_rows)
 
     for cohort, term_counts in family_term_counts_by_cohort.items():
-        n_notes = len(note_df) if cohort == "overall" else int(note_df["cohort"].eq(cohort).sum())
+        n_notes = (
+            len(note_df)
+            if cohort == "overall"
+            else int(note_df["cohort"].eq(cohort).sum())
+        )
         for term, n_hits in term_counts.most_common():
             n_notes_with_term = family_term_doc_counts_by_cohort[cohort][term]
             term_rows.append(
@@ -195,7 +206,11 @@ def scan_keyword_family(
             )
 
     for cohort, group_counts in group_counts_by_cohort.items():
-        n_notes = len(note_df) if cohort == "overall" else int(note_df["cohort"].eq(cohort).sum())
+        n_notes = (
+            len(note_df)
+            if cohort == "overall"
+            else int(note_df["cohort"].eq(cohort).sum())
+        )
         for keyword_group, n_hits in group_counts.most_common():
             n_notes_with_group = group_doc_counts_by_cohort[cohort][keyword_group]
             group_rows.append(
@@ -212,6 +227,7 @@ def scan_keyword_family(
     return note_df, pd.DataFrame(term_rows), pd.DataFrame(group_rows)
 
 
+# Collapse note-level hit rows into the headline family-by-cohort summary.
 def build_note_summary(note_hits: pd.DataFrame) -> pd.DataFrame:
     """Summarize keyword-hit coverage by family and cohort."""
     return (
@@ -233,6 +249,7 @@ def build_note_summary(note_hits: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+# Save only aggregate outputs; no raw note text or snippets are exported here.
 def write_outputs(
     note_summary: pd.DataFrame,
     top_terms: pd.DataFrame,
@@ -254,6 +271,7 @@ def write_outputs(
     )
 
 
+# Orchestrate parser/keyword imports, scanning, aggregation, and console summaries.
 def main() -> None:
     """Run aggregate psych and SL keyword summaries outside chief complaint."""
     parser = load_module(PARSER_PATH, "full_note_parser")
