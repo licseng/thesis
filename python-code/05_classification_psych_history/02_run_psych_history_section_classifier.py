@@ -49,7 +49,7 @@ OUTPUT_DIR = Path(
 BACKEND = os.environ.get("PSYCH_HISTORY_BACKEND", "ollama").lower()
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
 MODEL_NAME = os.environ.get("PSYCH_HISTORY_MODEL_NAME", "qwen3:4b")
-HF_MODEL_ID = os.environ.get("PSYCH_HISTORY_HF_MODEL_ID", "Qwen/Qwen3-4B")
+HF_MODEL_ID = os.environ.get("PSYCH_HISTORY_HF_MODEL_ID", "Qwen/Qwen3-8B")
 HF_DEVICE_MAP = os.environ.get("PSYCH_HISTORY_HF_DEVICE_MAP", "auto")
 HF_TORCH_DTYPE = os.environ.get("PSYCH_HISTORY_HF_TORCH_DTYPE", "auto").lower()
 REQUEST_TIMEOUT_SECONDS = int(os.environ.get("PSYCH_HISTORY_REQUEST_TIMEOUT_SECONDS", "180"))
@@ -104,19 +104,24 @@ OLLAMA_RESPONSE_SCHEMA = {
             "type": "string",
             "enum": ["positive", "negative"],
         },
-        "diagnosis": {"type": "string", "maxLength": 240},
-        "medication_only": {"type": "boolean"},
-        "negated_only": {"type": "boolean"},
-        "family_history_only": {"type": "boolean"},
+        "psychiatric_mention_type": {
+            "type": "string",
+            "enum": [
+                "current_context",
+                "background_only",
+                "medication_only",
+                "diagnosis_list_only",
+                "negated_only",
+                "family_history_only",
+                "none",
+            ],
+        },
         "evidence_span": {"type": "string", "maxLength": 160},
         "reason": {"type": "string", "maxLength": 240},
     },
     "required": [
         "psychiatric_context_label",
-        "diagnosis",
-        "medication_only",
-        "negated_only",
-        "family_history_only",
+        "psychiatric_mention_type",
         "evidence_span",
         "reason",
     ],
@@ -130,36 +135,42 @@ because it contains one or more psychiatry-related terms. But keyword matches ca
 false positives. 
 
 Task:
-Your role is to decide whether the section truly contains psychiatric context. 
-Context includes either one of the following:
-- diagnosis
-- symptoms
-- medication
-, with which the label should be positive.
+Your role is to decide whether psychiatric context is connected explicitly or implicitly to the patient's
+current admission, symptoms, hospital course, clinical reasoning, treatment
+decisions, workup, consults, disposition, or care barriers.
+
+Use "psychiatric_context_label": "positive" when the section does more than
+list a psychiatric diagnosis, history, or medication. 
+It can be either unnecessary detailed description of psychiatric context or 
+the psychiatric mention is mixed into the current clinical context in a meaningful way.
 
 Use label values:
 - positive
 - negative
 
 Do NOT count as positive:
+- standalone psychiatric diagnosis/history only, e.g. a problem list or past
+  medical history mention with no connection to current care
+- standalone psychiatric medication mention only, e.g. home medication listed
+  with no current care decision or clinical reasoning
 - negated psychiatric history or negated psychiatric symptoms, e.g. "denies hallucinations", negation of other physical symptoms is not relevant
 - family psychiatric history only
 - psychiatric words referring only to someone other than the patient
-- keyword matches that are not clinically meaningful psychiatric context
 
 Return exactly this JSON schema without including any extra fields or comments.
-If the note contains psychiatric diagnosis, please list them in the relevant section. 
-If only the psychiatric medication is mentioned, set medication_only to true. 
-If negated psychiatric context is mentioned, set negated_only to true.
-If only family history is mentioned, set family_history_only to true. 
+Set psychiatric_mention_type to one of:
+- current_context: connected to current admission/care; this should be positive
+- background_only: history/PMH/problem-list mention only
+- medication_only: psychiatric medication is mentioned without current-context reasoning
+- diagnosis_list_only: diagnosis is listed without explanation or current-context reasoning
+- negated_only: only negated psychiatric history/symptoms
+- family_history_only: only family psychiatric history
+- none: no clinically meaningful psychiatric context
 Keep evidence_span short, preferably 15 words or fewer. 
 Keep reason brief, one sentence maximum.
 {
   "psychiatric_context_label": "positive|negative",
-  "diagnosis": "",
-  "medication_only": true|false,
-  "negated_only": true|false,
-  "family_history_only": true|false,
+  "psychiatric_mention_type": "current_context|background_only|medication_only|diagnosis_list_only|negated_only|family_history_only|none",
   "evidence_span": "",
   "reason": ""
 }
@@ -473,14 +484,22 @@ def normalize_model_result(result: dict[str, Any]) -> dict[str, Any]:
     psychiatric_label = str(result.get("psychiatric_context_label", "")).strip().lower()
     if psychiatric_label not in {"positive", "negative"}:
         psychiatric_label = "negative"
+    mention_type = str(result.get("psychiatric_mention_type", "")).strip().lower()
+    allowed_mention_types = {
+        "current_context",
+        "background_only",
+        "medication_only",
+        "diagnosis_list_only",
+        "negated_only",
+        "family_history_only",
+        "none",
+    }
+    if mention_type not in allowed_mention_types:
+        mention_type = "current_context" if psychiatric_label == "positive" else "none"
 
     return {
         "psychiatric_context_label": psychiatric_label,
-        "label": psychiatric_label,
-        "diagnosis": str(result.get("diagnosis", "")).strip(),
-        "medication_only": bool(result.get("medication_only", False)),
-        "negated_only": bool(result.get("negated_only", False)),
-        "family_history_only": bool(result.get("family_history_only", False)),
+        "psychiatric_mention_type": mention_type,
         "evidence_span": str(result.get("evidence_span", "")).strip(),
         "reason": str(result.get("reason", "")).strip(),
     }
@@ -488,38 +507,20 @@ def normalize_model_result(result: dict[str, Any]) -> dict[str, Any]:
 
 def combine_chunk_results(chunk_results: list[dict[str, Any]]) -> dict[str, Any]:
     """Collapse chunk-level labels into one section-level label."""
-    labels = [result["label"] for result in chunk_results]
-    positive_chunk_results = [
-        result for result in chunk_results if result["label"] == "positive"
-    ]
+    labels = [result["psychiatric_context_label"] for result in chunk_results]
     if "positive" in labels:
         chosen_label = "positive"
     else:
         chosen_label = "negative"
 
     chosen_result = next(
-        result for result in chunk_results if result["label"] == chosen_label
-    )
-    positive_diagnoses = sorted(
-        {
-            diagnosis.strip()
-            for result in positive_chunk_results
-            for diagnosis in str(result.get("diagnosis", "")).split("|")
-            if diagnosis.strip()
-        }
+        result
+        for result in chunk_results
+        if result["psychiatric_context_label"] == chosen_label
     )
     return {
         **chosen_result,
         "psychiatric_context_label": chosen_label,
-        "label": chosen_label,
-        "diagnosis": " | ".join(positive_diagnoses)
-        if positive_diagnoses
-        else str(chosen_result.get("diagnosis", "")).strip(),
-        "medication_only": (
-            all(result["medication_only"] for result in positive_chunk_results)
-            if positive_chunk_results
-            else False
-        ),
         "n_chunks": len(chunk_results),
         "n_positive_chunks": labels.count("positive"),
         "n_negative_chunks": labels.count("negative"),
@@ -688,7 +689,6 @@ def write_outputs(
                 "cohort",
                 "section_name",
                 "psychiatric_context_label",
-                "label",
             ],
             as_index=False,
         )
@@ -699,7 +699,6 @@ def write_outputs(
                 "cohort",
                 "section_name",
                 "psychiatric_context_label",
-                "label",
             ]
         )
     )
@@ -707,7 +706,7 @@ def write_outputs(
 
     admission_summary = (
         results.assign(
-            is_positive=results["label"].eq("positive"),
+            is_positive=results["psychiatric_context_label"].eq("positive"),
         )
         .groupby(["cohort", "subject_id", "hadm_id"], as_index=False)
         .agg(
