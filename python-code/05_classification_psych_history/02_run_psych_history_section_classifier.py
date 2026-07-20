@@ -116,11 +116,11 @@ OLLAMA_RESPONSE_SCHEMA = {
                 "psychotic disorder",
                 "bipolar disorder with psychotic features",
                 "other psychiatric",
-                "substance use disorder",
                 "none",
                 "unclear",
             ],
         },
+        "medication_only": {"type": "boolean"},
         "negated_only": {"type": "boolean"},
         "family_history_only": {"type": "boolean"},
         "patient_specific": {"type": "boolean"},
@@ -131,6 +131,7 @@ OLLAMA_RESPONSE_SCHEMA = {
         "psychosis_related_context_label",
         "other_psychiatric_context_label",
         "disorder_type",
+        "medication_only",
         "negated_only",
         "family_history_only",
         "patient_specific",
@@ -144,19 +145,22 @@ SYSTEM_PROMPT = """You are a clinical text classification assistant.
 Context:
 The provided discharge-note section has already been selected by keyword matching
 because it contains one or more psychiatry-related terms. Keyword matches can be
-false positives. Your role is to decide whether the section truly contains
-patient-specific psychiatric context.
+false positives. 
 
 Task:
-Classify whether the provided discharge-note section mentions psychiatric context
-for the patient.
+Your role is to decide whether the section truly contains patient-specific psychiatric context. 
+Context includes either one of the following:
+- diagnosis
+- symptoms
+- medication
+
 
 Use two separate flags:
 1. psychosis_related_context:
-   Use "yes" if the section mentions psychosis-related context. Psychosis related mediaction also counts.
+   Use "positive" if the section mentions psychosis-related context.
     Schizophrenia sometimes abbreviated as 'sz'.
 2. other_psychiatric_context:
-   Use "yes" if the section mentions other psychiatric context that is not psychosis-related. 
+   Use "positive" if the section mentions other psychiatric context that is not psychosis-related. 
    Medications for other psychiatric disorders also count.
 
 Do NOT count as positive:
@@ -177,6 +181,7 @@ Keep reason brief, one sentence maximum.
   "psychosis_related_context_label": "positive|negative",
   "other_psychiatric_context_label": "positive|negative",
   "disorder_type": "schizophrenia|schizoaffective disorder|psychotic disorder|bipolar disorder with psychotic features|other psychiatric|none|unclear",
+  "medication_only": true|false,
   "negated_only": true|false,
   "family_history_only": true|false,
   "patient_specific": true|false,
@@ -503,11 +508,26 @@ def normalize_model_result(result: dict[str, Any]) -> dict[str, Any]:
         else "negative"
     )
 
+    disorder_type = str(result.get("disorder_type", "unclear")).strip().lower()
+    if disorder_type == "substance use disorder":
+        disorder_type = "other psychiatric"
+    if disorder_type not in {
+        "schizophrenia",
+        "schizoaffective disorder",
+        "psychotic disorder",
+        "bipolar disorder with psychotic features",
+        "other psychiatric",
+        "none",
+        "unclear",
+    }:
+        disorder_type = "unclear"
+
     return {
         "psychosis_related_context_label": psychosis_label,
         "other_psychiatric_context_label": other_label,
         "label": label,
-        "disorder_type": str(result.get("disorder_type", "unclear")).strip(),
+        "disorder_type": disorder_type,
+        "medication_only": bool(result.get("medication_only", False)),
         "negated_only": bool(result.get("negated_only", False)),
         "family_history_only": bool(result.get("family_history_only", False)),
         "patient_specific": bool(result.get("patient_specific", True)),
@@ -521,6 +541,9 @@ def combine_chunk_results(chunk_results: list[dict[str, Any]]) -> dict[str, Any]
     labels = [result["label"] for result in chunk_results]
     psychosis_labels = [result["psychosis_related_context_label"] for result in chunk_results]
     other_labels = [result["other_psychiatric_context_label"] for result in chunk_results]
+    positive_chunk_results = [
+        result for result in chunk_results if result["label"] == "positive"
+    ]
     if "positive" in labels:
         chosen_label = "positive"
     else:
@@ -538,6 +561,11 @@ def combine_chunk_results(chunk_results: list[dict[str, Any]]) -> dict[str, Any]
             "positive" if "positive" in other_labels else "negative"
         ),
         "label": chosen_label,
+        "medication_only": (
+            all(result["medication_only"] for result in positive_chunk_results)
+            if positive_chunk_results
+            else False
+        ),
         "n_chunks": len(chunk_results),
         "n_positive_chunks": labels.count("positive"),
         "n_negative_chunks": labels.count("negative"),
