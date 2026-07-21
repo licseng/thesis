@@ -1,8 +1,15 @@
 """Create keyword-filtered section inputs for the local LLM classifier.
 
-This script prepares the LLM input subset for WP2. It keeps only:
-    - the four candidate sections used by the classifier, and
-    - section rows with at least one psychiatry-related keyword hit.
+This script prepares the LLM input subset for WP2. It keeps only section rows
+with at least one psychiatry-related keyword hit. The section scope is
+configurable with PSYCH_HISTORY_SECTION_SCOPE:
+    - candidate4: the original four candidate sections
+    - candidate6: the original four plus discharge instructions/pertinent results
+    - all_keyword_sections: all selected psych-keyword exploration sections
+    - all_parsed_sections: all parser sections except chief complaint
+    - current_context_sections: all parser sections except the excluded
+      history/social/family/chief-complaint/unsectioned/medical-history/
+      discharge-medication sections
 
 The keyword vocabulary is imported from
 `04_discharge_note_text_analysis/02_explore_psych_keywords_by_section.py`, so it
@@ -23,6 +30,7 @@ Outputs:
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
 from collections import Counter
 from pathlib import Path
@@ -42,12 +50,32 @@ PSYCH_KEYWORD_SCRIPT = (
 )
 OUTPUT_DIR = SCRIPT_DIR / "psych_history_llm_input"
 
-LLM_CANDIDATE_SECTION_NAMES = [
+SECTION_SCOPE = os.environ.get("PSYCH_HISTORY_SECTION_SCOPE", "candidate4").strip().lower()
+
+CANDIDATE4_SECTION_NAMES = [
     "present_illness",
     "brief_hospital_course",
     "problems",
     "discharge_diagnosis",
 ]
+CANDIDATE6_SECTION_NAMES = CANDIDATE4_SECTION_NAMES + [
+    "discharge_instructions",
+    "pertinent_results",
+]
+EXCLUDED_BACKGROUND_SECTION_NAMES = {
+    "past_psychiatric_history",
+    "social_history",
+    "family_history",
+    "chief_complaint",
+    "unsectioned_text",
+    "medical_history",
+    "discharge_medications",
+}
+
+SECTION_SCOPE_OPTIONS = {
+    "candidate4": CANDIDATE4_SECTION_NAMES,
+    "candidate6": CANDIDATE6_SECTION_NAMES,
+}
 
 FULL_NOTE_FILES = [
     {
@@ -77,6 +105,32 @@ def compile_keyword_patterns(
         group: [re.compile(pattern, flags=re.IGNORECASE) for pattern in patterns]
         for group, patterns in keyword_patterns.items()
     }
+
+
+def selected_section_names(psych_keywords: Any) -> list[str]:
+    """Return section names for the configured prefiltering scope."""
+    if SECTION_SCOPE == "all_keyword_sections":
+        return list(psych_keywords.SELECTED_SECTION_NAMES)
+    if SECTION_SCOPE == "all_parsed_sections":
+        parser = load_module(psych_keywords.PARSER_PATH, "full_note_parser")
+        return [
+            section
+            for section in parser.CANONICAL_SECTIONS
+            if section != "chief_complaint"
+        ]
+    if SECTION_SCOPE == "current_context_sections":
+        parser = load_module(psych_keywords.PARSER_PATH, "full_note_parser")
+        return [
+            section
+            for section in parser.CANONICAL_SECTIONS
+            if section not in EXCLUDED_BACKGROUND_SECTION_NAMES
+        ]
+    if SECTION_SCOPE not in SECTION_SCOPE_OPTIONS:
+        raise ValueError(
+            "PSYCH_HISTORY_SECTION_SCOPE must be one of: "
+            f"{', '.join(sorted([*SECTION_SCOPE_OPTIONS, 'all_keyword_sections', 'all_parsed_sections', 'current_context_sections']))}"
+        )
+    return SECTION_SCOPE_OPTIONS[SECTION_SCOPE].copy()
 
 
 def load_full_note_outputs(section_columns: list[str]) -> pd.DataFrame:
@@ -120,15 +174,16 @@ def find_keyword_hits(
 def build_filtered_section_input(
     df: pd.DataFrame,
     compiled_patterns: dict[str, list[re.Pattern[str]]],
+    section_names: list[str],
 ) -> pd.DataFrame:
-    """Return one row per keyword-positive candidate section."""
+    """Return one row per keyword-positive selected section."""
     rows = []
 
     for source_row in df.itertuples(index=False):
         row_dict = source_row._asdict()
         metadata = {column: row_dict[column] for column in METADATA_COLUMNS}
 
-        for section_name in LLM_CANDIDATE_SECTION_NAMES:
+        for section_name in section_names:
             section_text = str(row_dict.get(section_name, "") or "").strip()
             if not section_text:
                 continue
@@ -177,7 +232,11 @@ def build_admission_summary(filtered_sections: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def build_filter_summary(filtered_sections: pd.DataFrame, source_notes: pd.DataFrame) -> pd.DataFrame:
+def build_filter_summary(
+    filtered_sections: pd.DataFrame,
+    source_notes: pd.DataFrame,
+    section_names: list[str],
+) -> pd.DataFrame:
     """Summarize filtered section coverage by cohort and section."""
     rows = []
     for cohort, cohort_notes in source_notes.groupby("cohort"):
@@ -186,7 +245,7 @@ def build_filter_summary(filtered_sections: pd.DataFrame, source_notes: pd.DataF
         rows.append(
             {
                 "cohort": cohort,
-                "section_name": "any_candidate_section",
+                "section_name": "any_selected_section",
                 "n_admissions": n_admissions,
                 "n_admissions_with_keyword_positive_section": int(
                     cohort_sections["hadm_id"].nunique()
@@ -198,7 +257,7 @@ def build_filter_summary(filtered_sections: pd.DataFrame, source_notes: pd.DataF
                 ),
             }
         )
-        for section_name in LLM_CANDIDATE_SECTION_NAMES:
+        for section_name in section_names:
             section_rows = cohort_sections.loc[cohort_sections["section_name"].eq(section_name)]
             rows.append(
                 {
@@ -274,15 +333,21 @@ def main() -> None:
     """Create filtered section input for the local LLM classifier."""
     psych_keywords = load_module(PSYCH_KEYWORD_SCRIPT, "psych_keyword_script")
     compiled_patterns = compile_keyword_patterns(psych_keywords.KEYWORD_PATTERNS)
+    section_names = selected_section_names(psych_keywords)
 
-    source_notes = load_full_note_outputs(LLM_CANDIDATE_SECTION_NAMES)
-    filtered_sections = build_filtered_section_input(source_notes, compiled_patterns)
+    source_notes = load_full_note_outputs(section_names)
+    filtered_sections = build_filtered_section_input(
+        source_notes,
+        compiled_patterns,
+        section_names,
+    )
     admission_summary = build_admission_summary(filtered_sections)
-    filter_summary = build_filter_summary(filtered_sections, source_notes)
+    filter_summary = build_filter_summary(filtered_sections, source_notes, section_names)
     write_outputs(filtered_sections, admission_summary, filter_summary)
 
     print(f"Scanned {source_notes['hadm_id'].nunique()} admissions.")
-    print(f"Candidate sections: {', '.join(LLM_CANDIDATE_SECTION_NAMES)}")
+    print(f"Section scope: {SECTION_SCOPE}")
+    print(f"Selected sections: {', '.join(section_names)}")
     print(f"Filtered to {len(filtered_sections)} keyword-positive section rows.")
     print(f"Filtered admissions: {filtered_sections['hadm_id'].nunique()}")
     print(f"Saved LLM input to: {OUTPUT_DIR}")
