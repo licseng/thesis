@@ -3,6 +3,7 @@
 **/.DS_Store
 
 run.sbatch
+*.env
 
 # Python cache files
 __pycache__/
@@ -44,14 +45,18 @@ python-code/04_LLM_flagging/analysis_output_psych_keyword_exploration/
 python-code/04_LLM_flagging/psych_history_classifier_output/
 python-code/04_discharge_note_text_analysis/analysis_output_psych_keyword_exploration/
 python-code/04_discharge_note_text_analysis/analysis_output_psych_keyword_llm_filter_coverage/
+python-code/04_discharge_note_text_analysis/analysis_output_SL_keyword_exploration/
+python-code/04_discharge_note_text_analysis/analysis_output_keyword_summary_excluding_chief_complaint/
 python-code/05_classification_psych_history/psych_history_llm_input/
 python-code/05_classification_psych_history/psych_history_classifier_output/
-python-code/05_classification_psych_history/psych_history_classifier_cluster_outputs/
+python-code/05_classification_psych_history/psych_history_classifier_cluster_outputs_psych_mention/
+python-code/05_classification_psych_history/psych_history_classifier_cluster_outputs_psych_integrated/
 python-code/05_classification_psych_history/psych_history_classifier_output_old/
 python-code/05_classification_psych_history/psych_keyword_llm_overlap_output/
 python-code/06_classification_diag_oversh/diagnostic_overshadowing_classifier_output/
-python-code/04_discharge_note_text_analysis/analysis_output_SL_keyword_exploration/
-python-code/04_discharge_note_text_analysis/analysis_output_keyword_summary_excluding_chief_complaint/
+python-code/06_classification_diag_oversh/diagnostic_overshadowing_classifier_output*/
+python-code/06_classification_diag_oversh/diagnostic_overshadowing_api.env
+
 
 # Generated HTML visualization output
 html-visualization/
