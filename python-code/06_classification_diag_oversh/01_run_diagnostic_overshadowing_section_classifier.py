@@ -41,15 +41,25 @@ import pandas as pd
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PSYCH_HISTORY_DIR = SCRIPT_DIR.parent / "05_classification_psych_history"
-INPUT_PATH = (
-    PSYCH_HISTORY_DIR
-    / "psych_history_llm_input"
-    / "filtered_psych_keyword_section_input.parquet"
+INPUT_PATH = Path(
+    os.environ.get(
+        "DIAGNOSTIC_OVERSHADOWING_FIRST_LLM_INPUT_PATH",
+        str(
+            PSYCH_HISTORY_DIR
+            / "psych_history_llm_input"
+            / "filtered_psych_keyword_section_input.parquet"
+        ),
+    )
 )
-PSYCH_HISTORY_RESULTS_PATH = (
-    PSYCH_HISTORY_DIR
-    / "psych_history_classifier_output"
-    / "psych_history_section_classifier_results.csv"
+PSYCH_HISTORY_RESULTS_PATH = Path(
+    os.environ.get(
+        "DIAGNOSTIC_OVERSHADOWING_FIRST_LLM_RESULTS_PATH",
+        str(
+            PSYCH_HISTORY_DIR
+            / "psych_history_classifier_output_prompt_B"
+            / "psych_history_section_classifier_results.csv"
+        ),
+    )
 )
 OUTPUT_DIR = Path(
     os.environ.get(
@@ -83,6 +93,10 @@ API_JSON_MODE = os.environ.get("DIAGNOSTIC_OVERSHADOWING_API_JSON_MODE", "1").lo
     "false",
     "no",
 }
+API_DISABLE_THINKING = os.environ.get(
+    "DIAGNOSTIC_OVERSHADOWING_API_DISABLE_THINKING",
+    "1",
+).lower() not in {"0", "false", "no"}
 CHUNK_WORDS = int(os.environ.get("DIAGNOSTIC_OVERSHADOWING_CHUNK_WORDS", "800"))
 CHUNK_OVERLAP_WORDS = int(
     os.environ.get("DIAGNOSTIC_OVERSHADOWING_CHUNK_OVERLAP_WORDS", "100")
@@ -104,6 +118,7 @@ if MAX_NOTES_OVERRIDE:
     MAX_NOTES = None if MAX_NOTES_OVERRIDE.lower() == "none" else int(MAX_NOTES_OVERRIDE)
 
 METADATA_COLUMNS = ["cohort", "subject_id", "hadm_id", "note_id", "charttime"]
+FIRST_STAGE_SECTION_KEY_COLUMNS = METADATA_COLUMNS + ["section_name"]
 
 OLLAMA_RESPONSE_SCHEMA = {
     "type": "object",
@@ -116,7 +131,6 @@ OLLAMA_RESPONSE_SCHEMA = {
         "physical_or_medical_problem_present": {"type": "boolean"},
         "attribution_to_psychiatric_condition": {"type": "boolean"},
         "possible_missed_or_delayed_workup": {"type": "boolean"},
-        "patient_specific": {"type": "boolean"},
         "evidence_span": {"type": "string", "maxLength": 180},
         "reason": {"type": "string", "maxLength": 320},
     },
@@ -126,7 +140,6 @@ OLLAMA_RESPONSE_SCHEMA = {
         "physical_or_medical_problem_present",
         "attribution_to_psychiatric_condition",
         "possible_missed_or_delayed_workup",
-        "patient_specific",
         "evidence_span",
         "reason",
     ],
@@ -152,10 +165,11 @@ Return exactly this JSON schema without extra fields or comments:
   "physical_or_medical_problem_present": true|false,
   "attribution_to_psychiatric_condition": true|false,
   "possible_missed_or_delayed_workup": true|false,
-  "patient_specific": true|false,
   "evidence_span": "",
   "reason": ""
 }
+
+Keep evidence span and reason brief. Maximum 2 sentences each. 
 """
 
 
@@ -218,11 +232,10 @@ def validate_columns(df: pd.DataFrame) -> None:
 def validate_psych_history_result_columns(df: pd.DataFrame) -> None:
     """Check that first-stage classifier output has required labels."""
     required = set(
-        [
+        FIRST_STAGE_SECTION_KEY_COLUMNS
+        + [
             "classifier_row_id",
-            "psychosis_related_context_label",
-            "other_psychiatric_context_label",
-            "label",
+            "psychiatric_context_label",
         ]
     )
     missing = sorted(required - set(df.columns))
@@ -232,28 +245,37 @@ def validate_psych_history_result_columns(df: pd.DataFrame) -> None:
         )
 
 
+def normalize_first_stage_section_keys(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize section identity columns before merging first-stage outputs."""
+    df = df.copy()
+    for column in FIRST_STAGE_SECTION_KEY_COLUMNS:
+        if column == "charttime":
+            df[column] = pd.to_datetime(df[column], errors="coerce").dt.strftime(
+                "%Y-%m-%d"
+            )
+        elif column == "section_name":
+            df[column] = df[column].fillna("").astype(str).str.strip()
+    return df
+
+
 def load_section_rows() -> pd.DataFrame:
     """Load first-LLM-positive section rows for diagnostic overshadowing."""
     section_text = pd.read_parquet(INPUT_PATH)
     validate_columns(section_text)
+    section_text = normalize_first_stage_section_keys(section_text)
 
     first_stage_results = pd.read_csv(PSYCH_HISTORY_RESULTS_PATH)
     validate_psych_history_result_columns(first_stage_results)
+    first_stage_results = normalize_first_stage_section_keys(first_stage_results)
 
     first_stage_label_columns = [
         "classifier_row_id",
-        "psychosis_related_context_label",
-        "other_psychiatric_context_label",
-        "label",
-        "disorder_type",
-        "negated_only",
-        "family_history_only",
-        "patient_specific",
+        *FIRST_STAGE_SECTION_KEY_COLUMNS,
+        "psychiatric_context_label",
+        "psychiatric_mention_type",
         "n_chunks",
         "n_positive_chunks",
         "n_negative_chunks",
-        "n_psychosis_positive_chunks",
-        "n_other_psychiatric_positive_chunks",
         "model_name",
     ]
     available_first_stage_columns = [
@@ -261,37 +283,41 @@ def load_section_rows() -> pd.DataFrame:
     ]
 
     positive_results = first_stage_results.loc[
-        first_stage_results["label"].astype(str).str.lower().eq(
+        first_stage_results["psychiatric_context_label"].astype(str).str.lower().eq(
             PSYCH_HISTORY_POSITIVE_LABEL.lower()
         ),
         available_first_stage_columns,
     ].copy()
     positive_results = positive_results.rename(
         columns={
-            "psychosis_related_context_label": "first_llm_psychosis_related_context_label",
-            "other_psychiatric_context_label": "first_llm_other_psychiatric_context_label",
-            "label": "first_llm_label",
-            "disorder_type": "first_llm_disorder_type",
-            "negated_only": "first_llm_negated_only",
-            "family_history_only": "first_llm_family_history_only",
-            "patient_specific": "first_llm_patient_specific",
+            "classifier_row_id": "first_llm_classifier_row_id",
+            "psychiatric_context_label": "first_llm_psychiatric_context_label",
+            "psychiatric_mention_type": "first_llm_psychiatric_mention_type",
             "n_chunks": "first_llm_n_chunks",
             "n_positive_chunks": "first_llm_n_positive_chunks",
             "n_negative_chunks": "first_llm_n_negative_chunks",
-            "n_psychosis_positive_chunks": "first_llm_n_psychosis_positive_chunks",
-            "n_other_psychiatric_positive_chunks": (
-                "first_llm_n_other_psychiatric_positive_chunks"
-            ),
             "model_name": "first_llm_model_name",
         }
     )
 
     df = section_text.merge(
         positive_results,
-        on="classifier_row_id",
+        on=FIRST_STAGE_SECTION_KEY_COLUMNS,
         how="inner",
         validate="one_to_one",
     )
+    if positive_results.empty:
+        raise ValueError(
+            f"No first-stage rows with {PSYCH_HISTORY_POSITIVE_LABEL=} in "
+            f"{PSYCH_HISTORY_RESULTS_PATH}"
+        )
+    if df.empty:
+        raise ValueError(
+            "No rows matched between first-stage section text input and "
+            "first-stage positive results. Check that "
+            "DIAGNOSTIC_OVERSHADOWING_FIRST_LLM_INPUT_PATH matches the input used "
+            f"to create {PSYCH_HISTORY_RESULTS_PATH}."
+        )
 
     if MAX_NOTES is not None:
         admission_keys = df.loc[:, ["cohort", "subject_id", "hadm_id"]].drop_duplicates()
@@ -306,7 +332,7 @@ def load_section_rows() -> pd.DataFrame:
     df = df.copy().reset_index(drop=True)
     df["section_text"] = df["section_text"].fillna("").astype(str).str.strip()
     df = df.loc[df["section_text"].ne("")].copy()
-    df = df.rename(columns={"classifier_row_id": "first_llm_classifier_row_id"})
+    df = df.rename(columns={"classifier_row_id": "source_input_classifier_row_id"})
     df.insert(0, "classifier_row_id", range(len(df)))
     return df
 
@@ -402,6 +428,8 @@ def check_model_available() -> None:
         }
         if API_JSON_MODE:
             payload["response_format"] = {"type": "json_object"}
+        if API_DISABLE_THINKING:
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
         try:
             call_openai_compatible(payload)
         except urllib.error.URLError as exc:
@@ -445,6 +473,8 @@ def generate_response(messages: list[dict[str, str]]) -> str:
         }
         if API_JSON_MODE:
             payload["response_format"] = {"type": "json_object"}
+        if API_DISABLE_THINKING:
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
         response = call_openai_compatible(payload)
         choices = response.get("choices", [])
         if not choices:
@@ -504,7 +534,6 @@ def normalize_model_result(result: dict[str, Any]) -> dict[str, Any]:
         "possible_missed_or_delayed_workup": bool(
             result.get("possible_missed_or_delayed_workup", False)
         ),
-        "patient_specific": bool(result.get("patient_specific", True)),
         "evidence_span": str(result.get("evidence_span", "")).strip(),
         "reason": str(result.get("reason", "")).strip(),
     }
@@ -540,7 +569,6 @@ def combine_chunk_results(chunk_results: list[dict[str, Any]]) -> dict[str, Any]
         "possible_missed_or_delayed_workup": any(
             result["possible_missed_or_delayed_workup"] for result in chunk_results
         ),
-        "patient_specific": any(result["patient_specific"] for result in chunk_results),
         "n_chunks": len(chunk_results),
         "n_positive_chunks": labels.count("positive"),
         "n_negative_chunks": labels.count("negative"),
@@ -609,16 +637,14 @@ def classify_sections(
                     "n_psych_keyword_hits": row.get("n_psych_keyword_hits", None),
                     "psych_keyword_groups": row.get("psych_keyword_groups", ""),
                     "matched_terms": row.get("matched_terms", ""),
-                    "first_llm_label": row.get("first_llm_label", ""),
-                    "first_llm_psychosis_related_context_label": row.get(
-                        "first_llm_psychosis_related_context_label",
+                    "first_llm_psychiatric_context_label": row.get(
+                        "first_llm_psychiatric_context_label",
                         "",
                     ),
-                    "first_llm_other_psychiatric_context_label": row.get(
-                        "first_llm_other_psychiatric_context_label",
+                    "first_llm_psychiatric_mention_type": row.get(
+                        "first_llm_psychiatric_mention_type",
                         "",
                     ),
-                    "first_llm_disorder_type": row.get("first_llm_disorder_type", ""),
                     "chunk_index": chunk_index,
                     "n_chunks": len(chunks),
                     "chunk_word_count": len(chunk_text.split()),
@@ -645,16 +671,14 @@ def classify_sections(
                 "n_psych_keyword_hits": row.get("n_psych_keyword_hits", None),
                 "psych_keyword_groups": row.get("psych_keyword_groups", ""),
                 "matched_terms": row.get("matched_terms", ""),
-                "first_llm_label": row.get("first_llm_label", ""),
-                "first_llm_psychosis_related_context_label": row.get(
-                    "first_llm_psychosis_related_context_label",
+                "first_llm_psychiatric_context_label": row.get(
+                    "first_llm_psychiatric_context_label",
                     "",
                 ),
-                "first_llm_other_psychiatric_context_label": row.get(
-                    "first_llm_other_psychiatric_context_label",
+                "first_llm_psychiatric_mention_type": row.get(
+                    "first_llm_psychiatric_mention_type",
                     "",
                 ),
-                "first_llm_disorder_type": row.get("first_llm_disorder_type", ""),
                 **section_result,
                 "model_name": MODEL_NAME,
             }
@@ -760,6 +784,7 @@ def main() -> None:
     if BACKEND == "openai_compatible":
         print(f"Using API URL: {api_chat_completions_url()}")
         print(f"Using API JSON mode: {API_JSON_MODE}")
+        print(f"Using API disable thinking: {API_DISABLE_THINKING}")
     print(f"Chunking sections at {CHUNK_WORDS} words with {CHUNK_OVERLAP_WORDS} word overlap")
     print(f"Run started at: {run_started_at}")
     if PROMPT_PATH:
@@ -781,6 +806,7 @@ def main() -> None:
         "api_base_url": API_BASE_URL,
         "api_url": api_chat_completions_url(),
         "api_json_mode": API_JSON_MODE,
+        "api_disable_thinking": API_DISABLE_THINKING,
         "input_path": str(INPUT_PATH),
         "psych_history_results_path": str(PSYCH_HISTORY_RESULTS_PATH),
         "psych_history_positive_label": PSYCH_HISTORY_POSITIVE_LABEL,
