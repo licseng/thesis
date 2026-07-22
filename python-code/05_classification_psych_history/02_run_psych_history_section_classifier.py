@@ -38,10 +38,13 @@ INPUT_PATH = (
     / "psych_history_llm_input"
     / "filtered_psych_keyword_section_input.parquet"
 )
+PROMPT_VERSION = os.environ.get("PSYCH_HISTORY_PROMPT_VERSION", "A").strip().upper()
+if PROMPT_VERSION not in {"A", "B"}:
+    raise ValueError("PSYCH_HISTORY_PROMPT_VERSION must be 'A' or 'B'.")
 OUTPUT_DIR = Path(
     os.environ.get(
         "PSYCH_HISTORY_OUTPUT_DIR",
-        str(SCRIPT_DIR / "psych_history_classifier_output"),
+        str(SCRIPT_DIR / f"psych_history_classifier_output_prompt_{PROMPT_VERSION}"),
     )
 )
 
@@ -57,6 +60,17 @@ MAX_NEW_TOKENS = int(os.environ.get("PSYCH_HISTORY_MAX_NEW_TOKENS", "384"))
 CHUNK_WORDS = int(os.environ.get("PSYCH_HISTORY_CHUNK_WORDS", "600"))
 CHUNK_OVERLAP_WORDS = int(os.environ.get("PSYCH_HISTORY_CHUNK_OVERLAP_WORDS", "75"))
 BATCH_SIZE = int(os.environ.get("PSYCH_HISTORY_BATCH_SIZE", "1"))
+CHECKPOINT_EVERY_SECTIONS = int(
+    os.environ.get("PSYCH_HISTORY_CHECKPOINT_EVERY_SECTIONS", "500")
+)
+RESUME_FROM_CHECKPOINT = os.environ.get(
+    "PSYCH_HISTORY_RESUME_FROM_CHECKPOINT",
+    "1",
+).lower() not in {"0", "false", "no"}
+MAX_EVIDENCE_WORDS = int(os.environ.get("PSYCH_HISTORY_MAX_EVIDENCE_WORDS", "20"))
+MAX_REASON_WORDS = int(os.environ.get("PSYCH_HISTORY_MAX_REASON_WORDS", "25"))
+MAX_EVIDENCE_CHARS = int(os.environ.get("PSYCH_HISTORY_MAX_EVIDENCE_CHARS", "120"))
+MAX_REASON_CHARS = int(os.environ.get("PSYCH_HISTORY_MAX_REASON_CHARS", "160"))
 SLEEP_BETWEEN_REQUESTS_SECONDS = 0.1
 
 # Pilot limit. Set to None to process every admission in the input table.
@@ -96,8 +110,17 @@ METADATA_COLUMNS = [
     "note_id",
     "charttime",
 ]
+SECTION_ID_COLUMNS = [
+    "classifier_row_id",
+    "cohort",
+    "subject_id",
+    "hadm_id",
+    "note_id",
+    "charttime",
+    "section_name",
+]
 
-OLLAMA_RESPONSE_SCHEMA = {
+RESPONSE_SCHEMA_A = {
     "type": "object",
     "properties": {
         "psychiatric_context_label": {
@@ -116,8 +139,8 @@ OLLAMA_RESPONSE_SCHEMA = {
                 "none",
             ],
         },
-        "evidence_span": {"type": "string", "maxLength": 160},
-        "reason": {"type": "string", "maxLength": 240},
+        "evidence_span": {"type": "string", "maxLength": 120},
+        "reason": {"type": "string", "maxLength": 160},
     },
     "required": [
         "psychiatric_context_label",
@@ -127,7 +150,41 @@ OLLAMA_RESPONSE_SCHEMA = {
     ],
 }
 
-SYSTEM_PROMPT = """You are a clinical text classification assistant.
+RESPONSE_SCHEMA_B = {
+    "type": "object",
+    "properties": {
+        "psychiatric_context_integrated": {
+            "type": "string",
+            "enum": ["positive", "negative"],
+        },
+        "integration_type": {
+            "type": "string",
+            "enum": [
+                "symptom_attribution",
+                "diagnostic_reasoning",
+                "management",
+                "disposition_or_capacity",
+                "behavior_or_reliability",
+                "care_interference",
+                "active_psychiatric_course",
+                "disproportionate_detail",
+                "incidental_history",
+                "medication_only",
+                "negated_or_irrelevant",
+            ],
+        },
+        "evidence_span": {"type": "string", "maxLength": 120},
+        "reason": {"type": "string", "maxLength": 160},
+    },
+    "required": [
+        "psychiatric_context_integrated",
+        "integration_type",
+        "evidence_span",
+        "reason",
+    ],
+}
+
+SYSTEM_PROMPT_A = """You are a clinical text classification assistant.
 
 Context:
 The provided hospital discharge-note section has already been selected by keyword matching
@@ -166,8 +223,10 @@ Set psychiatric_mention_type to one of:
 - negated_only: only negated psychiatric history/symptoms
 - family_history_only: only family psychiatric history
 - none: no clinically meaningful psychiatric context
-Keep evidence_span short, preferably 15 words or fewer. 
-Keep reason brief, one sentence maximum.
+Keep evidence_span short: 20 words maximum, shorter is better. Copy only the
+shortest exact phrase needed from the section text.
+Keep reason short: 25 words maximum, one sentence only. Do not include a long
+explanation.
 {
   "psychiatric_context_label": "positive|negative",
   "psychiatric_mention_type": "current_context|background_only|medication_only|diagnosis_list_only|negated_only|family_history_only|none",
@@ -175,6 +234,64 @@ Keep reason brief, one sentence maximum.
   "reason": ""
 }
 """
+
+SYSTEM_PROMPT_B = """You are a clinical text classification assistant.
+
+Context:
+The provided discharge-note section has already been selected because it contains
+psychiatry-related language. The presence of a psychiatric term alone is not enough
+for a positive label.
+
+Task:
+Classify whether psychiatric context is meaningfully integrated into the patient's
+current hospital stay.
+
+Positive:
+- psychiatric context is used to explain the current symptoms or presentation
+- it affects diagnostic reasoning, treatment, monitoring, disposition, or capacity
+- it is used to describe behavior, reliability, cooperation, or difficulties in care
+- active psychiatric symptoms meaningfully affect the hospital course
+- psychiatric issues are described in unusually extensive detail despite limited
+  relevance to the physical admission
+
+Negative:
+- psychiatric history is mentioned only as background information or just listed amongst the diagnoses
+- psychiatric medication is only listed or continued
+- the psychiatric condition is described as stable and does not affect the admission
+- the mention is negated, family-history-only, or irrelevant
+
+Examples:
+- "History of schizophrenia; home olanzapine was continued." → negative
+- "History was limited because of active psychosis." → positive
+- "Chest pain was considered anxiety-related." → positive
+- "Psychiatry assessed decision-making capacity before discharge." → positive
+
+Return exactly one valid JSON object and no extra text:
+
+{
+  "psychiatric_context_integrated": "positive|negative",
+  "integration_type": "symptom_attribution|diagnostic_reasoning|management|disposition_or_capacity|behavior_or_reliability|care_interference|active_psychiatric_course|disproportionate_detail|incidental_history|medication_only|negated_or_irrelevant",
+  "evidence_span": "",
+  "reason": ""
+}
+
+Choose the single best integration_type.
+Keep evidence_span short: 20 words maximum, shorter is better. Copy only the
+shortest exact phrase needed from the section text.
+Keep reason short: 25 words maximum, one sentence only. Do not include a long
+explanation.
+"""
+
+SYSTEM_PROMPTS = {
+    "A": SYSTEM_PROMPT_A,
+    "B": SYSTEM_PROMPT_B,
+}
+RESPONSE_SCHEMAS = {
+    "A": RESPONSE_SCHEMA_A,
+    "B": RESPONSE_SCHEMA_B,
+}
+SYSTEM_PROMPT = SYSTEM_PROMPTS[PROMPT_VERSION]
+ACTIVE_RESPONSE_SCHEMA = RESPONSE_SCHEMAS[PROMPT_VERSION]
 
 
 def validate_input_path() -> None:
@@ -212,6 +329,79 @@ def load_section_rows() -> pd.DataFrame:
         df = df.drop(columns=["classifier_row_id"])
     df.insert(0, "classifier_row_id", range(len(df)))
     return df
+
+
+def normalize_section_identity_values(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize stable section identity columns for checkpoint matching."""
+    df = df.copy()
+    if "charttime" in df.columns:
+        df["charttime"] = pd.to_datetime(df["charttime"], errors="coerce").dt.strftime(
+            "%Y-%m-%d"
+        )
+    if "section_name" in df.columns:
+        df["section_name"] = df["section_name"].fillna("").astype(str).str.strip()
+    return df
+
+
+def load_resume_checkpoint(
+    section_rows: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, set[int]]:
+    """Load matching checkpoint rows and return completed classifier row IDs."""
+    section_checkpoint_path = (
+        OUTPUT_DIR / "psych_history_section_classifier_results_checkpoint.csv"
+    )
+    chunk_checkpoint_path = (
+        OUTPUT_DIR / "psych_history_section_chunk_classifier_results_checkpoint.csv"
+    )
+    if not RESUME_FROM_CHECKPOINT or not section_checkpoint_path.exists():
+        return pd.DataFrame(), pd.DataFrame(), set()
+
+    section_checkpoint = pd.read_csv(section_checkpoint_path)
+    missing = sorted(set(SECTION_ID_COLUMNS) - set(section_checkpoint.columns))
+    if missing:
+        print(
+            f"Ignoring checkpoint with missing identity columns: {missing}",
+            flush=True,
+        )
+        return pd.DataFrame(), pd.DataFrame(), set()
+
+    current_identity = normalize_section_identity_values(
+        section_rows.loc[:, SECTION_ID_COLUMNS]
+    )
+    checkpoint_identity = normalize_section_identity_values(
+        section_checkpoint.loc[:, SECTION_ID_COLUMNS]
+    )
+    matching_identity = checkpoint_identity.merge(
+        current_identity,
+        on=SECTION_ID_COLUMNS,
+        how="inner",
+        validate="one_to_one",
+    )
+    completed_ids = set(matching_identity["classifier_row_id"].astype(int))
+    if not completed_ids:
+        print("Checkpoint found, but no rows match the current input; ignoring it.", flush=True)
+        return pd.DataFrame(), pd.DataFrame(), set()
+
+    section_checkpoint = section_checkpoint.loc[
+        section_checkpoint["classifier_row_id"].astype(int).isin(completed_ids)
+    ].copy()
+
+    if chunk_checkpoint_path.exists():
+        chunk_checkpoint = pd.read_csv(chunk_checkpoint_path)
+        if "classifier_row_id" in chunk_checkpoint.columns:
+            chunk_checkpoint = chunk_checkpoint.loc[
+                chunk_checkpoint["classifier_row_id"].astype(int).isin(completed_ids)
+            ].copy()
+        else:
+            chunk_checkpoint = pd.DataFrame()
+    else:
+        chunk_checkpoint = pd.DataFrame()
+
+    print(
+        f"Resuming from checkpoint with {len(section_checkpoint)} completed sections.",
+        flush=True,
+    )
+    return section_checkpoint, chunk_checkpoint, completed_ids
 
 
 def split_text_into_chunks(text: str) -> list[str]:
@@ -444,7 +634,7 @@ def generate_response(messages: list[dict[str, str]]) -> str:
         "model": MODEL_NAME,
         "messages": messages,
         "stream": False,
-        "format": OLLAMA_RESPONSE_SCHEMA,
+        "format": ACTIVE_RESPONSE_SCHEMA,
         "think": False,
         "options": {
             "num_predict": MAX_NEW_TOKENS,
@@ -472,19 +662,80 @@ def parse_json_response(response_text: str) -> dict[str, Any]:
 
     match = re.search(r"\{[\s\S]*\}", response_text)
     if not match:
+        recovered = recover_partial_json_response(response_text)
+        if recovered is not None:
+            return recovered
         raise ValueError(f"Model returned no JSON object: {response_text}")
     try:
         return json.loads(match.group(0))
     except json.JSONDecodeError as exc:
+        recovered = recover_partial_json_response(response_text)
+        if recovered is not None:
+            return recovered
         raise ValueError(f"Model returned invalid JSON: {response_text}") from exc
+
+
+def truncate_words_and_chars(text: str, max_words: int, max_chars: int) -> str:
+    """Return text capped by word and character limits."""
+    text = re.sub(r"\s+", " ", str(text)).strip()
+    if not text:
+        return ""
+    words = text.split()
+    text = " ".join(words[:max_words])
+    if len(text) > max_chars:
+        text = text[:max_chars].rsplit(" ", 1)[0].strip()
+    return text
+
+
+def extract_json_string_field(response_text: str, field_name: str) -> str:
+    """Extract a simple string field from a possibly truncated JSON object."""
+    pattern = rf'"{re.escape(field_name)}"\s*:\s*"([^"]*)'
+    match = re.search(pattern, response_text, flags=re.DOTALL)
+    if not match:
+        return ""
+    return re.sub(r"\s+", " ", match.group(1)).strip()
+
+
+def recover_partial_json_response(response_text: str) -> dict[str, Any] | None:
+    """Recover known classifier fields from a truncated JSON-like response."""
+    response_text = str(response_text)
+    label = (
+        extract_json_string_field(response_text, "psychiatric_context_label")
+        or extract_json_string_field(response_text, "psychiatric_context_integrated")
+    ).lower()
+    mention_type = (
+        extract_json_string_field(response_text, "psychiatric_mention_type")
+        or extract_json_string_field(response_text, "integration_type")
+    ).lower()
+    evidence_span = extract_json_string_field(response_text, "evidence_span")
+    reason = extract_json_string_field(response_text, "reason")
+
+    if label not in {"positive", "negative"}:
+        return None
+
+    recovered = {
+        "psychiatric_context_label": label,
+        "psychiatric_mention_type": mention_type,
+        "evidence_span": evidence_span,
+        "reason": reason,
+        "json_recovered_from_partial_response": True,
+    }
+    return recovered
 
 
 def normalize_model_result(result: dict[str, Any]) -> dict[str, Any]:
     """Normalize optional or malformed model fields into stable output columns."""
-    psychiatric_label = str(result.get("psychiatric_context_label", "")).strip().lower()
+    psychiatric_label = str(
+        result.get(
+            "psychiatric_context_label",
+            result.get("psychiatric_context_integrated", ""),
+        )
+    ).strip().lower()
     if psychiatric_label not in {"positive", "negative"}:
         psychiatric_label = "negative"
-    mention_type = str(result.get("psychiatric_mention_type", "")).strip().lower()
+    mention_type = str(
+        result.get("psychiatric_mention_type", result.get("integration_type", ""))
+    ).strip().lower()
     allowed_mention_types = {
         "current_context",
         "background_only",
@@ -493,6 +744,16 @@ def normalize_model_result(result: dict[str, Any]) -> dict[str, Any]:
         "negated_only",
         "family_history_only",
         "none",
+        "symptom_attribution",
+        "diagnostic_reasoning",
+        "management",
+        "disposition_or_capacity",
+        "behavior_or_reliability",
+        "care_interference",
+        "active_psychiatric_course",
+        "disproportionate_detail",
+        "incidental_history",
+        "negated_or_irrelevant",
     }
     if mention_type not in allowed_mention_types:
         mention_type = "current_context" if psychiatric_label == "positive" else "none"
@@ -500,8 +761,19 @@ def normalize_model_result(result: dict[str, Any]) -> dict[str, Any]:
     return {
         "psychiatric_context_label": psychiatric_label,
         "psychiatric_mention_type": mention_type,
-        "evidence_span": str(result.get("evidence_span", "")).strip(),
-        "reason": str(result.get("reason", "")).strip(),
+        "evidence_span": truncate_words_and_chars(
+            str(result.get("evidence_span", "")),
+            MAX_EVIDENCE_WORDS,
+            MAX_EVIDENCE_CHARS,
+        ),
+        "reason": truncate_words_and_chars(
+            str(result.get("reason", "")),
+            MAX_REASON_WORDS,
+            MAX_REASON_CHARS,
+        ),
+        "json_recovered_from_partial_response": bool(
+            result.get("json_recovered_from_partial_response", False)
+        ),
     }
 
 
@@ -527,6 +799,175 @@ def combine_chunk_results(chunk_results: list[dict[str, Any]]) -> dict[str, Any]
     }
 
 
+def build_section_output_rows(
+    section_row_ids: list[int],
+    section_records: dict[int, dict[str, Any]],
+    chunk_results_by_row_id: dict[int, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Build section-level output rows for completed section row IDs."""
+    output_rows = []
+    for row_id in section_row_ids:
+        row = section_records[int(row_id)]["row"]
+        chunk_results = chunk_results_by_row_id[int(row_id)]
+        section_result = combine_chunk_results(chunk_results)
+
+        output_rows.append(
+            {
+                "classifier_row_id": int(row["classifier_row_id"]),
+                "cohort": row["cohort"],
+                "subject_id": row["subject_id"],
+                "hadm_id": row["hadm_id"],
+                "note_id": row["note_id"],
+                "charttime": row["charttime"],
+                "section_name": row["section_name"],
+                "section_char_length": len(row["section_text"]),
+                "section_word_count": len(row["section_text"].split()),
+                "n_psych_keyword_hits": row.get("n_psych_keyword_hits", None),
+                "psych_keyword_groups": row.get("psych_keyword_groups", ""),
+                "matched_terms": row.get("matched_terms", ""),
+                **section_result,
+                "model_name": effective_model_name(),
+            }
+        )
+    return output_rows
+
+
+def completed_section_row_ids(
+    section_records: dict[int, dict[str, Any]],
+    chunk_results_by_row_id: dict[int, list[dict[str, Any]]],
+) -> list[int]:
+    """Return section row IDs whose chunks are fully classified."""
+    return [
+        row_id
+        for row_id, record in section_records.items()
+        if len(chunk_results_by_row_id[row_id]) == record["n_chunks"]
+    ]
+
+
+def write_checkpoint_outputs(
+    completed_row_ids: list[int],
+    section_records: dict[int, dict[str, Any]],
+    chunk_results_by_row_id: dict[int, list[dict[str, Any]]],
+    chunk_output_rows: list[dict[str, Any]],
+    prior_section_checkpoint: pd.DataFrame | None = None,
+    prior_chunk_checkpoint: pd.DataFrame | None = None,
+) -> None:
+    """Write cumulative checkpoint outputs for completed sections and chunks."""
+    if not completed_row_ids:
+        return
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    new_section_checkpoint = pd.DataFrame(
+        build_section_output_rows(
+            completed_row_ids,
+            section_records,
+            chunk_results_by_row_id,
+        )
+    )
+    new_chunk_checkpoint = pd.DataFrame(chunk_output_rows)
+
+    section_frames = [
+        frame
+        for frame in [prior_section_checkpoint, new_section_checkpoint]
+        if frame is not None and not frame.empty
+    ]
+    chunk_frames = [
+        frame
+        for frame in [prior_chunk_checkpoint, new_chunk_checkpoint]
+        if frame is not None and not frame.empty
+    ]
+    section_checkpoint = (
+        pd.concat(section_frames, ignore_index=True)
+        if section_frames
+        else pd.DataFrame()
+    )
+    chunk_checkpoint = (
+        pd.concat(chunk_frames, ignore_index=True) if chunk_frames else pd.DataFrame()
+    )
+
+    section_checkpoint = normalize_output_table(section_checkpoint)
+    chunk_checkpoint = normalize_output_table(chunk_checkpoint)
+    if not section_checkpoint.empty and "classifier_row_id" in section_checkpoint.columns:
+        section_checkpoint["classifier_row_id"] = section_checkpoint[
+            "classifier_row_id"
+        ].astype(int)
+        section_checkpoint = (
+            section_checkpoint.drop_duplicates(
+                subset=["classifier_row_id"],
+                keep="last",
+            )
+            .sort_values("classifier_row_id")
+            .reset_index(drop=True)
+        )
+    if (
+        not chunk_checkpoint.empty
+        and {"classifier_row_id", "chunk_index"}.issubset(chunk_checkpoint.columns)
+    ):
+        chunk_checkpoint["classifier_row_id"] = chunk_checkpoint[
+            "classifier_row_id"
+        ].astype(int)
+        chunk_checkpoint["chunk_index"] = chunk_checkpoint["chunk_index"].astype(int)
+        chunk_checkpoint = (
+            chunk_checkpoint.drop_duplicates(
+                subset=["classifier_row_id", "chunk_index"],
+                keep="last",
+            )
+            .sort_values(["classifier_row_id", "chunk_index"])
+            .reset_index(drop=True)
+        )
+
+    section_checkpoint.to_csv(
+        OUTPUT_DIR / "psych_history_section_classifier_results_checkpoint.csv",
+        index=False,
+    )
+    section_checkpoint.to_parquet(
+        OUTPUT_DIR / "psych_history_section_classifier_results_checkpoint.parquet",
+        index=False,
+    )
+    chunk_checkpoint.to_csv(
+        OUTPUT_DIR / "psych_history_section_chunk_classifier_results_checkpoint.csv",
+        index=False,
+    )
+    chunk_checkpoint.to_parquet(
+        OUTPUT_DIR / "psych_history_section_chunk_classifier_results_checkpoint.parquet",
+        index=False,
+    )
+    print(
+        "Checkpoint saved after "
+        f"{len(completed_row_ids)} newly completed sections "
+        f"({len(section_checkpoint)} cumulative sections) to: {OUTPUT_DIR}",
+        flush=True,
+    )
+
+
+def normalize_output_table(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize output dtypes before CSV/parquet writes."""
+    df = df.copy()
+    if "charttime" in df.columns:
+        df["charttime"] = pd.to_datetime(df["charttime"], errors="coerce").dt.strftime(
+            "%Y-%m-%d"
+        )
+    for column in [
+        "cohort",
+        "note_id",
+        "section_name",
+        "psych_keyword_groups",
+        "matched_terms",
+        "psychiatric_context_label",
+        "psychiatric_mention_type",
+        "evidence_span",
+        "reason",
+        "model_name",
+    ]:
+        if column in df.columns:
+            df[column] = df[column].fillna("").astype(str)
+    if "json_recovered_from_partial_response" in df.columns:
+        df["json_recovered_from_partial_response"] = df[
+            "json_recovered_from_partial_response"
+        ].fillna(False).astype(bool)
+    return df
+
+
 def effective_model_name() -> str:
     """Return the model identifier relevant to the active backend."""
     return HF_MODEL_ID if BACKEND == "transformers" else MODEL_NAME
@@ -534,6 +975,8 @@ def effective_model_name() -> str:
 
 def classify_sections(
     section_rows: pd.DataFrame,
+    prior_section_checkpoint: pd.DataFrame | None = None,
+    prior_chunk_checkpoint: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Run the local model over section chunks and return chunk/section labels."""
     chunk_output_rows = []
@@ -566,6 +1009,7 @@ def classify_sections(
 
     total_chunks = len(chunk_tasks)
     completed_chunks = 0
+    last_checkpoint_completed_sections = 0
     batch_size = max(1, BATCH_SIZE if BACKEND == "transformers" else 1)
 
     for batch_start in range(0, total_chunks, batch_size):
@@ -624,30 +1068,30 @@ def classify_sections(
         if BACKEND != "transformers":
             time.sleep(SLEEP_BETWEEN_REQUESTS_SECONDS)
         completed_chunks += len(batch_tasks)
+        completed_row_ids = completed_section_row_ids(
+            section_records,
+            chunk_results_by_row_id,
+        )
+        if (
+            CHECKPOINT_EVERY_SECTIONS > 0
+            and len(completed_row_ids) - last_checkpoint_completed_sections
+            >= CHECKPOINT_EVERY_SECTIONS
+        ):
+            write_checkpoint_outputs(
+                completed_row_ids,
+                section_records,
+                chunk_results_by_row_id,
+                chunk_output_rows,
+                prior_section_checkpoint=prior_section_checkpoint,
+                prior_chunk_checkpoint=prior_chunk_checkpoint,
+            )
+            last_checkpoint_completed_sections = len(completed_row_ids)
 
-    output_rows = []
-    for row_id in section_rows["classifier_row_id"].astype(int):
-        row = section_records[int(row_id)]["row"]
-        chunk_results = chunk_results_by_row_id[int(row_id)]
-        section_result = combine_chunk_results(chunk_results)
-
-        output_row = {
-            "classifier_row_id": int(row["classifier_row_id"]),
-            "cohort": row["cohort"],
-            "subject_id": row["subject_id"],
-            "hadm_id": row["hadm_id"],
-            "note_id": row["note_id"],
-            "charttime": row["charttime"],
-            "section_name": row["section_name"],
-            "section_char_length": len(row["section_text"]),
-            "section_word_count": len(row["section_text"].split()),
-            "n_psych_keyword_hits": row.get("n_psych_keyword_hits", None),
-            "psych_keyword_groups": row.get("psych_keyword_groups", ""),
-            "matched_terms": row.get("matched_terms", ""),
-            **section_result,
-            "model_name": effective_model_name(),
-        }
-        output_rows.append(output_row)
+    output_rows = build_section_output_rows(
+        section_rows["classifier_row_id"].astype(int).tolist(),
+        section_records,
+        chunk_results_by_row_id,
+    )
 
     elapsed = time.monotonic() - section_start_time
     print(
@@ -667,6 +1111,8 @@ def write_outputs(
 ) -> None:
     """Write section-level classifier results and compact summaries."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    results = normalize_output_table(results)
+    chunk_results = normalize_output_table(chunk_results)
     results.to_parquet(OUTPUT_DIR / "psych_history_section_classifier_results.parquet", index=False)
     results.to_csv(OUTPUT_DIR / "psych_history_section_classifier_results.csv", index=False)
     chunk_results.to_parquet(
@@ -727,7 +1173,16 @@ def main() -> None:
     run_start_time = time.monotonic()
     validate_input_path()
     section_rows = load_section_rows()
+    resume_results, resume_chunk_results, completed_resume_ids = load_resume_checkpoint(
+        section_rows
+    )
+    rows_to_classify = section_rows.loc[
+        ~section_rows["classifier_row_id"].astype(int).isin(completed_resume_ids)
+    ].copy()
     print(f"Loaded {len(section_rows)} non-empty section rows from: {INPUT_PATH}")
+    if completed_resume_ids:
+        print(f"Rows remaining after checkpoint resume: {len(rows_to_classify)}")
+    print(f"Using psych-history prompt version: {PROMPT_VERSION}")
     print(f"Using psych-history backend: {BACKEND}")
     if BACKEND == "transformers":
         print(f"Using Hugging Face model: {HF_MODEL_ID}")
@@ -736,9 +1191,35 @@ def main() -> None:
         print(f"Using local Ollama model: {MODEL_NAME}")
     print(f"Chunking sections at {CHUNK_WORDS} words with {CHUNK_OVERLAP_WORDS} word overlap")
     print(f"Transformers batch size: {BATCH_SIZE}")
+    print(f"Checkpoint every completed sections: {CHECKPOINT_EVERY_SECTIONS}")
+    print(
+        "Output text caps: "
+        f"evidence_span <= {MAX_EVIDENCE_WORDS} words/{MAX_EVIDENCE_CHARS} chars, "
+        f"reason <= {MAX_REASON_WORDS} words/{MAX_REASON_CHARS} chars"
+    )
     print(f"Run started at: {run_started_at}")
     check_model_available()
-    results, chunk_results = classify_sections(section_rows)
+    if rows_to_classify.empty:
+        results = resume_results.copy()
+        chunk_results = resume_chunk_results.copy()
+        print("All current input rows were already present in the checkpoint.")
+    else:
+        new_results, new_chunk_results = classify_sections(
+            rows_to_classify,
+            prior_section_checkpoint=resume_results,
+            prior_chunk_checkpoint=resume_chunk_results,
+        )
+        results = pd.concat([resume_results, new_results], ignore_index=True)
+        chunk_results = pd.concat(
+            [resume_chunk_results, new_chunk_results],
+            ignore_index=True,
+        )
+        if not results.empty and "classifier_row_id" in results.columns:
+            results = results.sort_values("classifier_row_id").reset_index(drop=True)
+        if not chunk_results.empty and "classifier_row_id" in chunk_results.columns:
+            chunk_results = chunk_results.sort_values(
+                ["classifier_row_id", "chunk_index"]
+            ).reset_index(drop=True)
     elapsed_seconds = time.monotonic() - run_start_time
     run_metadata = {
         "run_started_at": run_started_at,
@@ -746,6 +1227,7 @@ def main() -> None:
         "elapsed_seconds": round(elapsed_seconds, 3),
         "elapsed": format_duration(elapsed_seconds),
         "backend": BACKEND,
+        "prompt_version": PROMPT_VERSION,
         "model_name": MODEL_NAME,
         "hf_model_id": HF_MODEL_ID,
         "hf_device_map": HF_DEVICE_MAP,
@@ -756,6 +1238,14 @@ def main() -> None:
         "chunk_words": CHUNK_WORDS,
         "chunk_overlap_words": CHUNK_OVERLAP_WORDS,
         "batch_size": BATCH_SIZE,
+        "checkpoint_every_sections": CHECKPOINT_EVERY_SECTIONS,
+        "resume_from_checkpoint": RESUME_FROM_CHECKPOINT,
+        "n_resume_section_rows": len(resume_results),
+        "n_rows_classified_this_run": len(rows_to_classify),
+        "max_evidence_words": MAX_EVIDENCE_WORDS,
+        "max_reason_words": MAX_REASON_WORDS,
+        "max_evidence_chars": MAX_EVIDENCE_CHARS,
+        "max_reason_chars": MAX_REASON_CHARS,
         "n_section_rows": len(results),
         "n_chunk_rows": len(chunk_results),
         "n_admissions": int(results[["cohort", "subject_id", "hadm_id"]].drop_duplicates().shape[0]),
