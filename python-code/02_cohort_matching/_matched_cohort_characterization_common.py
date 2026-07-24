@@ -403,6 +403,165 @@ def build_optional_category_distribution(
     ].sort_values(["source_table", "variable", "cohort", "n_rows"], ascending=[True, True, True, False])
 
 
+def build_admissions_per_subject_summary(matched_ids: pd.DataFrame) -> pd.DataFrame:
+    """Summarize repeated admissions per subject by cohort."""
+    admissions_per_subject = (
+        matched_ids.groupby(["cohort", "subject_id"], as_index=False)
+        .agg(n_matched_admissions=("hadm_id", "nunique"))
+    )
+    rows = []
+    for cohort, group in admissions_per_subject.groupby("cohort"):
+        values = group["n_matched_admissions"]
+        rows.append(
+            {
+                "cohort": cohort,
+                "n_subjects": len(values),
+                "n_admissions": int(values.sum()),
+                "mean_admissions_per_subject": values.mean(),
+                "sd_admissions_per_subject": values.std(ddof=1),
+                "median_admissions_per_subject": values.median(),
+                "q1_admissions_per_subject": values.quantile(0.25),
+                "q3_admissions_per_subject": values.quantile(0.75),
+                "max_admissions_per_subject": values.max(),
+                "n_subjects_with_1_admission": int(values.eq(1).sum()),
+                "n_subjects_with_multiple_admissions": int(values.gt(1).sum()),
+                "pct_subjects_with_multiple_admissions": 100.0 * values.gt(1).mean(),
+            }
+        )
+    return pd.DataFrame(rows).sort_values("cohort")
+
+
+def choose_subject_category(values: pd.Series) -> str:
+    """Collapse admission-level categories to one subject-level category."""
+    normalized = values.fillna("missing").astype(str).str.strip()
+    normalized.loc[normalized.eq("")] = "missing"
+    unique_values = sorted(set(normalized))
+    if len(unique_values) == 1:
+        return unique_values[0]
+    nonmissing_values = [value for value in unique_values if value != "missing"]
+    if len(nonmissing_values) == 1:
+        return nonmissing_values[0]
+    if len(nonmissing_values) == 0:
+        return "missing"
+    return "multiple_values"
+
+
+def build_subject_categorical_distribution(descriptors: pd.DataFrame) -> pd.DataFrame:
+    """Build subject-level n/% tables for categorical descriptors."""
+    available_columns = [
+        column for column in CATEGORICAL_DESCRIPTOR_COLUMNS if column in descriptors.columns
+    ]
+    if not available_columns:
+        return pd.DataFrame(
+            columns=["variable", "cohort", "category", "n_subjects", "pct_within_cohort"]
+        )
+
+    rows = []
+    for variable in available_columns:
+        collapsed = (
+            descriptors.groupby(["cohort", "subject_id"])[variable]
+            .agg(choose_subject_category)
+            .reset_index(name="category")
+        )
+        denominators = collapsed.groupby("cohort")["subject_id"].nunique().to_dict()
+        counts = (
+            collapsed.groupby(["cohort", "category"], as_index=False)["subject_id"]
+            .nunique()
+            .rename(columns={"subject_id": "n_subjects"})
+        )
+        counts["variable"] = variable
+        counts["pct_within_cohort"] = counts.apply(
+            lambda row: 100.0
+            * row["n_subjects"]
+            / denominators.get(row["cohort"], 0),
+            axis=1,
+        )
+        rows.append(counts)
+    return pd.concat(rows, ignore_index=True).loc[
+        :, ["variable", "cohort", "category", "n_subjects", "pct_within_cohort"]
+    ].sort_values(["variable", "cohort", "n_subjects"], ascending=[True, True, False])
+
+
+def build_subject_categorical_balance(
+    subject_categorical_distribution: pd.DataFrame,
+) -> pd.DataFrame:
+    """Pivot subject-level categorical percentages by cohort."""
+    if subject_categorical_distribution.empty:
+        return subject_categorical_distribution.copy()
+    pivot = subject_categorical_distribution.pivot_table(
+        index=["variable", "category"],
+        columns="cohort",
+        values=["n_subjects", "pct_within_cohort"],
+        fill_value=0,
+        aggfunc="sum",
+    )
+    pivot.columns = [
+        f"{metric}_{cohort}".lower()
+        for metric, cohort in pivot.columns.to_flat_index()
+    ]
+    pivot = pivot.reset_index()
+    mhh_pct = "pct_within_cohort_mhh1_psychotic"
+    mhc0_pct = "pct_within_cohort_mhc0"
+    if mhh_pct in pivot.columns and mhc0_pct in pivot.columns:
+        pivot["pct_point_difference_mhh1_minus_mhc0"] = pivot[mhh_pct] - pivot[mhc0_pct]
+    return pivot.sort_values(["variable", "category"])
+
+
+def build_subject_utilization_counts(
+    utilization_counts_by_admission: pd.DataFrame,
+) -> pd.DataFrame:
+    """Collapse admission-level utilization counts to subject-level measures."""
+    count_columns = [
+        column
+        for column in utilization_counts_by_admission.columns
+        if column.startswith("n_") and column.endswith("_rows")
+    ]
+    grouped = utilization_counts_by_admission.groupby(
+        ["cohort", "subject_id"],
+        as_index=False,
+    )
+    subject_counts = grouped.agg(n_matched_admissions=("hadm_id", "nunique"))
+    for column in count_columns:
+        totals = grouped[column].sum().rename(columns={column: f"total_{column}"})
+        means = grouped[column].mean().rename(columns={column: f"mean_{column}_per_admission"})
+        subject_counts = subject_counts.merge(totals, on=["cohort", "subject_id"])
+        subject_counts = subject_counts.merge(means, on=["cohort", "subject_id"])
+    return subject_counts.sort_values(["cohort", "subject_id"]).reset_index(drop=True)
+
+
+def build_subject_utilization_summary(
+    subject_utilization_counts: pd.DataFrame,
+) -> pd.DataFrame:
+    """Summarize subject-level utilization measures by cohort."""
+    measure_columns = [
+        column
+        for column in subject_utilization_counts.columns
+        if column not in {"cohort", "subject_id"}
+    ]
+    rows = []
+    for cohort, group in subject_utilization_counts.groupby("cohort"):
+        for column in measure_columns:
+            values = group[column]
+            rows.append(
+                {
+                    "cohort": cohort,
+                    "measure": column,
+                    "n_subjects": len(values),
+                    "mean": values.mean(),
+                    "sd": values.std(ddof=1),
+                    "median": values.median(),
+                    "q1": values.quantile(0.25),
+                    "q3": values.quantile(0.75),
+                    "iqr": values.quantile(0.75) - values.quantile(0.25),
+                    "min": values.min(),
+                    "max": values.max(),
+                    "n_with_any": int(values.gt(0).sum()),
+                    "pct_with_any": 100.0 * values.gt(0).mean(),
+                }
+            )
+    return pd.DataFrame(rows).sort_values(["measure", "cohort"])
+
+
 def write_outputs(
     descriptor_completeness: pd.DataFrame,
     categorical_distribution: pd.DataFrame,
@@ -410,6 +569,11 @@ def write_outputs(
     utilization_counts: pd.DataFrame,
     utilization_summary: pd.DataFrame,
     optional_category_distribution: pd.DataFrame,
+    admissions_per_subject_summary: pd.DataFrame,
+    subject_categorical_distribution: pd.DataFrame,
+    subject_categorical_balance: pd.DataFrame,
+    subject_utilization_counts: pd.DataFrame,
+    subject_utilization_summary: pd.DataFrame,
 ) -> None:
     """Write characterization aggregate outputs."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -437,6 +601,26 @@ def write_outputs(
         OUTPUT_DIR / "matched_cohort_optional_category_distribution.csv",
         index=False,
     )
+    admissions_per_subject_summary.to_csv(
+        OUTPUT_DIR / "matched_cohort_admissions_per_subject_summary.csv",
+        index=False,
+    )
+    subject_categorical_distribution.to_csv(
+        OUTPUT_DIR / "matched_cohort_subject_categorical_distribution.csv",
+        index=False,
+    )
+    subject_categorical_balance.to_csv(
+        OUTPUT_DIR / "matched_cohort_subject_categorical_balance.csv",
+        index=False,
+    )
+    subject_utilization_counts.to_csv(
+        OUTPUT_DIR / "matched_cohort_subject_utilization_counts.csv",
+        index=False,
+    )
+    subject_utilization_summary.to_csv(
+        OUTPUT_DIR / "matched_cohort_subject_utilization_summary.csv",
+        index=False,
+    )
 
 
 def main() -> None:
@@ -457,6 +641,17 @@ def main() -> None:
     categorical_balance = build_categorical_balance(categorical_distribution)
     utilization_counts = build_event_counts_by_admission(matched_ids, event_tables)
     utilization_summary = build_utilization_summary(utilization_counts)
+    admissions_per_subject_summary = build_admissions_per_subject_summary(matched_ids)
+    subject_categorical_distribution = build_subject_categorical_distribution(
+        descriptors
+    )
+    subject_categorical_balance = build_subject_categorical_balance(
+        subject_categorical_distribution
+    )
+    subject_utilization_counts = build_subject_utilization_counts(utilization_counts)
+    subject_utilization_summary = build_subject_utilization_summary(
+        subject_utilization_counts
+    )
     optional_category_distribution = pd.concat(
         [
             build_optional_category_distribution(
@@ -485,6 +680,11 @@ def main() -> None:
         utilization_counts,
         utilization_summary,
         optional_category_distribution,
+        admissions_per_subject_summary,
+        subject_categorical_distribution,
+        subject_categorical_balance,
+        subject_utilization_counts,
+        subject_utilization_summary,
     )
 
     print(f"Read DBeaver exports from: {INPUT_DIR}")
@@ -493,6 +693,10 @@ def main() -> None:
     print(descriptor_completeness.to_string(index=False))
     print("\n=== Utilization Summary ===")
     print(utilization_summary.to_string(index=False))
+    print("\n=== Admissions Per Subject Summary ===")
+    print(admissions_per_subject_summary.to_string(index=False))
+    print("\n=== Subject-Level Utilization Summary ===")
+    print(subject_utilization_summary.to_string(index=False))
 
 
 if __name__ == "__main__":
