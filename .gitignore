@@ -41,6 +41,8 @@ python-code/02_cohort_matching/01_elixhauser/elixhauser_scores_output/
 python-code/02_cohort_matching/02_matching_variables/matching_variable_tables_output/
 python-code/02_cohort_matching/matched_cohort_output/
 python-code/02_cohort_matching/analysis_output_matched_cohort/
+python-code/02_cohort_matching/analysis_output_matched_cohort_characterization/
+python-code/02_cohort_matching/matched_cohort_dbeaver_exports/
 python-code/04_LLM_flagging/analysis_output_psych_keyword_exploration/
 python-code/04_LLM_flagging/psych_history_classifier_output/
 python-code/04_discharge_note_text_analysis/analysis_output_psych_keyword_exploration/
@@ -67,4 +69,3 @@ python-code/html-visualization/
 DataBase_copy
 python-code/DataBase_copy
 **/DataBase_copy
-sql-scripts/.DS_Store
