@@ -43,10 +43,22 @@ INPUT_DIR = Path(
         str(SCRIPT_DIR / "matched_cohort_dbeaver_exports"),
     )
 )
-OUTPUT_DIR = Path(
+BASE_OUTPUT_DIR = Path(
     os.environ.get(
         "MATCHED_COHORT_CHARACTERIZATION_OUTPUT_DIR",
         str(SCRIPT_DIR / "analysis_output_matched_cohort_characterization"),
+    )
+)
+ADMISSION_LEVEL_OUTPUT_DIR = Path(
+    os.environ.get(
+        "MATCHED_COHORT_ADMISSION_CHARACTERIZATION_OUTPUT_DIR",
+        str(SCRIPT_DIR / "analysis_output_matched_cohort_characterization_admission_level"),
+    )
+)
+SUBJECT_LEVEL_OUTPUT_DIR = Path(
+    os.environ.get(
+        "MATCHED_COHORT_SUBJECT_CHARACTERIZATION_OUTPUT_DIR",
+        str(SCRIPT_DIR / "analysis_output_matched_cohort_characterization_subject_level"),
     )
 )
 

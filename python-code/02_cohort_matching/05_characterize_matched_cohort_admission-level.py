@@ -14,6 +14,7 @@ import _matched_cohort_characterization_common as common
 
 def main() -> None:
     """Write admission-level matched-cohort characterization outputs."""
+    output_dir = common.ADMISSION_LEVEL_OUTPUT_DIR
     matched_ids = common.load_expected_matched_ids()
     descriptors = common.add_derived_descriptor_columns(
         common.validate_id_columns(
@@ -60,33 +61,33 @@ def main() -> None:
         ignore_index=True,
     )
 
-    common.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     descriptor_completeness.to_csv(
-        common.OUTPUT_DIR / "matched_cohort_descriptor_completeness.csv",
+        output_dir / "matched_cohort_descriptor_completeness.csv",
         index=False,
     )
     categorical_distribution.to_csv(
-        common.OUTPUT_DIR / "matched_cohort_categorical_distribution.csv",
+        output_dir / "matched_cohort_categorical_distribution.csv",
         index=False,
     )
     categorical_balance.to_csv(
-        common.OUTPUT_DIR / "matched_cohort_categorical_balance.csv",
+        output_dir / "matched_cohort_categorical_balance.csv",
         index=False,
     )
     utilization_counts.to_csv(
-        common.OUTPUT_DIR / "matched_cohort_utilization_counts_by_admission.csv",
+        output_dir / "matched_cohort_utilization_counts_by_admission.csv",
         index=False,
     )
     utilization_summary.to_csv(
-        common.OUTPUT_DIR / "matched_cohort_utilization_summary.csv",
+        output_dir / "matched_cohort_utilization_summary.csv",
         index=False,
     )
     optional_category_distribution.to_csv(
-        common.OUTPUT_DIR / "matched_cohort_optional_category_distribution.csv",
+        output_dir / "matched_cohort_optional_category_distribution.csv",
         index=False,
     )
 
-    print(f"Saved admission-level characterization outputs to: {common.OUTPUT_DIR}")
+    print(f"Saved admission-level characterization outputs to: {output_dir}")
     print("\n=== Descriptor Completeness ===")
     print(descriptor_completeness.to_string(index=False))
     print("\n=== Admission-Level Utilization Summary ===")
