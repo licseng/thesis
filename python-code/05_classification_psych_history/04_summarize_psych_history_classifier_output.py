@@ -40,6 +40,11 @@ SUMMARY_OUTPUT_DIR = Path(
         str(CLASSIFIER_OUTPUT_DIR / "summary_output"),
     )
 )
+EXCLUDED_SECTIONS = {
+    item.strip()
+    for item in os.environ.get("PSYCH_HISTORY_SUMMARY_EXCLUDE_SECTIONS", "").split(",")
+    if item.strip()
+}
 
 FILTER_SUMMARY_PATH = (
     SCRIPT_DIR / "psych_history_llm_input" / "filtered_psych_keyword_filter_summary.csv"
@@ -118,6 +123,44 @@ def load_filter_metadata() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return filter_summary, filter_metadata, filter_admissions
 
 
+def apply_section_exclusions(
+    section_results: pd.DataFrame,
+    filter_metadata: pd.DataFrame,
+    filter_summary: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Drop excluded sections from summary denominators."""
+    if not EXCLUDED_SECTIONS:
+        return section_results, filter_metadata, filter_summary
+
+    section_results = section_results.loc[
+        ~section_results["section_name"].isin(EXCLUDED_SECTIONS)
+    ].copy()
+    filter_metadata = filter_metadata.loc[
+        ~filter_metadata["section_name"].isin(EXCLUDED_SECTIONS)
+    ].copy()
+    filter_summary = filter_summary.loc[
+        ~filter_summary["section_name"].isin(EXCLUDED_SECTIONS)
+    ].copy()
+    return section_results, filter_metadata, filter_summary
+
+
+def rebuild_admission_results(section_results: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate section labels to admission level from the current section rows."""
+    section_results = section_results.assign(
+        is_positive=section_results["psychiatric_context_label"].eq("positive")
+    )
+    return (
+        section_results.groupby(["cohort", "subject_id", "hadm_id"], as_index=False)
+        .agg(
+            n_sections_classified=("classifier_row_id", "size"),
+            n_positive_sections=("is_positive", "sum"),
+            n_negative_sections=("is_positive", lambda values: int((~values).sum())),
+            any_positive=("is_positive", "any"),
+        )
+        .sort_values(["cohort", "subject_id", "hadm_id"])
+    )
+
+
 def build_completeness_summary(
     section_results: pd.DataFrame,
     chunk_results_available: bool,
@@ -140,6 +183,7 @@ def build_completeness_summary(
                 "n_missing_expected_section_ids": len(missing_ids),
                 "n_extra_section_ids_not_in_input": len(extra_ids),
                 "chunk_result_file_available": chunk_results_available,
+                "excluded_sections": " | ".join(sorted(EXCLUDED_SECTIONS)),
             }
         ]
     )
@@ -155,15 +199,26 @@ def build_overall_summary(
     overall_filter = filter_summary.loc[
         filter_summary["section_name"].eq("any_selected_section")
     ]
-    if overall_filter.empty:
+    if not EXCLUDED_SECTIONS and overall_filter.empty:
         raise ValueError("Filter summary has no any_selected_section row.")
-    overall_filter_row = overall_filter.iloc[0]
-
-    n_filtered_admissions = int(
-        overall_filter_row["n_admissions_with_keyword_positive_section"]
-    )
-    n_all_mhh1_admissions = int(overall_filter_row["n_admissions"])
-    n_filtered_sections = int(overall_filter_row["n_keyword_positive_section_rows"])
+    if EXCLUDED_SECTIONS:
+        filter_rows = filter_summary.loc[
+            ~filter_summary["section_name"].eq("any_selected_section")
+        ]
+        n_filtered_admissions = int(filter_admissions["hadm_id"].nunique())
+        n_all_mhh1_admissions = (
+            int(overall_filter.iloc[0]["n_admissions"])
+            if not overall_filter.empty
+            else int(filter_admissions["hadm_id"].nunique())
+        )
+        n_filtered_sections = int(filter_rows["n_keyword_positive_section_rows"].sum())
+    else:
+        overall_filter_row = overall_filter.iloc[0]
+        n_filtered_admissions = int(
+            overall_filter_row["n_admissions_with_keyword_positive_section"]
+        )
+        n_all_mhh1_admissions = int(overall_filter_row["n_admissions"])
+        n_filtered_sections = int(overall_filter_row["n_keyword_positive_section_rows"])
     n_classified_sections = len(section_results)
     n_classified_admissions = len(admission_results)
     n_positive_sections = int(
@@ -380,6 +435,13 @@ def main() -> None:
     """Write whole-run aggregate classifier summaries."""
     section_results, admission_results = load_classifier_outputs()
     filter_summary, filter_metadata, filter_admissions = load_filter_metadata()
+    section_results, filter_metadata, filter_summary = apply_section_exclusions(
+        section_results,
+        filter_metadata,
+        filter_summary,
+    )
+    if EXCLUDED_SECTIONS:
+        admission_results = rebuild_admission_results(section_results)
     chunk_results_available = (
         CLASSIFIER_OUTPUT_DIR / "psych_history_section_chunk_classifier_results.csv"
     ).exists()
@@ -433,6 +495,8 @@ def main() -> None:
 
     print(f"Summarized classifier output from: {CLASSIFIER_OUTPUT_DIR}")
     print(f"Saved aggregate summaries to: {SUMMARY_OUTPUT_DIR}")
+    if EXCLUDED_SECTIONS:
+        print(f"Excluded section(s): {', '.join(sorted(EXCLUDED_SECTIONS))}")
     print("\n=== Completeness ===")
     print(completeness_summary.to_string(index=False))
     print("\n=== Overall ===")
