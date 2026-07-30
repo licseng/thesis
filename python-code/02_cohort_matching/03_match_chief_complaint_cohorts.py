@@ -2,16 +2,16 @@
 
 This script matches each exposed `MHH_psychotic` admission to at most one
 `only_MHC0` control admission without replacement. The primary matching signal
-is chief-complaint embedding similarity. Sex, age bin, QuickUMLS concept overlap,
-and Elixhauser score are used as candidate restrictions or calipers before the
-final control is selected.
+is chief-complaint embedding similarity. Sex, insurance group, age bin,
+QuickUMLS concept overlap, and Elixhauser score are used as candidate
+restrictions or calipers before the final control is selected.
 
 Matching order:
     1. Load admission-level matching-variable tables.
     2. Validate sex, age, Elixhauser, embedding row IDs, and embedding paths.
-    3. Build control indexes within sex + age-bin strata.
-    4. For each exposed admission, search same-sex controls in the same age bin
-       plus neighboring bins.
+    3. Build control indexes within sex + insurance-group + age-bin strata.
+    4. For each exposed admission, search controls with the same sex and
+       insurance group in the same age bin plus neighboring bins.
     5. Optionally restrict candidate controls to those sharing QuickUMLS terms.
     6. Retrieve nearest controls by BERT embedding cosine distance.
     7. Remove already-used controls.
@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
+import re
 
 import numpy as np
 import pandas as pd
@@ -53,6 +54,7 @@ MHC0_INPUT = MATCHING_VARIABLE_DIR / "only_MHC0_matching_variables.parquet"
 # Matching configuration.
 K_NEIGHBORS = 100
 MIN_COSINE_SIMILARITY = 0.90
+FALLBACK_MIN_COSINE_SIMILARITY = 0.93
 COSINE_TIE_TOLERANCE = 0.01
 AGE_BIN_NEIGHBOR_RADIUS = 1
 
@@ -62,14 +64,20 @@ AGE_BIN_NEIGHBOR_RADIUS = 1
 # the admission matchable using the older sex/nearby-age-bin embedding search.
 USE_QUICKUMLS_CANDIDATE_FILTER = True
 MIN_SHARED_QUICKUMLS_TERMS = 1
-MIN_QUICKUMLS_JACCARD = 0.0
+MIN_QUICKUMLS_JACCARD = 0.2
 FALL_BACK_TO_NO_QUICKUMLS_FILTER = True
+
+# Matching uses a derived overlap representation rather than only exact
+# QuickUMLS concept strings. Example: "breast microcalcifications" contributes
+# "breast microcalcifications", "breast", and "microcalcifications". Original
+# QuickUMLS strings are still preserved in the output for audit.
+EXPAND_QUICKUMLS_TERMS_FOR_OVERLAP = True
 
 # Elixhauser score calipers. Strict matches use the primary caliper; if enabled,
 # relaxed matches can use a wider caliper.
-ELIXHAUSER_CALIPER = 5
+ELIXHAUSER_CALIPER = 2
 ALLOW_RELAXED_ELIXHAUSER = True
-RELAXED_ELIXHAUSER_CALIPER = 10
+RELAXED_ELIXHAUSER_CALIPER = 5
 RANDOM_SEED = 42
 
 # Age bins used during candidate restriction. `AGE_BIN_NEIGHBOR_RADIUS = 1`
@@ -85,11 +93,12 @@ REQUIRED_COLUMNS = {
     "embedding_file",
     "age_at_admission",
     "sex",
+    "insurance_group",
     "elixhauser_score",
 }
 
 UNMATCHED_REASONS = [
-    "no_same_sex_nearby_age_bin_candidates",
+    "no_same_sex_insurance_nearby_age_bin_candidates",
     "no_quickumls_overlap_candidates",
     "no_available_controls",
     "below_similarity_threshold",
@@ -150,8 +159,7 @@ def nearby_age_bins(age_bin: str) -> list[str]:
     return AGE_BIN_ORDER[start:end]
 
 
-# Parse pipe-separated QuickUMLS term strings into lowercase sets for overlap
-# and Jaccard calculations.
+# Parse pipe-separated QuickUMLS term strings into lowercase sets.
 def split_quickumls_terms(value: object) -> set[str]:
     if pd.isna(value):
         return set()
@@ -160,6 +168,31 @@ def split_quickumls_terms(value: object) -> set[str]:
         for term in str(value).split("|")
         if term.strip()
     }
+
+
+# Return derived matching terms from the original QuickUMLS concept strings.
+def derive_quickumls_overlap_terms(value: object) -> set[str]:
+    terms = split_quickumls_terms(value)
+    if not EXPAND_QUICKUMLS_TERMS_FOR_OVERLAP:
+        return terms
+
+    derived = set(terms)
+    for term in terms:
+        if term.startswith("negated:"):
+            prefix = "negated:"
+            base_term = term.removeprefix(prefix)
+        else:
+            prefix = ""
+            base_term = term
+
+        components = [
+            token
+            for token in re.split(r"[^a-z0-9]+", base_term.lower())
+            if token
+        ]
+        derived.update(f"{prefix}{component}" for component in components)
+
+    return derived
 
 
 # Calculate shared QuickUMLS term count and Jaccard similarity between one
@@ -175,6 +208,14 @@ def quickumls_overlap_stats(
     union_terms = exposed_terms | control_terms
     jaccard = len(shared_terms) / len(union_terms) if union_terms else 0.0
     return len(shared_terms), jaccard
+
+
+# Format the exact QuickUMLS terms shared by one exposed/control pair.
+def format_shared_quickumls_terms(
+    exposed_terms: set[str],
+    control_terms: set[str],
+) -> str:
+    return " | ".join(sorted(exposed_terms & control_terms))
 
 
 # Return True if a control passes the optional QuickUMLS candidate screen.
@@ -240,9 +281,15 @@ def prepare_matching_table(df: pd.DataFrame, path: Path) -> tuple[pd.DataFrame, 
     after["embedding_row_id"] = after["embedding_row_id"].astype(np.int64)
     after["elixhauser_score"] = after["elixhauser_score"].astype(float)
     if "quickumls_terms" in after.columns:
-        after["_quickumls_term_set"] = after["quickumls_terms"].map(split_quickumls_terms)
+        after["_quickumls_original_term_set"] = after["quickumls_terms"].map(
+            split_quickumls_terms
+        )
+        after["_quickumls_overlap_term_set"] = after["quickumls_terms"].map(
+            derive_quickumls_overlap_terms
+        )
     else:
-        after["_quickumls_term_set"] = [set() for _ in range(len(after))]
+        after["_quickumls_original_term_set"] = [set() for _ in range(len(after))]
+        after["_quickumls_overlap_term_set"] = [set() for _ in range(len(after))]
 
     print(
         f"{path.name}: {before_count:,} rows before validation, "
@@ -286,15 +333,17 @@ def load_embeddings_for_rows(
     return aligned_df, aligned_embeddings
 
 
-# Build a nearest-neighbor index for each control sex + age-bin stratum. The
-# final matching search combines the exposed admission's same/neighboring age
-# strata, while keeping sex exact.
+# Build a nearest-neighbor index for each control sex + insurance + age-bin
+# stratum. The final matching search combines the exposed admission's
+# same/neighboring age strata, while keeping sex and insurance group exact.
 def build_stratified_indexes(
     controls: pd.DataFrame,
     control_embeddings: np.ndarray,
 ) -> dict[tuple[str, str], dict[str, object]]:
     indexes = {}
-    for stratum, row_indexes in controls.groupby(["sex", "age_bin"]).groups.items():
+    for stratum, row_indexes in controls.groupby(
+        ["sex", "insurance_group", "age_bin"]
+    ).groups.items():
         positions = np.array(list(row_indexes), dtype=np.int64)
         stratum_embeddings = control_embeddings[positions]
         model = NearestNeighbors(metric="cosine")
@@ -311,27 +360,28 @@ def build_stratified_indexes(
     return indexes
 
 
-# Count the size of each exposed admission's same-sex + nearby-age-bin candidate
-# pool. This lets the greedy matcher process harder-to-match admissions first.
+# Count the size of each exposed admission's same-sex + same-insurance +
+# nearby-age-bin candidate pool. This lets the greedy matcher process
+# harder-to-match admissions first.
 def compute_candidate_pool_sizes(
     exposed: pd.DataFrame,
     controls: pd.DataFrame,
 ) -> pd.DataFrame:
     pool_sizes = (
-        controls.groupby(["sex", "age_bin"])
+        controls.groupby(["sex", "insurance_group", "age_bin"])
         .size()
         .rename("candidate_pool_size")
         .reset_index()
     )
     pool_lookup = {
-        (row.sex, row.age_bin): int(row.candidate_pool_size)
+        (row.sex, row.insurance_group, row.age_bin): int(row.candidate_pool_size)
         for row in pool_sizes.itertuples(index=False)
     }
 
     exposed = exposed.copy()
     exposed["candidate_pool_size"] = exposed.apply(
         lambda row: sum(
-            pool_lookup.get((row["sex"], age_bin), 0)
+            pool_lookup.get((row["sex"], row["insurance_group"], age_bin), 0)
             for age_bin in nearby_age_bins(row["age_bin"])
         ),
         axis=1,
@@ -347,7 +397,7 @@ def choose_best_candidate(
     caliper: float,
 ) -> pd.Series | None:
     eligible = candidates.loc[
-        (candidates["cosine_similarity"] >= MIN_COSINE_SIMILARITY)
+        (candidates["cosine_similarity"] > MIN_COSINE_SIMILARITY)
         & (candidates["abs_elixhauser_difference"] <= caliper)
     ].copy()
     if eligible.empty:
@@ -423,7 +473,7 @@ def query_existing_index(
 def find_match_for_row(
     mhh_row: pd.Series,
     mhh_embedding: np.ndarray,
-    indexes: dict[tuple[str, str], dict[str, object]],
+    indexes: dict[tuple[str, str, str], dict[str, object]],
     used_control_keys: set[tuple[int, int]],
 ) -> tuple[dict[str, object] | None, str | None]:
     age_bins = nearby_age_bins(mhh_row["age_bin"])
@@ -433,7 +483,7 @@ def find_match_for_row(
     used_quickumls_filter_fallback = False
 
     for age_bin in age_bins:
-        stratum = (mhh_row["sex"], age_bin)
+        stratum = (mhh_row["sex"], mhh_row["insurance_group"], age_bin)
         if stratum not in indexes:
             continue
 
@@ -447,8 +497,8 @@ def find_match_for_row(
         fallback_strata.append((controls, model))
 
         if USE_QUICKUMLS_CANDIDATE_FILTER:
-            exposed_terms = mhh_row["_quickumls_term_set"]
-            quickumls_filter = controls["_quickumls_term_set"].map(
+            exposed_terms = mhh_row["_quickumls_overlap_term_set"]
+            quickumls_filter = controls["_quickumls_overlap_term_set"].map(
                 lambda control_terms: passes_quickumls_candidate_filter(
                     exposed_terms,
                     control_terms,
@@ -471,7 +521,7 @@ def find_match_for_row(
 
     if not candidate_parts:
         if not fallback_strata:
-            return None, "no_same_sex_nearby_age_bin_candidates"
+            return None, "no_same_sex_insurance_nearby_age_bin_candidates"
         if not FALL_BACK_TO_NO_QUICKUMLS_FILTER:
             return None, "no_quickumls_overlap_candidates"
 
@@ -494,9 +544,9 @@ def find_match_for_row(
     candidate_rows["age_bin_distance"] = candidate_rows["age_bin"].map(
         lambda value: abs(AGE_BIN_ORDER.index(value) - age_bin_position)
     )
-    overlap_stats = candidate_rows["_quickumls_term_set"].map(
+    overlap_stats = candidate_rows["_quickumls_overlap_term_set"].map(
         lambda control_terms: quickumls_overlap_stats(
-            mhh_row["_quickumls_term_set"],
+            mhh_row["_quickumls_overlap_term_set"],
             control_terms,
         )
     )
@@ -514,8 +564,13 @@ def find_match_for_row(
     if available.empty:
         return None, "no_available_controls"
 
+    min_cosine_similarity = (
+        FALLBACK_MIN_COSINE_SIMILARITY
+        if used_quickumls_filter_fallback
+        else MIN_COSINE_SIMILARITY
+    )
     similarity_filtered = available.loc[
-        available["cosine_similarity"] >= MIN_COSINE_SIMILARITY
+        available["cosine_similarity"] > min_cosine_similarity
     ].copy()
     if similarity_filtered.empty:
         return None, "below_similarity_threshold"
@@ -543,6 +598,10 @@ def pair_record(
     match_type: str,
 ) -> dict[str, object]:
     cosine_similarity = float(control_row["cosine_similarity"])
+    shared_quickumls_terms = format_shared_quickumls_terms(
+        mhh_row["_quickumls_overlap_term_set"],
+        control_row["_quickumls_overlap_term_set"],
+    )
     return {
         "pair_id": pair_id,
         "mhh_subject_id": mhh_row["subject_id"],
@@ -550,8 +609,17 @@ def pair_record(
         "mhh_chief_complaint_raw": mhh_row.get("chief_complaint_raw"),
         "mhh_chief_complaint_normalized": mhh_row.get("chief_complaint_normalized"),
         "mhh_quickumls_terms": mhh_row.get("quickumls_terms"),
+        "mhh_quickumls_term_count": len(mhh_row["_quickumls_original_term_set"]),
+        "mhh_derived_quickumls_overlap_terms": " | ".join(
+            sorted(mhh_row["_quickumls_overlap_term_set"])
+        ),
+        "mhh_derived_quickumls_overlap_term_count": len(
+            mhh_row["_quickumls_overlap_term_set"]
+        ),
         "mhh_quickumls_extracted_text": mhh_row.get("quickumls_extracted_text"),
         "mhh_sex": mhh_row["sex"],
+        "mhh_insurance": mhh_row.get("insurance"),
+        "mhh_insurance_group": mhh_row["insurance_group"],
         "mhh_age_at_admission": mhh_row["age_at_admission"],
         "mhh_age_bin": mhh_row["age_bin"],
         "mhh_elixhauser_score": mhh_row["elixhauser_score"],
@@ -562,11 +630,23 @@ def pair_record(
             "chief_complaint_normalized"
         ),
         "mhc0_quickumls_terms": control_row.get("quickumls_terms"),
+        "mhc0_quickumls_term_count": len(control_row["_quickumls_original_term_set"]),
+        "mhc0_derived_quickumls_overlap_terms": " | ".join(
+            sorted(control_row["_quickumls_overlap_term_set"])
+        ),
+        "mhc0_derived_quickumls_overlap_term_count": len(
+            control_row["_quickumls_overlap_term_set"]
+        ),
         "mhc0_quickumls_extracted_text": control_row.get("quickumls_extracted_text"),
         "mhc0_sex": control_row["sex"],
+        "mhc0_insurance": control_row.get("insurance"),
+        "mhc0_insurance_group": control_row["insurance_group"],
         "mhc0_age_at_admission": control_row["age_at_admission"],
         "mhc0_age_bin": control_row["age_bin"],
         "mhc0_elixhauser_score": control_row["elixhauser_score"],
+        "same_insurance_group": bool(
+            control_row["insurance_group"] == mhh_row["insurance_group"]
+        ),
         "same_age_bin": bool(control_row["same_age_bin"]),
         "age_bin_distance": int(control_row["age_bin_distance"]),
         "abs_age_difference": float(control_row["abs_age_difference"]),
@@ -576,6 +656,7 @@ def pair_record(
             control_row["abs_elixhauser_difference"]
         ),
         "quickumls_shared_term_count": int(control_row["quickumls_shared_term_count"]),
+        "shared_quickumls_terms": shared_quickumls_terms,
         "quickumls_jaccard": float(control_row["quickumls_jaccard"]),
         "used_quickumls_candidate_filter": bool(
             control_row["used_quickumls_candidate_filter"]
@@ -627,7 +708,11 @@ def match_cohorts(
         if match is None:
             drop_labels = [
                 label
-                for label in ["_embedding_position", "_quickumls_term_set"]
+                for label in [
+                    "_embedding_position",
+                    "_quickumls_original_term_set",
+                    "_quickumls_overlap_term_set",
+                ]
                 if label in mhh_row.index
             ]
             unmatched = mhh_row.drop(labels=drop_labels).to_dict()
@@ -698,6 +783,16 @@ def build_summary(
         "pct_same_age_bin_matches": 100.0 * matched_pairs["same_age_bin"].mean()
         if n_matched
         else np.nan,
+        "n_same_insurance_group_matches": int(
+            matched_pairs["same_insurance_group"].sum()
+        )
+        if n_matched
+        else 0,
+        "pct_same_insurance_group_matches": (
+            100.0 * matched_pairs["same_insurance_group"].mean()
+        )
+        if n_matched
+        else np.nan,
         "n_strict_elixhauser_matches": int(
             (matched_pairs.get("match_type", pd.Series(dtype=str)) == "strict_elixhauser").sum()
         ),
@@ -710,6 +805,8 @@ def build_summary(
         "quickumls_candidate_filter_enabled": USE_QUICKUMLS_CANDIDATE_FILTER,
         "min_shared_quickumls_terms": MIN_SHARED_QUICKUMLS_TERMS,
         "min_quickumls_jaccard": MIN_QUICKUMLS_JACCARD,
+        "min_cosine_similarity": MIN_COSINE_SIMILARITY,
+        "fallback_min_cosine_similarity": FALLBACK_MIN_COSINE_SIMILARITY,
         "n_matches_using_quickumls_candidate_filter": int(
             matched_pairs.get(
                 "used_quickumls_candidate_filter",
@@ -736,7 +833,7 @@ def build_summary(
 
 
 # Sanity checks for no reused controls, one match per exposed admission, exact
-# sex matching, and configured caliper/threshold expectations.
+# sex and insurance matching, and configured caliper/threshold expectations.
 def quality_checks(matched_pairs: pd.DataFrame) -> None:
     if matched_pairs.empty:
         return
@@ -744,8 +841,12 @@ def quality_checks(matched_pairs: pd.DataFrame) -> None:
     assert not matched_pairs.duplicated(["mhc0_subject_id", "mhc0_hadm_id"]).any()
     assert not matched_pairs.duplicated(["mhh_subject_id", "mhh_hadm_id"]).any()
     assert (matched_pairs["mhh_sex"] == matched_pairs["mhc0_sex"]).all()
+    assert (
+        matched_pairs["mhh_insurance_group"]
+        == matched_pairs["mhc0_insurance_group"]
+    ).all()
 
-    below_similarity = matched_pairs["cosine_similarity"] < MIN_COSINE_SIMILARITY
+    below_similarity = matched_pairs["cosine_similarity"] <= MIN_COSINE_SIMILARITY
     if below_similarity.any():
         warnings.warn(
             f"{below_similarity.sum():,} matched pairs are below "

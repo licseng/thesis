@@ -7,6 +7,7 @@ creates clean, admission-level input tables for `03_match_chief_complaint_cohort
 For each cohort, it combines:
     - chief-complaint embedding metadata and embedding row/file pointers,
     - age and sex from the original cohort export table in DuckDB,
+    - insurance from the DuckDB admissions table,
     - Elixhauser comorbidity score from the prior Elixhauser step.
 
 Inputs:
@@ -72,6 +73,24 @@ def quote_identifier(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
 
 
+# Collapse MIMIC admission insurance values into the matching strata requested
+# for cohort balance.
+def normalize_insurance_group(value: object) -> str:
+    if pd.isna(value):
+        return "missing"
+
+    normalized = str(value).strip().lower()
+    if not normalized:
+        return "missing"
+    if normalized in {"medicare", "medicaid"}:
+        return "Government"
+    if normalized == "private":
+        return "Private"
+    if normalized in {"other", "no charge"}:
+        return "Other"
+    return "Other"
+
+
 # Load one row per admission of demographic matching covariates from the original
 # cohort export table. Duplicate subject/admission rows are allowed in the raw
 # export only if the demographic values are identical; this function raises if
@@ -82,13 +101,17 @@ def load_demographics(source_table: str) -> pd.DataFrame:
         demographics = con.execute(
             f"""
             SELECT DISTINCT
-                subject_id,
-                hadm_id,
-                sex,
-                age_at_admission
-            FROM {quote_identifier(source_table)}
-            WHERE subject_id IS NOT NULL
-              AND hadm_id IS NOT NULL
+                src.subject_id,
+                src.hadm_id,
+                src.sex,
+                src.age_at_admission,
+                adm.insurance
+            FROM {quote_identifier(source_table)} src
+            LEFT JOIN admissions adm
+                ON src.subject_id = adm.subject_id
+               AND src.hadm_id = adm.hadm_id
+            WHERE src.subject_id IS NOT NULL
+              AND src.hadm_id IS NOT NULL
             """
         ).fetchdf()
     finally:
@@ -104,6 +127,10 @@ def load_demographics(source_table: str) -> pd.DataFrame:
     demographics["sex"] = demographics["sex"].astype("string").str.strip().str.upper()
     demographics["age_at_admission"] = pd.to_numeric(
         demographics["age_at_admission"], errors="coerce"
+    )
+    demographics["insurance"] = demographics["insurance"].astype("string").str.strip()
+    demographics["insurance_group"] = demographics["insurance"].map(
+        normalize_insurance_group
     )
     return demographics
 
@@ -205,6 +232,8 @@ def create_matching_table(cohort_name: str, config: dict[str, str]) -> pd.DataFr
         "embedding_file",
         "age_at_admission",
         "sex",
+        "insurance",
+        "insurance_group",
         "elixhauser_score",
     ]
     output_columns.extend(
@@ -240,6 +269,18 @@ def write_outputs(cohort_tables: dict[str, pd.DataFrame]) -> None:
                 "n_with_embedding": table["embedding_row_id"].count(),
                 "mean_age": table["age_at_admission"].mean(),
                 "mean_elixhauser_score": table["elixhauser_score"].mean(),
+                "pct_government_insurance": (
+                    100.0 * table["insurance_group"].eq("Government").mean()
+                ),
+                "pct_private_insurance": (
+                    100.0 * table["insurance_group"].eq("Private").mean()
+                ),
+                "pct_other_insurance": (
+                    100.0 * table["insurance_group"].eq("Other").mean()
+                ),
+                "pct_missing_insurance": (
+                    100.0 * table["insurance_group"].eq("missing").mean()
+                ),
             }
             for cohort_name, table in cohort_tables.items()
         ]

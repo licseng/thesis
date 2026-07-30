@@ -15,6 +15,7 @@ Outputs:
     analysis_output_matched_cohort/elixhauser_score_summary.csv
     analysis_output_matched_cohort/elixhauser_difference_counts.csv
     analysis_output_matched_cohort/elixhauser_score_pair_counts.csv
+    analysis_output_matched_cohort/insurance_group_distribution.csv
     analysis_output_matched_cohort/age_bin_distance_counts.csv
     analysis_output_matched_cohort/age_year_distance_summary.csv
     analysis_output_matched_cohort/age_year_distance_counts.csv
@@ -67,6 +68,7 @@ REQUIRED_COLUMNS = {
     "mhh_sex",
     "mhh_age_at_admission",
     "mhh_age_bin",
+    "mhh_insurance_group",
     "mhh_elixhauser_score",
     "mhc0_subject_id",
     "mhc0_hadm_id",
@@ -75,10 +77,12 @@ REQUIRED_COLUMNS = {
     "mhc0_sex",
     "mhc0_age_at_admission",
     "mhc0_age_bin",
+    "mhc0_insurance_group",
     "mhc0_elixhauser_score",
     "cosine_similarity",
     "embedding_distance",
     "abs_elixhauser_difference",
+    "shared_quickumls_terms",
     "abs_age_difference",
     "match_type",
     "candidate_pool_size",
@@ -93,6 +97,7 @@ LOWEST_COSINE_REVIEW_COLUMNS = [
     "match_type",
     "abs_elixhauser_difference",
     "quickumls_shared_term_count",
+    "shared_quickumls_terms",
     "quickumls_jaccard",
     "used_quickumls_candidate_filter",
     "used_quickumls_filter_fallback",
@@ -101,12 +106,18 @@ LOWEST_COSINE_REVIEW_COLUMNS = [
     "mhh_hadm_id",
     "mhh_chief_complaint_raw",
     "mhh_quickumls_terms",
+    "mhh_quickumls_term_count",
+    "mhh_derived_quickumls_overlap_terms",
+    "mhh_derived_quickumls_overlap_term_count",
     "mhh_quickumls_extracted_text",
     "mhh_elixhauser_score",
     "mhc0_subject_id",
     "mhc0_hadm_id",
     "mhc0_chief_complaint_raw",
     "mhc0_quickumls_terms",
+    "mhc0_quickumls_term_count",
+    "mhc0_derived_quickumls_overlap_terms",
+    "mhc0_derived_quickumls_overlap_term_count",
     "mhc0_quickumls_extracted_text",
     "mhc0_elixhauser_score",
 ]
@@ -187,6 +198,12 @@ def build_match_quality_summary(matched_pairs: pd.DataFrame) -> pd.DataFrame:
         ),
         "n_same_age_bin_pairs": int(
             (matched_pairs["mhh_age_bin"] == matched_pairs["mhc0_age_bin"]).sum()
+        ),
+        "n_same_insurance_group_pairs": int(
+            (
+                matched_pairs["mhh_insurance_group"]
+                == matched_pairs["mhc0_insurance_group"]
+            ).sum()
         ),
     }
     return pd.DataFrame([summary])
@@ -302,6 +319,34 @@ def build_elixhauser_score_pair_counts(matched_pairs: pd.DataFrame) -> pd.DataFr
         "elixhauser_score_difference"
     ].abs()
     return counts
+
+
+# Summarize matched insurance-group balance. Because insurance group is exact
+# matched, exposed/control counts should be identical for each group.
+def build_insurance_group_distribution(matched_pairs: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for cohort_label, column in [
+        ("MHH_psychotic", "mhh_insurance_group"),
+        ("only_MHC0", "mhc0_insurance_group"),
+    ]:
+        counts = (
+            matched_pairs.groupby(column, dropna=False)
+            .agg(n_admissions=("pair_id", "size"))
+            .reset_index()
+            .rename(columns={column: "insurance_group"})
+        )
+        counts["cohort"] = cohort_label
+        rows.append(counts)
+
+    distribution = pd.concat(rows, ignore_index=True)
+    distribution["pct_admissions"] = (
+        distribution["n_admissions"]
+        / distribution.groupby("cohort")["n_admissions"].transform("sum")
+        * 100.0
+    )
+    return distribution.loc[
+        :, ["cohort", "insurance_group", "n_admissions", "pct_admissions"]
+    ].sort_values(["insurance_group", "cohort"])
 
 
 # Count how often controls were selected from the same or neighboring age bins.
@@ -542,6 +587,7 @@ def write_outputs(
     elixhauser_score_summary: pd.DataFrame,
     elixhauser_difference_counts: pd.DataFrame,
     elixhauser_score_pair_counts: pd.DataFrame,
+    insurance_group_distribution: pd.DataFrame,
     age_bin_distance_counts: pd.DataFrame,
     age_year_distance_summary: pd.DataFrame,
     age_year_distance_counts: pd.DataFrame,
@@ -558,6 +604,8 @@ def write_outputs(
         / "elixhauser_difference_counts.csv",
         "elixhauser_score_pair_counts": OUTPUT_DIR
         / "elixhauser_score_pair_counts.csv",
+        "insurance_group_distribution": OUTPUT_DIR
+        / "insurance_group_distribution.csv",
         "age_bin_distance_counts": OUTPUT_DIR / "age_bin_distance_counts.csv",
         "age_year_distance_summary": OUTPUT_DIR / "age_year_distance_summary.csv",
         "age_year_distance_counts": OUTPUT_DIR / "age_year_distance_counts.csv",
@@ -577,6 +625,9 @@ def write_outputs(
     )
     elixhauser_score_pair_counts.to_csv(
         outputs["elixhauser_score_pair_counts"], index=False
+    )
+    insurance_group_distribution.to_csv(
+        outputs["insurance_group_distribution"], index=False
     )
     age_bin_distance_counts.to_csv(outputs["age_bin_distance_counts"], index=False)
     age_year_distance_summary.to_csv(outputs["age_year_distance_summary"], index=False)
@@ -603,6 +654,7 @@ def main() -> None:
     elixhauser_score_summary = build_elixhauser_score_summary(matched_pairs)
     elixhauser_difference_counts = build_elixhauser_difference_counts(matched_pairs)
     elixhauser_score_pair_counts = build_elixhauser_score_pair_counts(matched_pairs)
+    insurance_group_distribution = build_insurance_group_distribution(matched_pairs)
     age_bin_distance_counts = build_age_bin_distance_counts(matched_pairs)
     age_year_distance_summary = build_age_year_distance_summary(matched_pairs)
     age_year_distance_counts = build_age_year_distance_counts(matched_pairs)
@@ -616,6 +668,7 @@ def main() -> None:
         elixhauser_score_summary,
         elixhauser_difference_counts,
         elixhauser_score_pair_counts,
+        insurance_group_distribution,
         age_bin_distance_counts,
         age_year_distance_summary,
         age_year_distance_counts,
@@ -632,6 +685,8 @@ def main() -> None:
     print(elixhauser_score_summary.to_string(index=False))
     print("\n=== Elixhauser Absolute Difference Counts ===")
     print(elixhauser_difference_counts.to_string(index=False))
+    print("\n=== Insurance Group Distribution ===")
+    print(insurance_group_distribution.to_string(index=False))
     print("\n=== Top Chief Complaint Bigrams ===")
     print(chief_complaint_bigram_counts.head(20).to_string(index=False))
     print("\n=== Selected Chief Complaint Phrase Counts ===")
