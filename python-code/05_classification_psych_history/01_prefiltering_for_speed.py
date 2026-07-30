@@ -3,13 +3,13 @@
 This script prepares the LLM input subset for WP2. It keeps only section rows
 with at least one psychiatry-related keyword hit. The section scope is
 configurable with PSYCH_HISTORY_SECTION_SCOPE:
+    - current_context_sections: all parser sections except the excluded
+      history/social/family/chief-complaint/unsectioned/medical-history/
+      discharge-medication sections
     - candidate4: the original four candidate sections
     - candidate6: the original four plus discharge instructions/pertinent results
     - all_keyword_sections: all selected psych-keyword exploration sections
     - all_parsed_sections: all parser sections except chief complaint
-    - current_context_sections: all parser sections except the excluded
-      history/social/family/chief-complaint/unsectioned/medical-history/
-      discharge-medication sections
 
 The keyword vocabulary is imported from
 `04_discharge_note_text_analysis/02_explore_psych_keywords_by_section.py`, so it
@@ -50,7 +50,11 @@ PSYCH_KEYWORD_SCRIPT = (
 )
 OUTPUT_DIR = SCRIPT_DIR / "psych_history_llm_input"
 
-SECTION_SCOPE = os.environ.get("PSYCH_HISTORY_SECTION_SCOPE", "candidate4").strip().lower()
+SECTION_SCOPE = (
+    os.environ.get("PSYCH_HISTORY_SECTION_SCOPE", "current_context_sections")
+    .strip()
+    .lower()
+)
 
 CANDIDATE4_SECTION_NAMES = [
     "present_illness",
