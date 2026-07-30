@@ -34,9 +34,16 @@ import pandas as pd
 # Paths
 SCRIPT_DIR = Path(__file__).resolve().parent
 INPUT_PATH = (
-    SCRIPT_DIR
-    / "psych_history_llm_input"
-    / "filtered_psych_keyword_section_input.parquet"
+    Path(
+        os.environ.get(
+            "PSYCH_HISTORY_INPUT_PATH",
+            str(
+                SCRIPT_DIR
+                / "psych_history_llm_input"
+                / "filtered_psych_keyword_section_input.parquet"
+            ),
+        )
+    )
 )
 PROMPT_VERSION = os.environ.get("PSYCH_HISTORY_PROMPT_VERSION", "A").strip().upper()
 if PROMPT_VERSION not in {"A", "B"}:
