@@ -48,6 +48,8 @@ python-code/02_cohort_matching/matched_cohort_dbeaver_exports/
 
 python-code/03_clustering/chief_complaint_cluster_qc_output_old/
 python-code/03_clustering/analysis_output_chief_complaint_subgroups/
+python-code/03_clustering/analysis_output_chief_complaint_subgroup_balance_check/
+python-code/03_clustering/analysis_output_chief_complaint_subgroup_outcomes/
 
 python-code/04_LLM_flagging/analysis_output_psych_keyword_exploration/
 python-code/04_LLM_flagging/psych_history_classifier_output/
