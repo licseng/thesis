@@ -21,7 +21,7 @@ PROJECT_DIR = SCRIPT_DIR.parent
 MATCHED_PAIRS_PATH = (
     PROJECT_DIR / "02_cohort_matching" / "matched_cohort_output" / "matched_pairs.parquet"
 )
-OUTPUT_DIR = SCRIPT_DIR / "analysis_output_chief_complaint_subgroups"
+OUTPUT_DIR = SCRIPT_DIR / "analysis_output_chief_complaint_subgroup_balance_check"
 
 CHIEF_COMPLAINT_SUBGROUPS = {
     "abdominal pain": {
