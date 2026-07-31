@@ -29,7 +29,7 @@ for clinically interpretable candidate grouping; final complaint groups will
 likely need manual review and possibly manual merging.
 
 Outputs are local QC artifacts under:
-    03_deferred_clustering/chief_complaint_cluster_qc_output/
+    03_clustering/chief_complaint_cluster_qc_output/
 """
 
 from __future__ import annotations
@@ -69,9 +69,9 @@ OUTPUT_DIR = SCRIPT_DIR / "chief_complaint_cluster_qc_output"
 RANDOM_STATE = 42
 
 # Default clustering route. You can override this from the command line:
-#     python 01_cluster_matched_chief_complaints.py --route bert
-#     python 01_cluster_matched_chief_complaints.py --route tfidf
-#     python 01_cluster_matched_chief_complaints.py --route both
+#     python 02_cluster_matched_chief_complaints.py --route bert
+#     python 02_cluster_matched_chief_complaints.py --route tfidf
+#     python 02_cluster_matched_chief_complaints.py --route both
 #
 # Accepted values:
 #   "bert"  - Bio_ClinicalBERT embeddings only
