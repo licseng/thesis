@@ -9,6 +9,7 @@ Default input folder:
 
 Expected file basenames, with .csv or .parquet extension:
     export_matched_cohort_descriptors
+    export_matched_cohort_diagnoses
     export_matched_cohort_labevents
     export_matched_cohort_microbiologyevents
     export_matched_cohort_poe
@@ -64,6 +65,7 @@ SUBJECT_LEVEL_OUTPUT_DIR = Path(
 
 EXPORT_BASENAMES = {
     "descriptors": "export_matched_cohort_descriptors",
+    "diagnoses": "export_matched_cohort_diagnoses",
     "labevents": "export_matched_cohort_labevents",
     "microbiologyevents": "export_matched_cohort_microbiologyevents",
     "poe": "export_matched_cohort_poe",
