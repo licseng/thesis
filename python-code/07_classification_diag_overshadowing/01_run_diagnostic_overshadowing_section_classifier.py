@@ -4,11 +4,11 @@ This script is a separate local/cluster LLM runner for the diagnostic
 overshadowing classification task. It uses a two-stage input:
 
 1. The filtered section text used by the psych-history classifier:
-   ../05_classification_psych_history/psych_history_llm_input/
+   ../06_classification_psych_integrated/psych_history_llm_input/
        filtered_psych_keyword_section_input.parquet
 
 2. The section-level psych-history LLM output:
-   ../05_classification_psych_history/psych_history_classifier_output/
+   ../06_classification_psych_integrated/psych_history_classifier_output/
        psych_history_section_classifier_results.csv
 
 Only sections positively labeled by the first LLM are sent to this diagnostic
@@ -40,7 +40,7 @@ import pandas as pd
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PSYCH_HISTORY_DIR = SCRIPT_DIR.parent / "05_classification_psych_history"
+PSYCH_HISTORY_DIR = SCRIPT_DIR.parent / "06_classification_psych_integrated"
 INPUT_PATH = Path(
     os.environ.get(
         "DIAGNOSTIC_OVERSHADOWING_FIRST_LLM_INPUT_PATH",

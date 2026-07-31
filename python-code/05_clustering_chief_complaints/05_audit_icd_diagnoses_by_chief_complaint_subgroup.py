@@ -49,7 +49,7 @@ def load_combined_group_assignments() -> pd.DataFrame:
     if not ASSIGNMENT_PATH.exists():
         raise FileNotFoundError(
             "Missing subgroup assignments. Run "
-            "03_clustering/01_describe_chief_complaint_subgroups.py first: "
+            "05_clustering_chief_complaints/01_describe_chief_complaint_subgroups.py first: "
             f"{ASSIGNMENT_PATH}"
         )
     assignments = pd.read_csv(ASSIGNMENT_PATH)
