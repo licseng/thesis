@@ -12,7 +12,7 @@ configurable with PSYCH_HISTORY_SECTION_SCOPE:
     - all_parsed_sections: all parser sections except chief complaint
 
 The keyword vocabulary is imported from
-`04_discharge_note_text_analysis/02_explore_psych_keywords_by_section.py`, so it
+`03_discharge_note_text_analysis/02_explore_psych_keywords_by_section.py`, so it
 uses all current psych-related keyword groups, including psychiatric
 medications.
 
@@ -45,7 +45,7 @@ PARSER_DIR = REPO_PYTHON_DIR / "01_discharge_note_preprocessing" / "01_discharge
 FULL_NOTE_DIR = PARSER_DIR / "full_discharge_note_sections"
 PSYCH_KEYWORD_SCRIPT = (
     REPO_PYTHON_DIR
-    / "04_discharge_note_text_analysis"
+    / "03_discharge_note_text_analysis"
     / "02_explore_psych_keywords_by_section.py"
 )
 OUTPUT_DIR = SCRIPT_DIR / "psych_history_llm_input"

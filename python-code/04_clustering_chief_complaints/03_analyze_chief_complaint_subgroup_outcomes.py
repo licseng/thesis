@@ -77,7 +77,7 @@ def load_subgroup_assignments() -> pd.DataFrame:
     if not ASSIGNMENT_PATH.exists():
         raise FileNotFoundError(
             "Missing subgroup assignments. Run "
-            "05_clustering_chief_complaints/01_describe_chief_complaint_subgroups.py first: "
+            "04_clustering_chief_complaints/01_describe_chief_complaint_subgroups.py first: "
             f"{ASSIGNMENT_PATH}"
         )
 
