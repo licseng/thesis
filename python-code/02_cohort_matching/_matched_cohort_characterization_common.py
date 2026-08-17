@@ -445,6 +445,124 @@ def build_admissions_per_subject_summary(matched_ids: pd.DataFrame) -> pd.DataFr
     return pd.DataFrame(rows).sort_values("cohort")
 
 
+def build_admissions_per_subject_distribution(matched_ids: pd.DataFrame) -> pd.DataFrame:
+    """Count subjects by exact number of matched admissions."""
+    admissions_per_subject = (
+        matched_ids.groupby(["cohort", "subject_id"], as_index=False)
+        .agg(n_matched_admissions=("hadm_id", "nunique"))
+    )
+    distribution = (
+        admissions_per_subject.groupby(["cohort", "n_matched_admissions"], as_index=False)
+        .agg(n_subjects=("subject_id", "nunique"))
+        .sort_values(["cohort", "n_matched_admissions"])
+    )
+    denominators = admissions_per_subject.groupby("cohort")["subject_id"].nunique().to_dict()
+    distribution["pct_subjects_within_cohort"] = distribution.apply(
+        lambda row: 100.0
+        * row["n_subjects"]
+        / denominators.get(row["cohort"], 0),
+        axis=1,
+    )
+    distribution["n_admissions_represented"] = (
+        distribution["n_subjects"] * distribution["n_matched_admissions"]
+    )
+    return distribution
+
+
+def build_readmission_cap_loss_summary(
+    matched_admissions: pd.DataFrame,
+    caps: tuple[int, ...] = (3, 4, 5),
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Estimate admission/pair loss under readmission caps.
+
+    The independent mode caps admissions within each cohort/subject. The
+    pair-preserving mode then drops a full matched pair if either admission in
+    the pair falls above the cap.
+    """
+    required_columns = {"pair_id", "cohort", "subject_id", "hadm_id"}
+    missing = sorted(required_columns - set(matched_admissions.columns))
+    if missing:
+        raise ValueError(f"matched_admissions is missing columns: {missing}")
+
+    clean = matched_admissions.copy()
+    clean["cohort"] = clean["cohort"].astype("string").str.strip()
+    clean["pair_id"] = pd.to_numeric(clean["pair_id"], errors="raise").astype(int)
+    clean["subject_id"] = pd.to_numeric(clean["subject_id"], errors="raise").astype(int)
+    clean["hadm_id"] = pd.to_numeric(clean["hadm_id"], errors="raise").astype(int)
+    if "admittime" in clean.columns:
+        clean["admittime"] = pd.to_datetime(clean["admittime"], errors="coerce")
+        sort_columns = ["cohort", "subject_id", "admittime", "pair_id", "hadm_id"]
+    else:
+        sort_columns = ["cohort", "subject_id", "pair_id", "hadm_id"]
+    clean = clean.sort_values(sort_columns).copy()
+    clean["admission_rank_within_subject_cohort"] = (
+        clean.groupby(["cohort", "subject_id"]).cumcount() + 1
+    )
+
+    admission_rows = []
+    pair_rows = []
+    original_pairs = clean["pair_id"].nunique()
+    for cap in caps:
+        keep_column = f"kept_by_independent_cap_{cap}"
+        clean[keep_column] = clean["admission_rank_within_subject_cohort"].le(cap)
+
+        for cohort, group in clean.groupby("cohort"):
+            kept = int(group[keep_column].sum())
+            lost = len(group) - kept
+            subject_counts = group.groupby("subject_id").size()
+            admission_rows.append(
+                {
+                    "cap": cap,
+                    "mode": "independent_within_cohort",
+                    "cohort": cohort,
+                    "original_admissions": len(group),
+                    "kept_admissions": kept,
+                    "lost_admissions": lost,
+                    "pct_admissions_lost": 100.0 * lost / len(group),
+                    "original_subjects": group["subject_id"].nunique(),
+                    "subjects_with_more_than_cap": int(subject_counts.gt(cap).sum()),
+                }
+            )
+
+        pair_keep = clean.groupby("pair_id")[keep_column].all()
+        kept_pair_ids = set(pair_keep.loc[pair_keep].index)
+        lost_pairs = original_pairs - len(kept_pair_ids)
+        pair_rows.append(
+            {
+                "cap": cap,
+                "original_pairs": original_pairs,
+                "kept_pairs": len(kept_pair_ids),
+                "lost_pairs": lost_pairs,
+                "pct_pairs_lost": 100.0 * lost_pairs / original_pairs,
+            }
+        )
+
+        pair_preserving = clean.assign(
+            kept_pair_preserving=clean["pair_id"].isin(kept_pair_ids)
+        )
+        for cohort, group in pair_preserving.groupby("cohort"):
+            kept = group.loc[group["kept_pair_preserving"]]
+            lost = len(group) - len(kept)
+            subject_counts = group.groupby("subject_id").size()
+            admission_rows.append(
+                {
+                    "cap": cap,
+                    "mode": "pair_preserving",
+                    "cohort": cohort,
+                    "original_admissions": len(group),
+                    "kept_admissions": len(kept),
+                    "lost_admissions": lost,
+                    "pct_admissions_lost": 100.0 * lost / len(group),
+                    "original_subjects": group["subject_id"].nunique(),
+                    "subjects_with_more_than_cap": int(subject_counts.gt(cap).sum()),
+                }
+            )
+
+    admission_loss = pd.DataFrame(admission_rows).sort_values(["cap", "mode", "cohort"])
+    pair_loss = pd.DataFrame(pair_rows).sort_values("cap")
+    return admission_loss, pair_loss
+
+
 def choose_subject_category(values: pd.Series) -> str:
     """Collapse admission-level categories to one subject-level category."""
     normalized = values.fillna("missing").astype(str).str.strip()

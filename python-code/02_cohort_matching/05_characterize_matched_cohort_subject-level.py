@@ -31,6 +31,12 @@ def main() -> None:
     admissions_per_subject_summary = common.build_admissions_per_subject_summary(
         matched_ids,
     )
+    admissions_per_subject_distribution = (
+        common.build_admissions_per_subject_distribution(matched_ids)
+    )
+    readmission_cap_admission_loss, readmission_cap_pair_loss = (
+        common.build_readmission_cap_loss_summary(descriptors)
+    )
     subject_categorical_distribution = common.build_subject_categorical_distribution(
         descriptors,
     )
@@ -53,6 +59,18 @@ def main() -> None:
         output_dir / "matched_cohort_admissions_per_subject_summary.csv",
         index=False,
     )
+    admissions_per_subject_distribution.to_csv(
+        output_dir / "matched_cohort_admissions_per_subject_distribution.csv",
+        index=False,
+    )
+    readmission_cap_admission_loss.to_csv(
+        output_dir / "matched_cohort_readmission_cap_admission_loss_summary.csv",
+        index=False,
+    )
+    readmission_cap_pair_loss.to_csv(
+        output_dir / "matched_cohort_readmission_cap_pair_loss_summary.csv",
+        index=False,
+    )
     subject_categorical_distribution.to_csv(
         output_dir / "matched_cohort_subject_categorical_distribution.csv",
         index=False,
@@ -73,6 +91,10 @@ def main() -> None:
     print(f"Saved subject-level characterization outputs to: {output_dir}")
     print("\n=== Admissions Per Subject Summary ===")
     print(admissions_per_subject_summary.to_string(index=False))
+    print("\n=== Admissions Per Subject Distribution ===")
+    print(admissions_per_subject_distribution.to_string(index=False))
+    print("\n=== Readmission Cap Pair-Preserving Pair Loss ===")
+    print(readmission_cap_pair_loss.to_string(index=False))
     print("\n=== Subject-Level Utilization Summary ===")
     print(subject_utilization_summary.to_string(index=False))
 
