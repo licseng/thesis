@@ -4,17 +4,26 @@ This analysis asks whether MHH1-vs-MHC0 differences in workup/utilization remain
 after accounting for real prior MIMIC admissions, not just repeated admissions
 inside the matched cohort.
 
-Models use admission-level rows and cluster-robust standard errors by subject:
+Models use admission-level rows and robust standard errors clustered by matched
+pair for the primary check:
 
-    log1p(utilization outcome) ~ cohort
-    log1p(utilization outcome) ~ cohort + age + Elixhauser
-    log1p(utilization outcome) ~ cohort + age + Elixhauser
-                                + log1p(prior all-MIMIC admissions)
+    count outcomes:
+        Poisson-log GLM(count) ~ cohort + age + Elixhauser
+        Poisson-log GLM(count) ~ cohort + age + Elixhauser
+                                 + log1p(prior admissions within 365d)
+
+    LOS outcomes:
+        log1p(LOS) OLS ~ cohort + age + Elixhauser
+        log1p(LOS) OLS ~ cohort + age + Elixhauser
+                         + log1p(prior admissions within 365d)
+
+Sensitivity models also use all previous MIMIC admissions, and Gamma-log GLMs
+are written for strictly positive LOS rows.
 
 Outputs:
     analysis_output_utilization_readmission_adjusted/
         utilization_readmission_adjusted_model_dataset.csv
-        utilization_readmission_adjusted_log_linear_models.csv
+        utilization_readmission_adjusted_models.csv
         utilization_readmission_adjusted_cohort_term_comparison.csv
         utilization_readmission_adjusted_outcome_summary.csv
 """
@@ -66,6 +75,16 @@ SUBGROUP_FLAG_COLUMNS = {
     "altered mental status": "has_altered_mental_status",
     "nausea vomiting": "has_nausea_vomiting",
 }
+COUNT_OUTCOMES = [
+    "n_labevents_rows",
+    "n_microbiologyevents_rows",
+    "n_poe_rows",
+    "n_poe_detail_rows",
+]
+LOS_OUTCOMES = [
+    "hospital_los_days",
+    "ed_los_hours",
+]
 
 
 def load_matching_covariates() -> pd.DataFrame:
@@ -245,6 +264,7 @@ def build_model_dataset() -> pd.DataFrame:
         "edregtime",
         "edouttime",
         "n_prior_all_admissions_for_subject",
+        "n_prior_admissions_within_365d_for_subject",
     }
     missing = sorted(required_descriptor_columns - set(descriptors.columns))
     if missing:
@@ -295,8 +315,15 @@ def build_model_dataset() -> pd.DataFrame:
         output["n_prior_all_admissions_for_subject"],
         errors="raise",
     )
+    output["n_prior_admissions_within_365d_for_subject"] = pd.to_numeric(
+        output["n_prior_admissions_within_365d_for_subject"],
+        errors="raise",
+    )
     output["log1p_prior_all_mimic_admissions"] = np.log1p(
         output["n_prior_all_admissions_for_subject"],
+    )
+    output["log1p_prior_admissions_365d"] = np.log1p(
+        output["n_prior_admissions_within_365d_for_subject"],
     )
     output["mhh1_psychotic"] = output["cohort"].eq("MHH1_psychotic").astype(float)
     output["age_at_admission_per_10y"] = output["age_at_admission"] / 10.0
@@ -333,20 +360,53 @@ def summarize_outcomes(model_data: pd.DataFrame, outcome_columns: list[str]) -> 
     return pd.DataFrame(rows).sort_values(["outcome", "cohort"])
 
 
-def fit_log_linear_model(
+def get_model_specs() -> list[tuple[str, list[str]]]:
+    """Return nested adjustment sets used across utilization models."""
+    return [
+        ("cohort_only", ["mhh1_psychotic"]),
+        (
+            "age_elixhauser",
+            ["mhh1_psychotic", "age_at_admission_per_10y", "elixhauser_score_per_5pt"],
+        ),
+        (
+            "age_elixhauser_prior365",
+            [
+                "mhh1_psychotic",
+                "age_at_admission_per_10y",
+                "elixhauser_score_per_5pt",
+                "log1p_prior_admissions_365d",
+            ],
+        ),
+        (
+            "age_elixhauser_prior_all_mimic",
+            [
+                "mhh1_psychotic",
+                "age_at_admission_per_10y",
+                "elixhauser_score_per_5pt",
+                "log1p_prior_all_mimic_admissions",
+            ],
+        ),
+    ]
+
+
+def fit_utilization_model(
     model_data: pd.DataFrame,
     outcome: str,
     model_name: str,
+    model_family: str,
     predictor_columns: list[str],
     subgroup_set: str,
     stratum: str,
+    cluster_column: str = "pair_id",
 ) -> pd.DataFrame:
-    """Fit log1p(outcome) linear model with cluster-robust SEs by subject."""
-    required_columns = [outcome, "cluster_id", *predictor_columns]
+    """Fit one utilization model and return coefficient-level results."""
+    required_columns = [outcome, cluster_column, *predictor_columns]
     data = model_data.loc[:, required_columns].copy()
     data[outcome] = pd.to_numeric(data[outcome], errors="coerce")
     data = data.dropna(subset=required_columns).reset_index(drop=True)
     data = data.loc[data[outcome].ge(0)].reset_index(drop=True)
+    if model_family == "gamma_log":
+        data = data.loc[data[outcome].gt(0)].reset_index(drop=True)
 
     coefficient_names = ["intercept", *predictor_columns]
     if data.empty:
@@ -354,6 +414,7 @@ def fit_log_linear_model(
             [
                 {
                     "model": model_name,
+                    "model_family": model_family,
                     "subgroup_set": subgroup_set,
                     "stratum": stratum,
                     "outcome": outcome,
@@ -368,16 +429,28 @@ def fit_log_linear_model(
         data.loc[:, predictor_columns].astype(float),
         has_constant="add",
     ).rename(columns={"const": "intercept"})
-    y = np.log1p(data[outcome].astype(float))
+    y = data[outcome].astype(float)
+
+    if model_family == "poisson_log":
+        model = sm.GLM(y, x, family=sm.families.Poisson(link=sm.families.links.Log()))
+        estimate_column = "estimate_log_rate"
+    elif model_family == "gamma_log":
+        model = sm.GLM(y, x, family=sm.families.Gamma(link=sm.families.links.Log()))
+        estimate_column = "estimate_log_mean"
+    elif model_family == "log_ols":
+        model = sm.OLS(np.log1p(y), x)
+        estimate_column = "estimate_log1p_mean"
+    else:
+        raise ValueError(f"Unknown model family: {model_family}")
 
     captured_warnings = []
     try:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            fit = sm.OLS(y, x).fit(
+            fit = model.fit(
                 cov_type="cluster",
                 cov_kwds={
-                    "groups": data["cluster_id"],
+                    "groups": data[cluster_column],
                     "use_correction": True,
                 },
             )
@@ -390,12 +463,14 @@ def fit_log_linear_model(
             [
                 {
                     "model": model_name,
+                    "model_family": model_family,
                     "subgroup_set": subgroup_set,
                     "stratum": stratum,
                     "outcome": outcome,
                     "term": term,
                     "n_admissions": len(data),
-                    "n_clusters": data["cluster_id"].nunique(),
+                    "cluster_column": cluster_column,
+                    "n_clusters": data[cluster_column].nunique(),
                     "status": "fit_failed",
                     "fit_message": repr(exc),
                 }
@@ -412,27 +487,32 @@ def fit_log_linear_model(
         rows.append(
             {
                 "model": model_name,
+                "model_family": model_family,
                 "subgroup_set": subgroup_set,
                 "stratum": stratum,
                 "outcome": outcome,
                 "term": term,
                 "n_admissions": len(data),
-                "n_clusters": data["cluster_id"].nunique(),
-                "estimate_log1p_scale": estimate,
+                "cluster_column": cluster_column,
+                "n_clusters": data[cluster_column].nunique(),
+                estimate_column: estimate,
                 "cluster_robust_se": fit.bse.get(term, pd.NA),
                 "z": fit.tvalues.get(term, pd.NA),
                 "p_value": fit.pvalues.get(term, pd.NA),
                 "multiplicative_ratio": math.exp(estimate),
                 "pct_difference": 100.0 * (math.exp(estimate) - 1.0),
                 "multiplicative_ratio_ci_low": math.exp(ci_low)
-                if ci_low is not pd.NA
+                if pd.notna(ci_low)
                 else pd.NA,
                 "multiplicative_ratio_ci_high": math.exp(ci_high)
-                if ci_high is not pd.NA
+                if pd.notna(ci_high)
                 else pd.NA,
                 "status": "fit_converged" if not captured_warnings else "fit_warning",
                 "fit_warnings": " | ".join(captured_warnings),
-                "r_squared": fit.rsquared,
+                "fit_method": f"statsmodels_{model_family}_cluster_robust",
+                "fit_converged": getattr(fit, "converged", pd.NA),
+                "fit_deviance": getattr(fit, "deviance", pd.NA),
+                "pearson_chi2": getattr(fit, "pearson_chi2", pd.NA),
             }
         )
     return pd.DataFrame(rows)
@@ -440,35 +520,44 @@ def fit_log_linear_model(
 
 def fit_all_models_for_stratum(
     model_data: pd.DataFrame,
-    outcome_columns: list[str],
     subgroup_set: str,
     stratum: str,
 ) -> pd.DataFrame:
     """Fit all utilization models for all outcomes in one analysis stratum."""
-    model_specs = [
-        ("cohort_only", ["mhh1_psychotic"]),
-        (
-            "age_elixhauser",
-            ["mhh1_psychotic", "age_at_admission_per_10y", "elixhauser_score_per_5pt"],
-        ),
-        (
-            "age_elixhauser_log1p_prior_all_mimic_admissions",
-            [
-                "mhh1_psychotic",
-                "age_at_admission_per_10y",
-                "elixhauser_score_per_5pt",
-                "log1p_prior_all_mimic_admissions",
-            ],
-        ),
-    ]
+    model_specs = get_model_specs()
     rows = []
-    for outcome in outcome_columns:
+    for outcome in [column for column in COUNT_OUTCOMES if column in model_data.columns]:
         for model_name, predictors in model_specs:
             rows.append(
-                fit_log_linear_model(
+                fit_utilization_model(
                     model_data,
                     outcome,
                     model_name,
+                    "poisson_log",
+                    predictors,
+                    subgroup_set,
+                    stratum,
+                )
+            )
+    for outcome in [column for column in LOS_OUTCOMES if column in model_data.columns]:
+        for model_name, predictors in model_specs:
+            rows.append(
+                fit_utilization_model(
+                    model_data,
+                    outcome,
+                    model_name,
+                    "log_ols",
+                    predictors,
+                    subgroup_set,
+                    stratum,
+                )
+            )
+            rows.append(
+                fit_utilization_model(
+                    model_data,
+                    outcome,
+                    model_name,
+                    "gamma_log",
                     predictors,
                     subgroup_set,
                     stratum,
@@ -477,10 +566,10 @@ def fit_all_models_for_stratum(
     return pd.concat(rows, ignore_index=True)
 
 
-def fit_all_models(model_data: pd.DataFrame, outcome_columns: list[str]) -> pd.DataFrame:
+def fit_all_models(model_data: pd.DataFrame) -> pd.DataFrame:
     """Fit utilization models overall and inside chief-complaint subgroups."""
     model_rows = [
-        fit_all_models_for_stratum(model_data, outcome_columns, "overall", "overall")
+        fit_all_models_for_stratum(model_data, "overall", "overall")
     ]
 
     pure = model_data.dropna(subset=["pure_chief_complaint_group"]).copy()
@@ -491,7 +580,6 @@ def fit_all_models(model_data: pd.DataFrame, outcome_columns: list[str]) -> pd.D
         model_rows.append(
             fit_all_models_for_stratum(
                 group,
-                outcome_columns,
                 "pure_chief_complaint",
                 f"{group_name}: {group_label}",
             )
@@ -505,7 +593,6 @@ def fit_all_models(model_data: pd.DataFrame, outcome_columns: list[str]) -> pd.D
         model_rows.append(
             fit_all_models_for_stratum(
                 group,
-                outcome_columns,
                 "combined_chief_complaint",
                 f"{group_name}: {group_label}",
             )
@@ -524,46 +611,97 @@ def build_cohort_term_comparison(model_results: pd.DataFrame) -> pd.DataFrame:
         "multiplicative_ratio_ci_high",
         "pct_difference",
         "p_value",
-        "estimate_log1p_scale",
+        "estimate_log_rate",
+        "estimate_log_mean",
+        "estimate_log1p_mean",
         "cluster_robust_se",
         "status",
         "fit_warnings",
     ]
     comparison = cohort_rows.pivot_table(
         index=["subgroup_set", "stratum", "outcome"],
-        columns="model",
+        columns=["model_family", "model"],
         values=value_columns,
         aggfunc="first",
     )
-    comparison.columns = [f"{value}_{model}" for value, model in comparison.columns]
+    comparison.columns = [
+        f"{value}_{model_family}_{model}"
+        for value, model_family, model in comparison.columns
+    ]
     comparison = comparison.reset_index()
 
-    base = "multiplicative_ratio_age_elixhauser"
-    adjusted = "multiplicative_ratio_age_elixhauser_log1p_prior_all_mimic_admissions"
+    base = "multiplicative_ratio_poisson_log_age_elixhauser"
+    adjusted = "multiplicative_ratio_poisson_log_age_elixhauser_prior365"
     if base in comparison.columns and adjusted in comparison.columns:
-        comparison["ratio_difference_after_readmission_adjustment"] = (
+        comparison["poisson_ratio_difference_after_365d_readmission_adjustment"] = (
             comparison[adjusted] - comparison[base]
         )
-        comparison["ratio_ratio_after_readmission_adjustment"] = (
+        comparison["poisson_ratio_ratio_after_365d_readmission_adjustment"] = (
             comparison[adjusted] / comparison[base]
         )
+    comparison["primary_model_family"] = np.where(
+        comparison["outcome"].isin(COUNT_OUTCOMES),
+        "poisson_log",
+        "log_ols",
+    )
+    comparison["primary_multiplicative_ratio_age_elixhauser"] = np.select(
+        [
+            comparison["outcome"].isin(COUNT_OUTCOMES),
+            comparison["outcome"].isin(LOS_OUTCOMES),
+        ],
+        [
+            comparison.get("multiplicative_ratio_poisson_log_age_elixhauser", pd.NA),
+            comparison.get("multiplicative_ratio_log_ols_age_elixhauser", pd.NA),
+        ],
+        default=pd.NA,
+    )
+    comparison["primary_p_value_age_elixhauser"] = np.select(
+        [
+            comparison["outcome"].isin(COUNT_OUTCOMES),
+            comparison["outcome"].isin(LOS_OUTCOMES),
+        ],
+        [
+            comparison.get("p_value_poisson_log_age_elixhauser", pd.NA),
+            comparison.get("p_value_log_ols_age_elixhauser", pd.NA),
+        ],
+        default=pd.NA,
+    )
+    comparison["primary_multiplicative_ratio_age_elixhauser_prior365"] = np.select(
+        [
+            comparison["outcome"].isin(COUNT_OUTCOMES),
+            comparison["outcome"].isin(LOS_OUTCOMES),
+        ],
+        [
+            comparison.get("multiplicative_ratio_poisson_log_age_elixhauser_prior365", pd.NA),
+            comparison.get("multiplicative_ratio_log_ols_age_elixhauser_prior365", pd.NA),
+        ],
+        default=pd.NA,
+    )
+    comparison["primary_p_value_age_elixhauser_prior365"] = np.select(
+        [
+            comparison["outcome"].isin(COUNT_OUTCOMES),
+            comparison["outcome"].isin(LOS_OUTCOMES),
+        ],
+        [
+            comparison.get("p_value_poisson_log_age_elixhauser_prior365", pd.NA),
+            comparison.get("p_value_log_ols_age_elixhauser_prior365", pd.NA),
+        ],
+        default=pd.NA,
+    )
+    comparison["primary_ratio_difference_after_365d_readmission_adjustment"] = (
+        comparison["primary_multiplicative_ratio_age_elixhauser_prior365"]
+        - comparison["primary_multiplicative_ratio_age_elixhauser"]
+    )
     return comparison.sort_values(["subgroup_set", "stratum", "outcome"])
 
 
 def main() -> None:
     """Run readmission-adjusted utilization models and write outputs."""
     model_data = build_model_dataset()
-    outcome_columns = [
-        "n_labevents_rows",
-        "n_microbiologyevents_rows",
-        "n_poe_rows",
-        "n_poe_detail_rows",
-        "hospital_los_days",
-        "ed_los_hours",
-    ]
+    outcome_columns = [*COUNT_OUTCOMES, *LOS_OUTCOMES]
     outcome_columns = [column for column in outcome_columns if column in model_data.columns]
     outcome_summary = summarize_outcomes(model_data, outcome_columns)
-    model_results = fit_all_models(model_data, outcome_columns)
+    model_results = fit_all_models(model_data)
     cohort_term_comparison = build_cohort_term_comparison(model_results)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -576,7 +714,7 @@ def main() -> None:
         index=False,
     )
     model_results.to_csv(
-        OUTPUT_DIR / "utilization_readmission_adjusted_log_linear_models.csv",
+        OUTPUT_DIR / "utilization_readmission_adjusted_models.csv",
         index=False,
     )
     cohort_term_comparison.to_csv(
@@ -590,11 +728,12 @@ def main() -> None:
         "subgroup_set",
         "stratum",
         "outcome",
-        "multiplicative_ratio_age_elixhauser",
-        "p_value_age_elixhauser",
-        "multiplicative_ratio_age_elixhauser_log1p_prior_all_mimic_admissions",
-        "p_value_age_elixhauser_log1p_prior_all_mimic_admissions",
-        "ratio_difference_after_readmission_adjustment",
+        "primary_model_family",
+        "primary_multiplicative_ratio_age_elixhauser",
+        "primary_p_value_age_elixhauser",
+        "primary_multiplicative_ratio_age_elixhauser_prior365",
+        "primary_p_value_age_elixhauser_prior365",
+        "primary_ratio_difference_after_365d_readmission_adjustment",
     ]
     display_columns = [
         column for column in display_columns if column in cohort_term_comparison.columns
