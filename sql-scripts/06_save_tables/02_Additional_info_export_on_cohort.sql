@@ -40,7 +40,12 @@ WITH all_admissions_with_history AS (
         LAG(adm.dischtime) OVER (
             PARTITION BY adm.subject_id
             ORDER BY adm.admittime, adm.hadm_id
-        ) AS previous_dischtime_for_subject
+        ) AS previous_dischtime_for_subject,
+
+        FIRST_VALUE(adm.admittime) OVER (
+            PARTITION BY adm.subject_id
+            ORDER BY adm.admittime, adm.hadm_id
+        ) AS first_observed_admittime_for_subject
     FROM admissions adm
 ),
 
@@ -53,6 +58,9 @@ all_admissions_with_prior_windows AS (
 
         DATE_DIFF('day', curr.previous_dischtime_for_subject, curr.admittime)
             AS days_since_previous_discharge_for_subject,
+
+        DATE_DIFF('day', curr.first_observed_admittime_for_subject, curr.admittime)
+            AS days_since_first_observed_admission_for_subject,
 
         COUNT(prev.hadm_id) FILTER (
             WHERE prev.admittime >= curr.admittime - INTERVAL '30 days'
@@ -108,7 +116,9 @@ SELECT
     adm.previous_hadm_id_for_subject,
     adm.previous_admittime_for_subject,
     adm.previous_dischtime_for_subject,
+    adm.first_observed_admittime_for_subject,
     adm.days_since_previous_discharge_for_subject,
+    adm.days_since_first_observed_admission_for_subject,
     adm.n_prior_admissions_within_30d_for_subject,
     adm.n_prior_admissions_within_90d_for_subject,
     adm.n_prior_admissions_within_365d_for_subject,
@@ -186,7 +196,12 @@ all_admissions_with_history AS (
         LAG(adm.dischtime) OVER (
             PARTITION BY adm.subject_id
             ORDER BY adm.admittime, adm.hadm_id
-        ) AS previous_dischtime_for_subject
+        ) AS previous_dischtime_for_subject,
+
+        FIRST_VALUE(adm.admittime) OVER (
+            PARTITION BY adm.subject_id
+            ORDER BY adm.admittime, adm.hadm_id
+        ) AS first_observed_admittime_for_subject
     FROM admissions adm
 ),
 
@@ -199,6 +214,9 @@ all_admissions_with_prior_windows AS (
 
         DATE_DIFF('day', curr.previous_dischtime_for_subject, curr.admittime)
             AS days_since_previous_discharge_for_subject,
+
+        DATE_DIFF('day', curr.first_observed_admittime_for_subject, curr.admittime)
+            AS days_since_first_observed_admission_for_subject,
 
         COUNT(prev.hadm_id) FILTER (
             WHERE prev.admittime >= curr.admittime - INTERVAL '30 days'
@@ -257,7 +275,9 @@ SELECT
     adm.previous_hadm_id_for_subject,
     adm.previous_admittime_for_subject,
     adm.previous_dischtime_for_subject,
+    adm.first_observed_admittime_for_subject,
     adm.days_since_previous_discharge_for_subject,
+    adm.days_since_first_observed_admission_for_subject,
     adm.n_prior_admissions_within_30d_for_subject,
     adm.n_prior_admissions_within_90d_for_subject,
     adm.n_prior_admissions_within_365d_for_subject,
