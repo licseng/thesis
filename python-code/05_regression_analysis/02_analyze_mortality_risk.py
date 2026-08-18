@@ -40,13 +40,14 @@ import statsmodels.api as sm
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 COHORT_MATCHING_DIR = PROJECT_DIR / "02_cohort_matching"
+CLUSTERING_DIR = PROJECT_DIR / "04_clustering_chief_complaints"
 sys.path.insert(0, str(COHORT_MATCHING_DIR))
 
 import _matched_cohort_characterization_common as common  # noqa: E402
 
 
 ASSIGNMENT_PATH = (
-    SCRIPT_DIR
+    CLUSTERING_DIR
     / "analysis_output_chief_complaint_subgroup_balance_check"
     / "chief_complaint_subgroup_admission_assignments.csv"
 )

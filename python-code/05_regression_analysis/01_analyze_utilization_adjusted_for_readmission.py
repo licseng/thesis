@@ -23,19 +23,24 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+import sys
 import warnings
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
-import _matched_cohort_characterization_common as common
+COHORT_DIR_FOR_IMPORT = Path(__file__).resolve().parent.parent / "02_cohort_matching"
+sys.path.insert(0, str(COHORT_DIR_FOR_IMPORT))
+
+import _matched_cohort_characterization_common as common  # noqa: E402
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
+COHORT_DIR = PROJECT_DIR / "02_cohort_matching"
 CLUSTERING_DIR = PROJECT_DIR / "04_clustering_chief_complaints"
-MATCHED_PAIRS_PATH = SCRIPT_DIR / "matched_cohort_output" / "matched_pairs.csv"
+MATCHED_PAIRS_PATH = COHORT_DIR / "matched_cohort_output" / "matched_pairs.csv"
 SUBGROUP_ASSIGNMENT_PATH = (
     CLUSTERING_DIR
     / "analysis_output_chief_complaint_subgroup_balance_check"
