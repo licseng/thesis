@@ -56,7 +56,8 @@ PSYCH_HISTORY_RESULTS_PATH = Path(
         "DIAGNOSTIC_OVERSHADOWING_FIRST_LLM_RESULTS_PATH",
         str(
             PSYCH_HISTORY_DIR
-            / "psych_history_classifier_output_prompt_B"
+            / "psych_history_classifier_cluster_outputs_psych_integrated"
+            / "psych_history_classifier_output_prompt_B_current_cohort_merged"
             / "psych_history_section_classifier_results.csv"
         ),
     )
@@ -116,6 +117,14 @@ MAX_NOTES: int | None = 10
 MAX_NOTES_OVERRIDE = os.environ.get("DIAGNOSTIC_OVERSHADOWING_MAX_NOTES")
 if MAX_NOTES_OVERRIDE:
     MAX_NOTES = None if MAX_NOTES_OVERRIDE.lower() == "none" else int(MAX_NOTES_OVERRIDE)
+
+CHECKPOINT_EVERY_ADMISSIONS = int(
+    os.environ.get("DIAGNOSTIC_OVERSHADOWING_CHECKPOINT_EVERY_ADMISSIONS", "50")
+)
+RESUME_FROM_CHECKPOINT = os.environ.get(
+    "DIAGNOSTIC_OVERSHADOWING_RESUME_FROM_CHECKPOINT",
+    "1",
+).lower() not in {"0", "false", "no"}
 
 METADATA_COLUMNS = ["cohort", "subject_id", "hadm_id", "note_id", "charttime"]
 FIRST_STAGE_SECTION_KEY_COLUMNS = METADATA_COLUMNS + ["section_name"]
@@ -576,13 +585,165 @@ def combine_chunk_results(chunk_results: list[dict[str, Any]]) -> dict[str, Any]
     }
 
 
+def section_checkpoint_path() -> Path:
+    """Return the append-only section checkpoint path."""
+    return OUTPUT_DIR / "diagnostic_overshadowing_section_checkpoint.jsonl"
+
+
+def chunk_checkpoint_path() -> Path:
+    """Return the append-only chunk checkpoint path."""
+    return OUTPUT_DIR / "diagnostic_overshadowing_section_chunk_checkpoint.jsonl"
+
+
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Read an append-only JSONL checkpoint file if it exists."""
+    if not path.exists():
+        return []
+
+    rows = []
+    with path.open("r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Invalid JSON in checkpoint {path} at line {line_number}."
+                ) from exc
+    return rows
+
+
+def deduplicate_rows(
+    rows: list[dict[str, Any]],
+    key_columns: list[str],
+) -> list[dict[str, Any]]:
+    """Keep the latest checkpoint row for each stable key."""
+    deduplicated = {}
+    for row in rows:
+        key = tuple(row.get(column) for column in key_columns)
+        deduplicated[key] = row
+    return list(deduplicated.values())
+
+
+def load_checkpoint_rows() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Load completed section and chunk checkpoint rows for resume."""
+    section_rows = deduplicate_rows(
+        read_jsonl(section_checkpoint_path()),
+        ["classifier_row_id"],
+    )
+    chunk_rows = deduplicate_rows(
+        read_jsonl(chunk_checkpoint_path()),
+        ["classifier_row_id", "chunk_index"],
+    )
+    return section_rows, chunk_rows
+
+
+def append_checkpoint_row(path: Path, row: dict[str, Any]) -> None:
+    """Append one checkpoint row and flush it to disk."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row, default=str, ensure_ascii=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def append_checkpoint_rows(path: Path, rows: list[dict[str, Any]]) -> None:
+    """Append multiple checkpoint rows and flush them to disk."""
+    if not rows:
+        return
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, default=str, ensure_ascii=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def write_result_tables(results: pd.DataFrame, chunk_results: pd.DataFrame) -> None:
+    """Write section-level classifier results and compact summaries."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    results.to_parquet(
+        OUTPUT_DIR / "diagnostic_overshadowing_section_classifier_results.parquet",
+        index=False,
+    )
+    results.to_csv(
+        OUTPUT_DIR / "diagnostic_overshadowing_section_classifier_results.csv",
+        index=False,
+    )
+    chunk_results.to_parquet(
+        OUTPUT_DIR / "diagnostic_overshadowing_section_chunk_classifier_results.parquet",
+        index=False,
+    )
+    chunk_results.to_csv(
+        OUTPUT_DIR / "diagnostic_overshadowing_section_chunk_classifier_results.csv",
+        index=False,
+    )
+
+    with (
+        OUTPUT_DIR / "diagnostic_overshadowing_section_classifier_results.jsonl"
+    ).open("w", encoding="utf-8") as handle:
+        for row in results.to_dict(orient="records"):
+            handle.write(json.dumps(row, default=str, ensure_ascii=True) + "\n")
+
+    label_summary = (
+        results.groupby(
+            ["cohort", "section_name", "diagnostic_overshadowing_label"],
+            as_index=False,
+        )
+        .size()
+        .rename(columns={"size": "n_sections"})
+        .sort_values(["cohort", "section_name", "diagnostic_overshadowing_label"])
+    )
+    label_summary.to_csv(
+        OUTPUT_DIR / "diagnostic_overshadowing_section_label_summary.csv",
+        index=False,
+    )
+
+    admission_summary = (
+        results.assign(
+            is_positive=results["diagnostic_overshadowing_label"].eq("positive"),
+            is_unclear=results["diagnostic_overshadowing_label"].eq("unclear"),
+        )
+        .groupby(["cohort", "subject_id", "hadm_id"], as_index=False)
+        .agg(
+            n_sections_classified=("section_name", "size"),
+            n_positive_sections=("is_positive", "sum"),
+            n_unclear_sections=("is_unclear", "sum"),
+            any_positive=("is_positive", "any"),
+            any_unclear=("is_unclear", "any"),
+        )
+    )
+    admission_summary.to_csv(
+        OUTPUT_DIR / "diagnostic_overshadowing_admission_summary.csv",
+        index=False,
+    )
+
+
 def classify_sections(
     section_rows: pd.DataFrame,
     system_prompt: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Run the local model over section chunks and return chunk/section labels."""
-    output_rows = []
-    chunk_output_rows = []
+    if RESUME_FROM_CHECKPOINT:
+        output_rows, chunk_output_rows = load_checkpoint_rows()
+    else:
+        output_rows, chunk_output_rows = [], []
+
+    completed_section_ids = {
+        int(row["classifier_row_id"])
+        for row in output_rows
+        if row.get("classifier_row_id") is not None
+    }
+    if completed_section_ids:
+        print(
+            f"Resuming from checkpoint: {len(completed_section_ids)} sections "
+            f"and {len(chunk_output_rows)} chunks already completed.",
+            flush=True,
+        )
+
     total = len(section_rows)
     section_start_time = time.monotonic()
     total_chunks = int(
@@ -590,11 +751,20 @@ def classify_sections(
             lambda text: len(split_text_into_chunks(str(text)))
         ).sum()
     )
-    completed_chunks = 0
+    completed_chunks = len(chunk_output_rows)
+    completed_admission_keys = {
+        (row.get("cohort"), row.get("subject_id"), row.get("hadm_id"))
+        for row in output_rows
+    }
+    last_snapshot_admission_count = len(completed_admission_keys)
 
     for index, row in section_rows.iterrows():
+        classifier_row_id = int(row["classifier_row_id"])
+        if classifier_row_id in completed_section_ids:
+            continue
+
         if index == 0 or (index + 1) % 10 == 0 or (index + 1) == total:
-            completed_sections = index
+            completed_sections = len(completed_section_ids)
             elapsed = time.monotonic() - section_start_time
             section_rate = 60.0 * completed_sections / elapsed if elapsed > 0 else 0.0
             print(
@@ -624,41 +794,8 @@ def classify_sections(
             raw_result = parse_json_response(response_text)
             normalized = normalize_model_result(raw_result)
             chunk_results.append(normalized)
-            chunk_output_rows.append(
-                {
-                    "classifier_row_id": int(row["classifier_row_id"]),
-                    "first_llm_classifier_row_id": int(row["first_llm_classifier_row_id"]),
-                    "cohort": row["cohort"],
-                    "subject_id": row["subject_id"],
-                    "hadm_id": row["hadm_id"],
-                    "note_id": row["note_id"],
-                    "charttime": row["charttime"],
-                    "section_name": row["section_name"],
-                    "n_psych_keyword_hits": row.get("n_psych_keyword_hits", None),
-                    "psych_keyword_groups": row.get("psych_keyword_groups", ""),
-                    "matched_terms": row.get("matched_terms", ""),
-                    "first_llm_psychiatric_context_label": row.get(
-                        "first_llm_psychiatric_context_label",
-                        "",
-                    ),
-                    "first_llm_psychiatric_mention_type": row.get(
-                        "first_llm_psychiatric_mention_type",
-                        "",
-                    ),
-                    "chunk_index": chunk_index,
-                    "n_chunks": len(chunks),
-                    "chunk_word_count": len(chunk_text.split()),
-                    **normalized,
-                    "model_name": MODEL_NAME,
-                }
-            )
-            time.sleep(SLEEP_BETWEEN_REQUESTS_SECONDS)
-            completed_chunks += 1
-
-        section_result = combine_chunk_results(chunk_results)
-        output_rows.append(
-            {
-                "classifier_row_id": int(row["classifier_row_id"]),
+            chunk_output_row = {
+                "classifier_row_id": classifier_row_id,
                 "first_llm_classifier_row_id": int(row["first_llm_classifier_row_id"]),
                 "cohort": row["cohort"],
                 "subject_id": row["subject_id"],
@@ -666,8 +803,6 @@ def classify_sections(
                 "note_id": row["note_id"],
                 "charttime": row["charttime"],
                 "section_name": row["section_name"],
-                "section_char_length": len(row["section_text"]),
-                "section_word_count": len(row["section_text"].split()),
                 "n_psych_keyword_hits": row.get("n_psych_keyword_hits", None),
                 "psych_keyword_groups": row.get("psych_keyword_groups", ""),
                 "matched_terms": row.get("matched_terms", ""),
@@ -679,20 +814,88 @@ def classify_sections(
                     "first_llm_psychiatric_mention_type",
                     "",
                 ),
-                **section_result,
+                "chunk_index": chunk_index,
+                "n_chunks": len(chunks),
+                "chunk_word_count": len(chunk_text.split()),
+                **normalized,
                 "model_name": MODEL_NAME,
             }
+            chunk_output_rows.append(chunk_output_row)
+            time.sleep(SLEEP_BETWEEN_REQUESTS_SECONDS)
+            completed_chunks += 1
+
+        section_result = combine_chunk_results(chunk_results)
+        output_row = {
+            "classifier_row_id": classifier_row_id,
+            "first_llm_classifier_row_id": int(row["first_llm_classifier_row_id"]),
+            "cohort": row["cohort"],
+            "subject_id": row["subject_id"],
+            "hadm_id": row["hadm_id"],
+            "note_id": row["note_id"],
+            "charttime": row["charttime"],
+            "section_name": row["section_name"],
+            "section_char_length": len(row["section_text"]),
+            "section_word_count": len(row["section_text"].split()),
+            "n_psych_keyword_hits": row.get("n_psych_keyword_hits", None),
+            "psych_keyword_groups": row.get("psych_keyword_groups", ""),
+            "matched_terms": row.get("matched_terms", ""),
+            "first_llm_psychiatric_context_label": row.get(
+                "first_llm_psychiatric_context_label",
+                "",
+            ),
+            "first_llm_psychiatric_mention_type": row.get(
+                "first_llm_psychiatric_mention_type",
+                "",
+            ),
+            **section_result,
+            "model_name": MODEL_NAME,
+        }
+        append_checkpoint_rows(chunk_checkpoint_path(), chunk_output_rows[-len(chunks) :])
+        append_checkpoint_row(section_checkpoint_path(), output_row)
+        chunk_output_rows = deduplicate_rows(
+            chunk_output_rows,
+            ["classifier_row_id", "chunk_index"],
         )
+        output_rows.append(output_row)
+        output_rows = deduplicate_rows(output_rows, ["classifier_row_id"])
+        completed_section_ids.add(classifier_row_id)
+        completed_admission_keys.add((row["cohort"], row["subject_id"], row["hadm_id"]))
+
+        completed_admission_count = len(completed_admission_keys)
+        if (
+            CHECKPOINT_EVERY_ADMISSIONS > 0
+            and completed_admission_count - last_snapshot_admission_count
+            >= CHECKPOINT_EVERY_ADMISSIONS
+        ):
+            write_result_tables(
+                pd.DataFrame(output_rows).sort_values("classifier_row_id"),
+                pd.DataFrame(chunk_output_rows).sort_values(
+                    ["classifier_row_id", "chunk_index"]
+                ),
+            )
+            last_snapshot_admission_count = completed_admission_count
+            print(
+                f"Checkpoint snapshot saved after {completed_admission_count} "
+                f"completed admissions and {len(output_rows)} completed sections.",
+                flush=True,
+            )
 
     elapsed = time.monotonic() - section_start_time
+    completed_sections = len(completed_section_ids)
     print(
-        f"Finished classifying {total} sections and {completed_chunks} chunks "
+        f"Finished classifying {completed_sections}/{total} sections and "
+        f"{completed_chunks} chunks "
         f"in {format_duration(elapsed)} "
-        f"({60.0 * total / elapsed:.2f} sections/min).",
+        f"({60.0 * completed_sections / elapsed:.2f} sections/min).",
         flush=True,
     )
 
-    return pd.DataFrame(output_rows), pd.DataFrame(chunk_output_rows)
+    return (
+        pd.DataFrame(output_rows).sort_values("classifier_row_id").reset_index(drop=True),
+        pd.DataFrame(chunk_output_rows)
+        .sort_values(["classifier_row_id", "chunk_index"])
+        .reset_index(drop=True),
+    )
 
 
 def write_outputs(
@@ -701,33 +904,11 @@ def write_outputs(
     run_metadata: dict[str, Any],
 ) -> None:
     """Write section-level classifier results and compact summaries."""
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    results.to_parquet(
-        OUTPUT_DIR / "diagnostic_overshadowing_section_classifier_results.parquet",
-        index=False,
-    )
-    results.to_csv(
-        OUTPUT_DIR / "diagnostic_overshadowing_section_classifier_results.csv",
-        index=False,
-    )
-    chunk_results.to_parquet(
-        OUTPUT_DIR / "diagnostic_overshadowing_section_chunk_classifier_results.parquet",
-        index=False,
-    )
-    chunk_results.to_csv(
-        OUTPUT_DIR / "diagnostic_overshadowing_section_chunk_classifier_results.csv",
-        index=False,
-    )
-
+    write_result_tables(results, chunk_results)
     with (
-        OUTPUT_DIR / "diagnostic_overshadowing_section_classifier_results.jsonl"
-    ).open("w") as handle:
-        for row in results.to_dict(orient="records"):
-            handle.write(json.dumps(row, default=str, ensure_ascii=True) + "\n")
-
-    with (OUTPUT_DIR / "diagnostic_overshadowing_run_metadata.json").open("w") as handle:
+        OUTPUT_DIR / "diagnostic_overshadowing_run_metadata.json"
+    ).open("w", encoding="utf-8") as handle:
         json.dump(run_metadata, handle, indent=2, default=str)
-
     label_summary = (
         results.groupby(
             ["cohort", "section_name", "diagnostic_overshadowing_label"],
@@ -781,6 +962,11 @@ def main() -> None:
     print(f"First-stage positive label: {PSYCH_HISTORY_POSITIVE_LABEL}")
     print(f"Using diagnostic-overshadowing backend: {BACKEND}")
     print(f"Using diagnostic-overshadowing model: {MODEL_NAME}")
+    print(f"Resume from checkpoint: {RESUME_FROM_CHECKPOINT}")
+    print(
+        "Checkpoint snapshot interval: "
+        f"{CHECKPOINT_EVERY_ADMISSIONS} completed admissions"
+    )
     if BACKEND == "openai_compatible":
         print(f"Using API URL: {api_chat_completions_url()}")
         print(f"Using API JSON mode: {API_JSON_MODE}")
@@ -815,6 +1001,10 @@ def main() -> None:
         "max_notes": MAX_NOTES,
         "chunk_words": CHUNK_WORDS,
         "chunk_overlap_words": CHUNK_OVERLAP_WORDS,
+        "resume_from_checkpoint": RESUME_FROM_CHECKPOINT,
+        "checkpoint_every_admissions": CHECKPOINT_EVERY_ADMISSIONS,
+        "section_checkpoint_path": str(section_checkpoint_path()),
+        "chunk_checkpoint_path": str(chunk_checkpoint_path()),
         "n_section_rows": len(results),
         "n_chunk_rows": len(chunk_results),
         "n_admissions": int(
