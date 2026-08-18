@@ -30,12 +30,11 @@ from __future__ import annotations
 import math
 from pathlib import Path
 import sys
+import warnings
 
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize
-from scipy.special import expit
-from scipy.stats import norm
+import statsmodels.api as sm
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -656,39 +655,60 @@ def summarize_covariate_bins(analysis: pd.DataFrame) -> tuple[pd.DataFrame, pd.D
     return age_counts, elixhauser_counts
 
 
-def add_readmission_order_columns(analysis: pd.DataFrame) -> pd.DataFrame:
-    """Add admission-order and prior-admission bucket variables by cohort-subject."""
+def prior_all_mimic_admission_group(n_prior: object) -> str:
+    """Bucket real prior MIMIC admissions before the matched admission."""
+    if pd.isna(n_prior):
+        return "missing"
+    n_prior = int(n_prior)
+    if n_prior == 0:
+        return "0_prior"
+    if n_prior <= 2:
+        return "1_2_prior"
+    if n_prior <= 5:
+        return "3_5_prior"
+    return "6plus_prior"
+
+
+def add_real_readmission_columns(analysis: pd.DataFrame) -> pd.DataFrame:
+    """Add full-MIMIC prior-admission bucket variables for each admission."""
+    if "n_prior_all_admissions_for_subject" not in analysis.columns:
+        raise ValueError(
+            "Missing n_prior_all_admissions_for_subject. Rerun the matched-cohort "
+            "additional-info SQL export before mortality readmission adjustment."
+        )
     output = analysis.copy()
-    output["admittime"] = pd.to_datetime(output["admittime"], errors="coerce")
-    output = output.sort_values(["cohort", "subject_id", "admittime", "pair_id", "hadm_id"])
-    output["matched_admission_order"] = (
-        output.groupby(["cohort", "subject_id"]).cumcount() + 1
+    output["prior_all_mimic_admissions"] = pd.to_numeric(
+        output["n_prior_all_admissions_for_subject"],
+        errors="raise",
     )
-    output["prior_matched_admissions"] = output["matched_admission_order"] - 1
-    output["prior_1"] = output["prior_matched_admissions"].eq(1).astype(int)
-    output["prior_2plus"] = output["prior_matched_admissions"].ge(2).astype(int)
-    output["prior_matched_admission_group"] = "0_prior"
-    output.loc[
-        output["prior_matched_admissions"].eq(1),
-        "prior_matched_admission_group",
-    ] = "1_prior"
-    output.loc[
-        output["prior_matched_admissions"].ge(2),
-        "prior_matched_admission_group",
-    ] = "2plus_prior"
+    output["log1p_prior_all_mimic_admissions"] = np.log1p(
+        output["prior_all_mimic_admissions"],
+    )
+    output["prior_all_mimic_admission_group"] = output[
+        "prior_all_mimic_admissions"
+    ].map(prior_all_mimic_admission_group)
+    output["prior_all_mimic_1_2"] = output[
+        "prior_all_mimic_admission_group"
+    ].eq("1_2_prior").astype(int)
+    output["prior_all_mimic_3_5"] = output[
+        "prior_all_mimic_admission_group"
+    ].eq("3_5_prior").astype(int)
+    output["prior_all_mimic_6plus"] = output[
+        "prior_all_mimic_admission_group"
+    ].eq("6plus_prior").astype(int)
     return output.sort_values(["pair_id", "cohort"]).reset_index(drop=True)
 
 
-def summarize_readmission_order_distribution(analysis: pd.DataFrame) -> pd.DataFrame:
-    """Count admissions by prior matched-admission group and cohort."""
+def summarize_real_readmission_distribution(analysis: pd.DataFrame) -> pd.DataFrame:
+    """Count admissions by full-MIMIC prior admission group and cohort."""
     denominators = analysis.groupby("cohort")["hadm_id"].nunique().to_dict()
     distribution = (
-        analysis.groupby(["cohort", "prior_matched_admission_group"], as_index=False)
+        analysis.groupby(["cohort", "prior_all_mimic_admission_group"], as_index=False)
         .agg(
             n_admissions=("hadm_id", "nunique"),
             n_subjects=("subject_id", "nunique"),
         )
-        .sort_values(["cohort", "prior_matched_admission_group"])
+        .sort_values(["cohort", "prior_all_mimic_admission_group"])
     )
     distribution["pct_admissions_within_cohort"] = distribution.apply(
         lambda row: 100.0
@@ -771,71 +791,85 @@ def fit_clustered_logistic_model(
                     "n_events": n_events,
                     "n_clusters": n_clusters,
                     "status": "not_fit_outcome_has_one_class",
+                    "fit_method": "statsmodels_glm_binomial_cluster_robust",
+                    "fit_converged": False,
+                    "fit_message": "not_fit_outcome_has_one_class",
+                    "fit_warnings": "",
+                    "fit_iterations": pd.NA,
                 }
                 for term in coefficient_names
             ]
         )
 
-    x = np.column_stack(
-        [
-            np.ones(n_rows),
-            model_data["mhh1_psychotic"].to_numpy(dtype=float),
-            model_data["age_at_admission_per_10y"].to_numpy(dtype=float),
-            model_data["elixhauser_score_per_5pt"].to_numpy(dtype=float),
-            *[
-                model_data[column].to_numpy(dtype=float)
-                for column in extra_predictor_columns
-            ],
-        ]
+    predictor_columns = [
+        "mhh1_psychotic",
+        "age_at_admission_per_10y",
+        "elixhauser_score_per_5pt",
+        *extra_predictor_columns,
+    ]
+    x = sm.add_constant(
+        model_data.loc[:, predictor_columns].astype(float),
+        has_constant="add",
     )
-    y = model_data[outcome].to_numpy(dtype=float)
+    x = x.rename(columns={"const": "intercept"})
+    y = model_data[outcome].astype(float)
+    coefficient_names = x.columns.tolist()
 
-    def objective(beta: np.ndarray) -> float:
-        eta = x @ beta
-        return float(np.sum(np.logaddexp(0, eta) - y * eta))
-
-    def gradient(beta: np.ndarray) -> np.ndarray:
-        p = expit(x @ beta)
-        return x.T @ (p - y)
-
-    initial_intercept = math.log((n_events + 0.5) / (n_rows - n_events + 0.5))
-    initial_beta = np.array([initial_intercept, *([0.0] * (len(coefficient_names) - 1))])
-    fit = minimize(
-        objective,
-        initial_beta,
-        jac=gradient,
-        method="BFGS",
-        options={"maxiter": 1000, "gtol": 1e-6},
-    )
-    beta = fit.x
-    p = expit(x @ beta)
-    weights = p * (1.0 - p)
-    bread = np.linalg.pinv(x.T @ (x * weights[:, None]))
-
-    cluster_scores = []
-    residual = y - p
-    for _, cluster_index in model_data.groupby("cluster_id").groups.items():
-        indices = np.asarray(cluster_index)
-        cluster_scores.append(x[indices, :].T @ residual[indices])
-    meat = np.zeros((x.shape[1], x.shape[1]))
-    for score in cluster_scores:
-        meat += np.outer(score, score)
-
-    covariance = bread @ meat @ bread
-    n_parameters = x.shape[1]
-    if n_clusters > 1 and n_rows > n_parameters:
-        finite_sample_correction = (n_clusters / (n_clusters - 1)) * (
-            (n_rows - 1) / (n_rows - n_parameters)
+    captured_warnings = []
+    try:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            fit = sm.GLM(y, x, family=sm.families.Binomial()).fit(
+                cov_type="cluster",
+                cov_kwds={
+                    "groups": model_data["cluster_id"],
+                    "use_correction": True,
+                },
+                maxiter=100,
+            )
+            captured_warnings = [
+                f"{warning.category.__name__}: {warning.message}"
+                for warning in caught
+            ]
+    except Exception as exc:
+        return pd.DataFrame(
+            [
+                {
+                    "model": model_name,
+                    "stratum": stratum,
+                    "outcome": outcome,
+                    "term": term,
+                    "n_admissions": n_rows,
+                    "n_events": n_events,
+                    "n_clusters": n_clusters,
+                    "status": "fit_failed",
+                    "fit_method": "statsmodels_glm_binomial_cluster_robust",
+                    "fit_converged": False,
+                    "fit_message": repr(exc),
+                    "fit_warnings": "",
+                    "fit_iterations": pd.NA,
+                }
+                for term in coefficient_names
+            ]
         )
-        covariance *= finite_sample_correction
-    standard_errors = np.sqrt(np.maximum(np.diag(covariance), 0))
+
+    params = fit.params
+    standard_errors = fit.bse
+    conf_int = fit.conf_int(alpha=0.05)
+    fit_history = getattr(fit, "fit_history", {}) or {}
+    fit_converged = bool(getattr(fit, "converged", False))
+    fit_warnings = " | ".join(captured_warnings)
+    fit_message = "converged" if fit_converged else "not_converged"
+    fit_iterations = fit_history.get("iteration", pd.NA)
 
     rows = []
-    for term, estimate, se in zip(coefficient_names, beta, standard_errors, strict=True):
-        z_value = estimate / se if se and not np.isnan(se) else pd.NA
-        p_value = 2 * (1 - norm.cdf(abs(z_value))) if z_value is not pd.NA else pd.NA
-        ci_low = estimate - 1.96 * se if se and not np.isnan(se) else pd.NA
-        ci_high = estimate + 1.96 * se if se and not np.isnan(se) else pd.NA
+    for term in coefficient_names:
+        estimate = params.get(term, pd.NA)
+        se = standard_errors.get(term, pd.NA)
+        z_value = fit.tvalues.get(term, pd.NA)
+        p_value = fit.pvalues.get(term, pd.NA)
+        ci_low = conf_int.loc[term, 0] if term in conf_int.index else pd.NA
+        ci_high = conf_int.loc[term, 1] if term in conf_int.index else pd.NA
         rows.append(
             {
                 "model": model_name,
@@ -852,7 +886,12 @@ def fit_clustered_logistic_model(
                 "odds_ratio": math.exp(estimate),
                 "odds_ratio_ci_low": math.exp(ci_low) if ci_low is not pd.NA else pd.NA,
                 "odds_ratio_ci_high": math.exp(ci_high) if ci_high is not pd.NA else pd.NA,
-                "status": "fit_converged" if fit.success else f"fit_warning_{fit.message}",
+                "status": "fit_converged" if fit_converged and not fit_warnings else "fit_warning",
+                "fit_method": "statsmodels_glm_binomial_cluster_robust",
+                "fit_converged": fit_converged,
+                "fit_message": fit_message,
+                "fit_warnings": fit_warnings,
+                "fit_iterations": fit_iterations,
             }
         )
     return pd.DataFrame(rows)
@@ -889,9 +928,9 @@ def fit_admission_level_models(analysis: pd.DataFrame) -> pd.DataFrame:
 
 
 def fit_admission_level_readmission_adjusted_models(analysis: pd.DataFrame) -> pd.DataFrame:
-    """Fit adjusted mortality models with prior admission bucket covariates."""
+    """Fit adjusted mortality models with log-transformed full-MIMIC prior admissions."""
     model_rows = []
-    extra_predictors = ["prior_1", "prior_2plus"]
+    extra_predictors = ["log1p_prior_all_mimic_admissions"]
     for outcome in OUTCOME_COLUMNS:
         model_rows.append(
             fit_clustered_logistic_model(
@@ -946,9 +985,9 @@ def fit_admission_level_combined_models(analysis: pd.DataFrame) -> pd.DataFrame:
 def fit_admission_level_combined_readmission_adjusted_models(
     analysis: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Fit combined-subgroup mortality models with prior admission buckets."""
+    """Fit combined-subgroup models with log-transformed full-MIMIC prior admissions."""
     model_rows = []
-    extra_predictors = ["prior_1", "prior_2plus"]
+    extra_predictors = ["log1p_prior_all_mimic_admissions"]
     combined = analysis.dropna(subset=["combined_chief_complaint_group"]).copy()
     for (group_name, group_label), group in combined.groupby(
         ["combined_chief_complaint_group", "combined_chief_complaint_group_label"],
@@ -969,6 +1008,88 @@ def fit_admission_level_combined_readmission_adjusted_models(
     return pd.concat(model_rows, ignore_index=True)
 
 
+def build_cohort_term_model_comparison(
+    age_elixhauser_models: pd.DataFrame,
+    readmission_adjusted_models: pd.DataFrame,
+    combined_age_elixhauser_models: pd.DataFrame,
+    combined_readmission_adjusted_models: pd.DataFrame,
+) -> pd.DataFrame:
+    """Put cohort effect estimates before/after readmission adjustment side by side."""
+    model_sets = [
+        ("pure_or_overall", "age_elixhauser", age_elixhauser_models),
+        (
+            "pure_or_overall",
+            "age_elixhauser_log1p_prior_all_mimic_admissions",
+            readmission_adjusted_models,
+        ),
+        ("combined", "age_elixhauser", combined_age_elixhauser_models),
+        (
+            "combined",
+            "age_elixhauser_log1p_prior_all_mimic_admissions",
+            combined_readmission_adjusted_models,
+        ),
+    ]
+    rows = []
+    for subgroup_set, adjustment, model_table in model_sets:
+        if model_table.empty:
+            continue
+        cohort_rows = model_table.loc[model_table["term"].eq("mhh1_psychotic")].copy()
+        if cohort_rows.empty:
+            continue
+        cohort_rows["subgroup_set"] = subgroup_set
+        cohort_rows["adjustment"] = adjustment
+        rows.append(cohort_rows)
+    if not rows:
+        return pd.DataFrame()
+
+    combined = pd.concat(rows, ignore_index=True)
+    value_columns = [
+        "n_admissions",
+        "n_events",
+        "n_clusters",
+        "odds_ratio",
+        "odds_ratio_ci_low",
+        "odds_ratio_ci_high",
+        "p_value",
+        "estimate_log_odds",
+        "cluster_robust_se",
+        "status",
+        "fit_converged",
+        "fit_message",
+        "fit_warnings",
+    ]
+    comparison = combined.pivot_table(
+        index=["subgroup_set", "stratum", "outcome"],
+        columns="adjustment",
+        values=value_columns,
+        aggfunc="first",
+    )
+    comparison.columns = [
+        f"{value}_{adjustment}" for value, adjustment in comparison.columns
+    ]
+    comparison = comparison.reset_index()
+
+    base_or = "odds_ratio_age_elixhauser"
+    readmit_or = "odds_ratio_age_elixhauser_log1p_prior_all_mimic_admissions"
+    if base_or in comparison.columns and readmit_or in comparison.columns:
+        comparison["odds_ratio_difference_after_readmission_adjustment"] = (
+            comparison[readmit_or] - comparison[base_or]
+        )
+        comparison["odds_ratio_ratio_after_readmission_adjustment"] = (
+            comparison[readmit_or] / comparison[base_or]
+        )
+
+    outcome_order = {outcome: index for index, outcome in enumerate(OUTCOME_COLUMNS)}
+    comparison["outcome_order"] = comparison["outcome"].map(outcome_order)
+    comparison["stratum_order"] = comparison["stratum"].eq("overall").map(
+        {True: 0, False: 1}
+    )
+    comparison = comparison.sort_values(
+        ["subgroup_set", "stratum_order", "stratum", "outcome_order"]
+    ).drop(columns=["stratum_order", "outcome_order"])
+    return comparison
+
+
 def main() -> None:
     """Run subject-level mortality analysis and write CSV outputs."""
     descriptors = load_descriptors()
@@ -979,7 +1100,7 @@ def main() -> None:
     admission_level = add_matching_covariates(descriptors, matching_covariates)
     admission_level = add_pure_subgroup_columns(admission_level, pure_assignments)
     admission_level = add_combined_subgroup_columns(admission_level, combined_assignments)
-    admission_level = add_readmission_order_columns(admission_level)
+    admission_level = add_real_readmission_columns(admission_level)
     admission_overall_summary = summarize_outcomes(admission_level)
     admission_overall_comparison = compare_cohorts(admission_overall_summary)
     admission_pure = admission_level.dropna(subset=["pure_chief_complaint_group"]).copy()
@@ -1012,6 +1133,12 @@ def main() -> None:
     admission_combined_readmission_adjusted_models = (
         fit_admission_level_combined_readmission_adjusted_models(admission_level)
     )
+    admission_cohort_term_model_comparison = build_cohort_term_model_comparison(
+        admission_adjusted_models,
+        admission_readmission_adjusted_models,
+        admission_combined_adjusted_models,
+        admission_combined_readmission_adjusted_models,
+    )
 
     selected, selection_summary = select_first_mhh1_subject_pairs(descriptors)
     selected, selection_summary, dropped_repeated_mhc0_pairs = restrict_to_unique_mhc0_subjects(
@@ -1040,8 +1167,8 @@ def main() -> None:
         OUTPUT_DIR / "admission_level_mortality_all_matched_dataset.csv",
         index=False,
     )
-    summarize_readmission_order_distribution(admission_level).to_csv(
-        OUTPUT_DIR / "admission_level_readmission_order_distribution.csv",
+    summarize_real_readmission_distribution(admission_level).to_csv(
+        OUTPUT_DIR / "admission_level_prior_all_mimic_admission_distribution.csv",
         index=False,
     )
     admission_overall_summary.to_csv(
@@ -1084,6 +1211,10 @@ def main() -> None:
     admission_combined_readmission_adjusted_models.to_csv(
         OUTPUT_DIR
         / "admission_level_mortality_combined_subgroup_readmission_adjusted_logistic_models.csv",
+        index=False,
+    )
+    admission_cohort_term_model_comparison.to_csv(
+        OUTPUT_DIR / "admission_level_mortality_cohort_term_model_comparison.csv",
         index=False,
     )
     selected.to_csv(
@@ -1159,9 +1290,9 @@ def main() -> None:
         & admission_adjusted_models["stratum"].eq("overall")
     ]
     print(cohort_model_rows.to_string(index=False))
-    print("\n=== Admission-level readmission-order distribution ===")
-    print(summarize_readmission_order_distribution(admission_level).to_string(index=False))
-    print("\n=== Admission-level readmission-adjusted model, cohort term ===")
+    print("\n=== Admission-level full-MIMIC prior admission distribution ===")
+    print(summarize_real_readmission_distribution(admission_level).to_string(index=False))
+    print("\n=== Admission-level full-MIMIC readmission-adjusted model, cohort term ===")
     readmission_cohort_model_rows = admission_readmission_adjusted_models.loc[
         admission_readmission_adjusted_models["term"].eq("mhh1_psychotic")
         & admission_readmission_adjusted_models["stratum"].eq("overall")
@@ -1178,7 +1309,7 @@ def main() -> None:
                 admission_combined_adjusted_models["term"].eq("mhh1_psychotic")
             ].to_string(index=False)
         )
-    print("\n=== Admission-level combined subgroup readmission-adjusted models, cohort term ===")
+    print("\n=== Admission-level combined subgroup full-MIMIC readmission-adjusted models, cohort term ===")
     if admission_combined_readmission_adjusted_models.empty:
         print("No combined subgroup readmission-adjusted models were fit.")
     else:
@@ -1189,6 +1320,13 @@ def main() -> None:
                 )
             ].to_string(index=False)
         )
+    print("\n=== Admission-level post-discharge mortality cohort term comparison ===")
+    post_discharge_comparison = admission_cohort_term_model_comparison.loc[
+        admission_cohort_term_model_comparison["outcome"].eq(
+            "post_discharge_death_within_1y"
+        )
+    ]
+    print(post_discharge_comparison.to_string(index=False))
     print("\n=== Pair selection ===")
     print(selection_summary.to_string(index=False))
     print("\n=== Overall mortality comparison ===")

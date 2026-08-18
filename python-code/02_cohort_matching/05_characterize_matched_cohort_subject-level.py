@@ -34,6 +34,30 @@ def main() -> None:
     admissions_per_subject_distribution = (
         common.build_admissions_per_subject_distribution(matched_ids)
     )
+    prior_all_mimic_admission_summary = (
+        common.build_prior_all_mimic_admission_summary(descriptors)
+    )
+    prior_all_mimic_admission_distribution = (
+        common.build_prior_all_mimic_admission_distribution(descriptors)
+    )
+    prior_all_mimic_admission_bucket_distribution = (
+        common.build_prior_all_mimic_admission_bucket_distribution(descriptors)
+    )
+    prior_all_mimic_window_summary = common.build_prior_all_mimic_window_summary(
+        descriptors,
+    )
+    prior_all_mimic_interval_summary = (
+        common.build_prior_all_mimic_interval_summary(descriptors)
+    )
+    prior_all_mimic_interval_bucket_distribution = (
+        common.build_prior_all_mimic_interval_bucket_distribution(descriptors)
+    )
+    prior_all_mimic_rate_summary = (
+        common.build_prior_all_mimic_admission_rate_summary(descriptors)
+    )
+    prior_all_mimic_rate_distribution = (
+        common.build_prior_all_mimic_admission_rate_distribution(descriptors)
+    )
     readmission_cap_admission_loss, readmission_cap_pair_loss = (
         common.build_readmission_cap_loss_summary(descriptors)
     )
@@ -61,6 +85,38 @@ def main() -> None:
     )
     admissions_per_subject_distribution.to_csv(
         output_dir / "matched_cohort_admissions_per_subject_distribution.csv",
+        index=False,
+    )
+    prior_all_mimic_admission_summary.to_csv(
+        output_dir / "matched_cohort_prior_all_mimic_admission_summary.csv",
+        index=False,
+    )
+    prior_all_mimic_admission_distribution.to_csv(
+        output_dir / "matched_cohort_prior_all_mimic_admission_distribution.csv",
+        index=False,
+    )
+    prior_all_mimic_admission_bucket_distribution.to_csv(
+        output_dir / "matched_cohort_prior_all_mimic_admission_bucket_distribution.csv",
+        index=False,
+    )
+    prior_all_mimic_window_summary.to_csv(
+        output_dir / "matched_cohort_prior_all_mimic_window_summary.csv",
+        index=False,
+    )
+    prior_all_mimic_interval_summary.to_csv(
+        output_dir / "matched_cohort_prior_all_mimic_interval_summary.csv",
+        index=False,
+    )
+    prior_all_mimic_interval_bucket_distribution.to_csv(
+        output_dir / "matched_cohort_prior_all_mimic_interval_bucket_distribution.csv",
+        index=False,
+    )
+    prior_all_mimic_rate_summary.to_csv(
+        output_dir / "matched_cohort_prior_all_mimic_admission_rate_summary.csv",
+        index=False,
+    )
+    prior_all_mimic_rate_distribution.to_csv(
+        output_dir / "matched_cohort_prior_all_mimic_admission_rate_distribution.csv",
         index=False,
     )
     readmission_cap_admission_loss.to_csv(
@@ -93,6 +149,20 @@ def main() -> None:
     print(admissions_per_subject_summary.to_string(index=False))
     print("\n=== Admissions Per Subject Distribution ===")
     print(admissions_per_subject_distribution.to_string(index=False))
+    print("\n=== Prior All-MIMIC Admissions Summary ===")
+    print(prior_all_mimic_admission_summary.to_string(index=False))
+    print("\n=== Prior All-MIMIC Admissions Bucket Distribution ===")
+    print(prior_all_mimic_admission_bucket_distribution.to_string(index=False))
+    print("\n=== Recent Prior All-MIMIC Admission Window Summary ===")
+    print(prior_all_mimic_window_summary.to_string(index=False))
+    print("\n=== Prior All-MIMIC Admission Interval Summary ===")
+    print(prior_all_mimic_interval_summary.to_string(index=False))
+    print("\n=== Prior All-MIMIC Previous Discharge Interval Distribution ===")
+    print(prior_all_mimic_interval_bucket_distribution.to_string(index=False))
+    print("\n=== Prior All-MIMIC Admission Rate Summary ===")
+    print(prior_all_mimic_rate_summary.to_string(index=False))
+    print("\n=== Prior All-MIMIC Admission Rate Distribution ===")
+    print(prior_all_mimic_rate_distribution.to_string(index=False))
     print("\n=== Readmission Cap Pair-Preserving Pair Loss ===")
     print(readmission_cap_pair_loss.to_string(index=False))
     print("\n=== Subject-Level Utilization Summary ===")

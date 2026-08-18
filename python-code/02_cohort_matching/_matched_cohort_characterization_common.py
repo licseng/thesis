@@ -66,6 +66,7 @@ SUBJECT_LEVEL_OUTPUT_DIR = Path(
 EXPORT_BASENAMES = {
     "descriptors": "export_matched_cohort_descriptors",
     "diagnoses": "export_matched_cohort_diagnoses",
+    "subject_admission_history": "export_matched_cohort_subject_admission_history",
     "labevents": "export_matched_cohort_labevents",
     "microbiologyevents": "export_matched_cohort_microbiologyevents",
     "poe": "export_matched_cohort_poe",
@@ -467,6 +468,544 @@ def build_admissions_per_subject_distribution(matched_ids: pd.DataFrame) -> pd.D
         distribution["n_subjects"] * distribution["n_matched_admissions"]
     )
     return distribution
+
+
+def prior_all_admission_bucket(n_prior: int) -> str:
+    """Return a compact bucket for prior admissions across all MIMIC admissions."""
+    if n_prior <= 5:
+        return str(n_prior)
+    if n_prior <= 10:
+        return "6-10"
+    return "11+"
+
+
+def build_prior_all_mimic_admission_summary(descriptors: pd.DataFrame) -> pd.DataFrame:
+    """Summarize true prior hospital admissions for matched admissions.
+
+    This uses the full MIMIC admissions table-derived column
+    `n_prior_all_admissions_for_subject`, not the count of repeated admissions
+    inside the matched cohort.
+    """
+    required_columns = {
+        "cohort",
+        "subject_id",
+        "hadm_id",
+        "n_prior_all_admissions_for_subject",
+    }
+    missing = sorted(required_columns - set(descriptors.columns))
+    if missing:
+        raise ValueError(
+            "descriptors is missing full-admission-history columns. "
+            f"Rerun sql-scripts/06_save_tables/02_Additional_info_export_on_cohort.sql. "
+            f"Missing: {missing}"
+        )
+    clean = descriptors.copy()
+    clean["n_prior_all_admissions_for_subject"] = pd.to_numeric(
+        clean["n_prior_all_admissions_for_subject"],
+        errors="raise",
+    ).astype(int)
+    rows = []
+    for cohort, group in clean.groupby("cohort"):
+        values = group["n_prior_all_admissions_for_subject"]
+        rows.append(
+            {
+                "cohort": cohort,
+                "n_matched_admissions": group["hadm_id"].nunique(),
+                "n_subjects": group["subject_id"].nunique(),
+                "mean_prior_all_mimic_admissions": values.mean(),
+                "sd_prior_all_mimic_admissions": values.std(ddof=1),
+                "median_prior_all_mimic_admissions": values.median(),
+                "q1_prior_all_mimic_admissions": values.quantile(0.25),
+                "q3_prior_all_mimic_admissions": values.quantile(0.75),
+                "max_prior_all_mimic_admissions": values.max(),
+                "n_matched_admissions_with_no_prior_mimic_admission": int(values.eq(0).sum()),
+                "n_matched_admissions_with_any_prior_mimic_admission": int(values.gt(0).sum()),
+                "pct_matched_admissions_with_any_prior_mimic_admission": 100.0
+                * values.gt(0).mean(),
+            }
+        )
+    return pd.DataFrame(rows).sort_values("cohort")
+
+
+def build_prior_all_mimic_admission_distribution(
+    descriptors: pd.DataFrame,
+) -> pd.DataFrame:
+    """Count matched admissions by exact number of prior MIMIC admissions."""
+    required_columns = {
+        "cohort",
+        "subject_id",
+        "hadm_id",
+        "n_prior_all_admissions_for_subject",
+    }
+    missing = sorted(required_columns - set(descriptors.columns))
+    if missing:
+        raise ValueError(
+            "descriptors is missing full-admission-history columns. "
+            f"Rerun sql-scripts/06_save_tables/02_Additional_info_export_on_cohort.sql. "
+            f"Missing: {missing}"
+        )
+    clean = descriptors.copy()
+    clean["n_prior_all_admissions_for_subject"] = pd.to_numeric(
+        clean["n_prior_all_admissions_for_subject"],
+        errors="raise",
+    ).astype(int)
+    distribution = (
+        clean.groupby(["cohort", "n_prior_all_admissions_for_subject"], as_index=False)
+        .agg(
+            n_matched_admissions=("hadm_id", "nunique"),
+            n_subjects=("subject_id", "nunique"),
+        )
+        .sort_values(["cohort", "n_prior_all_admissions_for_subject"])
+    )
+    denominators = clean.groupby("cohort")["hadm_id"].nunique().to_dict()
+    distribution["pct_matched_admissions_within_cohort"] = distribution.apply(
+        lambda row: 100.0
+        * row["n_matched_admissions"]
+        / denominators.get(row["cohort"], 0),
+        axis=1,
+    )
+    return distribution
+
+
+def build_prior_all_mimic_admission_bucket_distribution(
+    descriptors: pd.DataFrame,
+) -> pd.DataFrame:
+    """Count matched admissions by bucketed number of prior MIMIC admissions."""
+    exact = build_prior_all_mimic_admission_distribution(descriptors)
+    exact["prior_all_mimic_admission_bucket"] = exact[
+        "n_prior_all_admissions_for_subject"
+    ].map(prior_all_admission_bucket)
+    bucket_order = ["0", "1", "2", "3", "4", "5", "6-10", "11+"]
+    bucketed = (
+        exact.groupby(["cohort", "prior_all_mimic_admission_bucket"], as_index=False)
+        .agg(
+            n_matched_admissions=("n_matched_admissions", "sum"),
+            n_subjects=("n_subjects", "sum"),
+        )
+    )
+    denominators = (
+        exact.groupby("cohort")["n_matched_admissions"].sum().to_dict()
+    )
+    bucketed["pct_matched_admissions_within_cohort"] = bucketed.apply(
+        lambda row: 100.0
+        * row["n_matched_admissions"]
+        / denominators.get(row["cohort"], 0),
+        axis=1,
+    )
+    bucketed["prior_all_mimic_admission_bucket"] = pd.Categorical(
+        bucketed["prior_all_mimic_admission_bucket"],
+        categories=bucket_order,
+        ordered=True,
+    )
+    return bucketed.sort_values(["cohort", "prior_all_mimic_admission_bucket"])
+
+
+def build_prior_all_mimic_window_summary(descriptors: pd.DataFrame) -> pd.DataFrame:
+    """Summarize recent prior admissions within 30/90/365 days."""
+    window_columns = [
+        "n_prior_admissions_within_30d_for_subject",
+        "n_prior_admissions_within_90d_for_subject",
+        "n_prior_admissions_within_365d_for_subject",
+        "has_prior_admission_within_30d_for_subject",
+        "has_prior_admission_within_90d_for_subject",
+        "has_prior_admission_within_365d_for_subject",
+    ]
+    missing = sorted(set(["cohort", "subject_id", "hadm_id", *window_columns]) - set(descriptors.columns))
+    if missing:
+        raise ValueError(
+            "descriptors is missing recent full-admission-history columns. "
+            f"Rerun sql-scripts/06_save_tables/02_Additional_info_export_on_cohort.sql. "
+            f"Missing: {missing}"
+        )
+    clean = descriptors.copy()
+    for column in window_columns:
+        clean[column] = pd.to_numeric(clean[column], errors="raise")
+
+    rows = []
+    for cohort, group in clean.groupby("cohort"):
+        for days in (30, 90, 365):
+            count_column = f"n_prior_admissions_within_{days}d_for_subject"
+            flag_column = f"has_prior_admission_within_{days}d_for_subject"
+            rows.append(
+                {
+                    "cohort": cohort,
+                    "window_days": days,
+                    "n_matched_admissions": group["hadm_id"].nunique(),
+                    "n_subjects": group["subject_id"].nunique(),
+                    "n_matched_admissions_with_prior_admission_in_window": int(
+                        group[flag_column].sum()
+                    ),
+                    "pct_matched_admissions_with_prior_admission_in_window": 100.0
+                    * group[flag_column].mean(),
+                    "mean_prior_admissions_in_window": group[count_column].mean(),
+                    "median_prior_admissions_in_window": group[count_column].median(),
+                    "max_prior_admissions_in_window": group[count_column].max(),
+                }
+            )
+    return pd.DataFrame(rows).sort_values(["cohort", "window_days"])
+
+
+def readmission_interval_bucket(days: float | int | pd.NA) -> str:
+    """Bucket time from previous discharge to current matched admission."""
+    if pd.isna(days):
+        return "no_prior_admission"
+    if days < 0:
+        return "overlap_or_negative"
+    if days <= 7:
+        return "0-7d"
+    if days <= 30:
+        return "8-30d"
+    if days <= 90:
+        return "31-90d"
+    if days <= 365:
+        return "91-365d"
+    return ">365d"
+
+
+def build_prior_all_mimic_interval_summary(descriptors: pd.DataFrame) -> pd.DataFrame:
+    """Summarize time since the previous hospital admission/discharge."""
+    required_columns = {
+        "cohort",
+        "subject_id",
+        "hadm_id",
+        "admittime",
+        "previous_admittime_for_subject",
+        "previous_dischtime_for_subject",
+        "days_since_previous_discharge_for_subject",
+        "n_prior_admissions_within_30d_for_subject",
+        "n_prior_admissions_within_90d_for_subject",
+        "n_prior_admissions_within_365d_for_subject",
+    }
+    missing = sorted(required_columns - set(descriptors.columns))
+    if missing:
+        raise ValueError(
+            "descriptors is missing full-admission interval columns. "
+            f"Rerun sql-scripts/06_save_tables/02_Additional_info_export_on_cohort.sql. "
+            f"Missing: {missing}"
+        )
+
+    clean = descriptors.copy()
+    clean["admittime"] = pd.to_datetime(clean["admittime"], errors="coerce")
+    clean["previous_admittime_for_subject"] = pd.to_datetime(
+        clean["previous_admittime_for_subject"],
+        errors="coerce",
+    )
+    clean["days_since_previous_admission_for_subject"] = (
+        clean["admittime"] - clean["previous_admittime_for_subject"]
+    ).dt.total_seconds() / 86400.0
+    numeric_columns = [
+        "days_since_previous_discharge_for_subject",
+        "n_prior_admissions_within_30d_for_subject",
+        "n_prior_admissions_within_90d_for_subject",
+        "n_prior_admissions_within_365d_for_subject",
+    ]
+    for column in numeric_columns:
+        clean[column] = pd.to_numeric(clean[column], errors="coerce")
+
+    rows = []
+    for cohort, group in clean.groupby("cohort"):
+        has_prior = group["previous_admittime_for_subject"].notna()
+        prior_group = group.loc[has_prior]
+        rows.append(
+            {
+                "cohort": cohort,
+                "n_matched_admissions": group["hadm_id"].nunique(),
+                "n_subjects": group["subject_id"].nunique(),
+                "n_matched_admissions_with_previous_mimic_admission": int(has_prior.sum()),
+                "pct_matched_admissions_with_previous_mimic_admission": 100.0
+                * has_prior.mean(),
+                "mean_days_since_previous_admission": prior_group[
+                    "days_since_previous_admission_for_subject"
+                ].mean(),
+                "median_days_since_previous_admission": prior_group[
+                    "days_since_previous_admission_for_subject"
+                ].median(),
+                "q1_days_since_previous_admission": prior_group[
+                    "days_since_previous_admission_for_subject"
+                ].quantile(0.25),
+                "q3_days_since_previous_admission": prior_group[
+                    "days_since_previous_admission_for_subject"
+                ].quantile(0.75),
+                "mean_days_since_previous_discharge": prior_group[
+                    "days_since_previous_discharge_for_subject"
+                ].mean(),
+                "median_days_since_previous_discharge": prior_group[
+                    "days_since_previous_discharge_for_subject"
+                ].median(),
+                "q1_days_since_previous_discharge": prior_group[
+                    "days_since_previous_discharge_for_subject"
+                ].quantile(0.25),
+                "q3_days_since_previous_discharge": prior_group[
+                    "days_since_previous_discharge_for_subject"
+                ].quantile(0.75),
+                "mean_prior_admissions_within_30d": group[
+                    "n_prior_admissions_within_30d_for_subject"
+                ].mean(),
+                "mean_prior_admissions_within_90d": group[
+                    "n_prior_admissions_within_90d_for_subject"
+                ].mean(),
+                "mean_prior_admissions_within_365d": group[
+                    "n_prior_admissions_within_365d_for_subject"
+                ].mean(),
+                "pct_matched_admissions_with_2plus_prior_admissions_within_365d": 100.0
+                * group["n_prior_admissions_within_365d_for_subject"].ge(2).mean(),
+                "pct_matched_admissions_with_3plus_prior_admissions_within_365d": 100.0
+                * group["n_prior_admissions_within_365d_for_subject"].ge(3).mean(),
+            }
+        )
+    return pd.DataFrame(rows).sort_values("cohort")
+
+
+def build_prior_all_mimic_interval_bucket_distribution(
+    descriptors: pd.DataFrame,
+) -> pd.DataFrame:
+    """Count matched admissions by time since previous discharge bucket."""
+    required_columns = {
+        "cohort",
+        "subject_id",
+        "hadm_id",
+        "days_since_previous_discharge_for_subject",
+    }
+    missing = sorted(required_columns - set(descriptors.columns))
+    if missing:
+        raise ValueError(
+            "descriptors is missing prior discharge interval columns. "
+            f"Rerun sql-scripts/06_save_tables/02_Additional_info_export_on_cohort.sql. "
+            f"Missing: {missing}"
+        )
+
+    clean = descriptors.copy()
+    clean["days_since_previous_discharge_for_subject"] = pd.to_numeric(
+        clean["days_since_previous_discharge_for_subject"],
+        errors="coerce",
+    )
+    clean["previous_discharge_interval_bucket"] = clean[
+        "days_since_previous_discharge_for_subject"
+    ].map(readmission_interval_bucket)
+    bucket_order = [
+        "no_prior_admission",
+        "overlap_or_negative",
+        "0-7d",
+        "8-30d",
+        "31-90d",
+        "91-365d",
+        ">365d",
+    ]
+    distribution = (
+        clean.groupby(["cohort", "previous_discharge_interval_bucket"], as_index=False)
+        .agg(
+            n_matched_admissions=("hadm_id", "nunique"),
+            n_subjects=("subject_id", "nunique"),
+        )
+    )
+    denominators = clean.groupby("cohort")["hadm_id"].nunique().to_dict()
+    distribution["pct_matched_admissions_within_cohort"] = distribution.apply(
+        lambda row: 100.0
+        * row["n_matched_admissions"]
+        / denominators.get(row["cohort"], 0),
+        axis=1,
+    )
+    distribution["previous_discharge_interval_bucket"] = pd.Categorical(
+        distribution["previous_discharge_interval_bucket"],
+        categories=bucket_order,
+        ordered=True,
+    )
+    return distribution.sort_values(["cohort", "previous_discharge_interval_bucket"])
+
+
+def build_prior_all_mimic_admission_rate_summary(
+    descriptors: pd.DataFrame,
+) -> pd.DataFrame:
+    """Summarize prior admission frequency per observed patient-year.
+
+    Rates are missing for first observed admissions because they have no prior
+    observation interval. This avoids treating zero prior admissions as a true
+    zero-rate estimate.
+    """
+    required_columns = {
+        "cohort",
+        "subject_id",
+        "hadm_id",
+        "n_prior_all_admissions_for_subject",
+        "n_prior_emergency_or_urgent_admissions_for_subject",
+    }
+    missing = sorted(required_columns - set(descriptors.columns))
+    if missing:
+        raise ValueError(
+            "descriptors is missing rate-denominator columns. "
+            f"Rerun sql-scripts/06_save_tables/02_Additional_info_export_on_cohort.sql. "
+            f"Missing: {missing}"
+        )
+
+    clean = add_prior_all_mimic_admission_rates(descriptors)
+    rows = []
+    for cohort, group in clean.groupby("cohort"):
+        valid_rate = group["prior_admission_rate_per_observed_year"].notna()
+        valid_group = group.loc[valid_rate]
+        rows.append(
+            {
+                "cohort": cohort,
+                "n_matched_admissions": group["hadm_id"].nunique(),
+                "n_subjects": group["subject_id"].nunique(),
+                "n_rate_observable_matched_admissions": int(valid_rate.sum()),
+                "n_rate_missing_first_observed_admissions": int((~valid_rate).sum()),
+                "pct_rate_missing_first_observed_admissions": 100.0 * (~valid_rate).mean(),
+                "mean_prior_admission_rate_per_observed_year": valid_group[
+                    "prior_admission_rate_per_observed_year"
+                ].mean(),
+                "median_prior_admission_rate_per_observed_year": valid_group[
+                    "prior_admission_rate_per_observed_year"
+                ].median(),
+                "q1_prior_admission_rate_per_observed_year": valid_group[
+                    "prior_admission_rate_per_observed_year"
+                ].quantile(0.25),
+                "q3_prior_admission_rate_per_observed_year": valid_group[
+                    "prior_admission_rate_per_observed_year"
+                ].quantile(0.75),
+                "mean_prior_emergency_or_urgent_rate_per_observed_year": valid_group[
+                    "prior_emergency_or_urgent_admission_rate_per_observed_year"
+                ].mean(),
+                "median_prior_emergency_or_urgent_rate_per_observed_year": valid_group[
+                    "prior_emergency_or_urgent_admission_rate_per_observed_year"
+                ].median(),
+            }
+        )
+    return pd.DataFrame(rows).sort_values("cohort")
+
+
+def build_prior_all_mimic_admission_rate_distribution(
+    descriptors: pd.DataFrame,
+) -> pd.DataFrame:
+    """Count matched admissions by prior admission-rate buckets."""
+    clean = add_prior_all_mimic_admission_rates(descriptors)
+    bucket_order = [
+        "missing_first_observed",
+        "0-0.5/year",
+        "0.5-1/year",
+        "1-2/year",
+        "2-4/year",
+        "4+/year",
+    ]
+    clean["prior_admission_rate_bucket"] = clean[
+        "prior_admission_rate_per_observed_year"
+    ].map(prior_admission_rate_bucket)
+    distribution = (
+        clean.groupby(["cohort", "prior_admission_rate_bucket"], as_index=False)
+        .agg(
+            n_matched_admissions=("hadm_id", "nunique"),
+            n_subjects=("subject_id", "nunique"),
+        )
+    )
+    denominators = clean.groupby("cohort")["hadm_id"].nunique().to_dict()
+    distribution["pct_matched_admissions_within_cohort"] = distribution.apply(
+        lambda row: 100.0
+        * row["n_matched_admissions"]
+        / denominators.get(row["cohort"], 0),
+        axis=1,
+    )
+    distribution["prior_admission_rate_bucket"] = pd.Categorical(
+        distribution["prior_admission_rate_bucket"],
+        categories=bucket_order,
+        ordered=True,
+    )
+    return distribution.sort_values(["cohort", "prior_admission_rate_bucket"])
+
+
+def add_prior_all_mimic_admission_rates(descriptors: pd.DataFrame) -> pd.DataFrame:
+    """Add prior admission rates per observed patient-year to descriptor rows."""
+    required_columns = {
+        "subject_id",
+        "admittime",
+        "n_prior_all_admissions_for_subject",
+        "n_prior_emergency_or_urgent_admissions_for_subject",
+    }
+    missing = sorted(required_columns - set(descriptors.columns))
+    if missing:
+        raise ValueError(
+            "descriptors is missing prior admission columns. "
+            f"Rerun sql-scripts/06_save_tables/02_Additional_info_export_on_cohort.sql. "
+            f"Missing: {missing}"
+        )
+    clean = descriptors.copy()
+    if "days_since_first_observed_admission_for_subject" not in clean.columns:
+        history = load_optional_table("subject_admission_history")
+        if history is None:
+            history = load_duckdb_table("admissions")
+        if not {"subject_id", "admittime"}.issubset(history.columns):
+            raise ValueError(
+                "Could not derive first observed admission time because the "
+                "admission history table is missing subject_id/admittime."
+            )
+        history = history.loc[:, ["subject_id", "admittime"]].copy()
+        history["subject_id"] = pd.to_numeric(
+            history["subject_id"],
+            errors="raise",
+        ).astype(int)
+        history["admittime"] = pd.to_datetime(history["admittime"], errors="coerce")
+        first_admissions = (
+            history.dropna(subset=["admittime"])
+            .groupby("subject_id", as_index=False)["admittime"]
+            .min()
+            .rename(columns={"admittime": "first_observed_admittime_for_subject"})
+        )
+        clean["subject_id"] = pd.to_numeric(
+            clean["subject_id"],
+            errors="raise",
+        ).astype(int)
+        clean["admittime"] = pd.to_datetime(clean["admittime"], errors="coerce")
+        clean = clean.merge(first_admissions, on="subject_id", how="left")
+        clean["days_since_first_observed_admission_for_subject"] = (
+            clean["admittime"] - clean["first_observed_admittime_for_subject"]
+        ).dt.total_seconds() / 86400.0
+    clean["n_prior_all_admissions_for_subject"] = pd.to_numeric(
+        clean["n_prior_all_admissions_for_subject"],
+        errors="raise",
+    )
+    clean["n_prior_emergency_or_urgent_admissions_for_subject"] = pd.to_numeric(
+        clean["n_prior_emergency_or_urgent_admissions_for_subject"],
+        errors="coerce",
+    )
+    clean["days_since_first_observed_admission_for_subject"] = pd.to_numeric(
+        clean["days_since_first_observed_admission_for_subject"],
+        errors="coerce",
+    )
+    clean["observed_years_before_matched_admission"] = (
+        clean["days_since_first_observed_admission_for_subject"] / 365.25
+    )
+    valid_denominator = clean["observed_years_before_matched_admission"].gt(0)
+    clean["prior_admission_rate_per_observed_year"] = pd.NA
+    clean.loc[valid_denominator, "prior_admission_rate_per_observed_year"] = (
+        clean.loc[valid_denominator, "n_prior_all_admissions_for_subject"]
+        / clean.loc[valid_denominator, "observed_years_before_matched_admission"]
+    )
+    clean["prior_emergency_or_urgent_admission_rate_per_observed_year"] = pd.NA
+    clean.loc[
+        valid_denominator,
+        "prior_emergency_or_urgent_admission_rate_per_observed_year",
+    ] = (
+        clean.loc[
+            valid_denominator,
+            "n_prior_emergency_or_urgent_admissions_for_subject",
+        ].fillna(0)
+        / clean.loc[valid_denominator, "observed_years_before_matched_admission"]
+    )
+    return clean
+
+
+def prior_admission_rate_bucket(rate: object) -> str:
+    """Return a compact bucket for prior admission rate per observed year."""
+    if pd.isna(rate):
+        return "missing_first_observed"
+    rate = float(rate)
+    if rate <= 0.5:
+        return "0-0.5/year"
+    if rate <= 1:
+        return "0.5-1/year"
+    if rate <= 2:
+        return "1-2/year"
+    if rate <= 4:
+        return "2-4/year"
+    return "4+/year"
 
 
 def build_readmission_cap_loss_summary(
