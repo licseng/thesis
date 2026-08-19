@@ -20,12 +20,15 @@ Outputs:
 from __future__ import annotations
 
 import importlib.util
+import math
 import re
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
+import statsmodels.api as sm
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -152,6 +155,7 @@ def scan_keyword_family(
         row_dict = row._asdict()
         cohort = row_dict["cohort"]
         text = combined_note_text(pd.Series(row_dict), section_columns)
+        note_word_count = len(text.split())
         total_hits, matched_groups, term_counts, group_counts = find_keyword_hits(
             text,
             compiled_patterns,
@@ -165,10 +169,16 @@ def scan_keyword_family(
                 "subject_id": row_dict["subject_id"],
                 "hadm_id": row_dict["hadm_id"],
                 "note_id": row_dict["note_id"],
+                "note_word_count_excluding_chief_complaint": note_word_count,
                 "n_keyword_hits": total_hits,
                 "has_keyword_hit": total_hits > 0,
                 "n_keyword_groups": len(matched_groups),
                 "keyword_groups": " | ".join(sorted(matched_groups)),
+                "keyword_hits_per_1000_words": (
+                    1000.0 * total_hits / note_word_count
+                    if note_word_count > 0
+                    else pd.NA
+                ),
             }
         )
 
@@ -236,17 +246,162 @@ def build_note_summary(note_hits: pd.DataFrame) -> pd.DataFrame:
             n_notes=("hadm_id", "nunique"),
             n_notes_with_any_keyword=("has_keyword_hit", "sum"),
             total_keyword_hits=("n_keyword_hits", "sum"),
+            total_note_words_excluding_chief_complaint=(
+                "note_word_count_excluding_chief_complaint",
+                "sum",
+            ),
+            mean_note_words_excluding_chief_complaint=(
+                "note_word_count_excluding_chief_complaint",
+                "mean",
+            ),
+            median_note_words_excluding_chief_complaint=(
+                "note_word_count_excluding_chief_complaint",
+                "median",
+            ),
             mean_keyword_hits_per_note=("n_keyword_hits", "mean"),
             median_keyword_hits_per_note=("n_keyword_hits", "median"),
+            mean_keyword_hits_per_1000_words=("keyword_hits_per_1000_words", "mean"),
+            median_keyword_hits_per_1000_words=("keyword_hits_per_1000_words", "median"),
             max_keyword_hits_in_one_note=("n_keyword_hits", "max"),
         )
         .assign(
             pct_notes_with_any_keyword=lambda df: (
                 100.0 * df["n_notes_with_any_keyword"] / df["n_notes"]
-            )
+            ),
+            aggregate_keyword_hits_per_1000_words=lambda df: (
+                1000.0 * df["total_keyword_hits"] / df[
+                    "total_note_words_excluding_chief_complaint"
+                ]
+            ),
         )
         .sort_values(["keyword_family", "cohort"])
     )
+
+
+def fit_length_adjusted_keyword_models(note_hits: pd.DataFrame) -> pd.DataFrame:
+    """Fit cohort models for keyword hits while accounting for note length."""
+    rows = []
+    if note_hits.empty:
+        return pd.DataFrame(rows)
+
+    for keyword_family, family_df in note_hits.groupby("keyword_family"):
+        model_data = family_df.loc[
+            family_df["note_word_count_excluding_chief_complaint"].gt(0),
+            [
+                "cohort",
+                "subject_id",
+                "n_keyword_hits",
+                "has_keyword_hit",
+                "note_word_count_excluding_chief_complaint",
+            ],
+        ].copy()
+        if model_data.empty:
+            continue
+
+        model_data["mhh1_psychotic"] = model_data["cohort"].eq("MHH1_psychotic").astype(
+            float
+        )
+        model_data["log_note_words"] = np.log(
+            model_data["note_word_count_excluding_chief_complaint"].astype(float)
+        )
+        model_data["has_keyword_hit"] = model_data["has_keyword_hit"].astype(int)
+        model_data["cluster_id"] = (
+            model_data["cohort"].astype(str)
+            + "_"
+            + model_data["subject_id"].astype(str)
+        )
+        n_notes = len(model_data)
+        n_events = int(model_data["has_keyword_hit"].sum())
+        n_clusters = int(model_data["cluster_id"].nunique())
+
+        specs = [
+            {
+                "model": "poisson_keyword_hits_with_log_word_offset",
+                "outcome": "n_keyword_hits",
+                "family": sm.families.Poisson(),
+                "y": model_data["n_keyword_hits"].astype(float),
+                "predictors": ["mhh1_psychotic"],
+                "offset": model_data["log_note_words"],
+                "effect_label": "rate_ratio",
+            },
+            {
+                "model": "logistic_any_keyword_adjusted_for_log_words",
+                "outcome": "has_keyword_hit",
+                "family": sm.families.Binomial(),
+                "y": model_data["has_keyword_hit"].astype(float),
+                "predictors": ["mhh1_psychotic", "log_note_words"],
+                "offset": None,
+                "effect_label": "odds_ratio",
+            },
+        ]
+
+        for spec in specs:
+            x = sm.add_constant(
+                model_data.loc[:, spec["predictors"]].astype(float),
+                has_constant="add",
+            ).rename(columns={"const": "intercept"})
+            try:
+                fit = sm.GLM(
+                    spec["y"],
+                    x,
+                    family=spec["family"],
+                    offset=spec["offset"],
+                ).fit(
+                    cov_type="cluster",
+                    cov_kwds={
+                        "groups": model_data["cluster_id"],
+                        "use_correction": True,
+                    },
+                    maxiter=100,
+                )
+                conf_int = fit.conf_int(alpha=0.05)
+                for term in x.columns:
+                    estimate = fit.params.get(term, pd.NA)
+                    ci_low = conf_int.loc[term, 0] if term in conf_int.index else pd.NA
+                    ci_high = conf_int.loc[term, 1] if term in conf_int.index else pd.NA
+                    rows.append(
+                        {
+                            "keyword_family": keyword_family,
+                            "model": spec["model"],
+                            "outcome": spec["outcome"],
+                            "term": term,
+                            "n_notes": n_notes,
+                            "n_notes_with_any_keyword": n_events,
+                            "n_clusters": n_clusters,
+                            "estimate": estimate,
+                            "cluster_robust_se": fit.bse.get(term, pd.NA),
+                            "z": fit.tvalues.get(term, pd.NA),
+                            "p_value": fit.pvalues.get(term, pd.NA),
+                            "effect_label": spec["effect_label"],
+                            "effect": math.exp(estimate),
+                            "effect_ci_low": math.exp(ci_low)
+                            if ci_low is not pd.NA
+                            else pd.NA,
+                            "effect_ci_high": math.exp(ci_high)
+                            if ci_high is not pd.NA
+                            else pd.NA,
+                            "status": "fit_converged"
+                            if getattr(fit, "converged", False)
+                            else "fit_warning",
+                        }
+                    )
+            except Exception as exc:
+                for term in ["intercept", *spec["predictors"]]:
+                    rows.append(
+                        {
+                            "keyword_family": keyword_family,
+                            "model": spec["model"],
+                            "outcome": spec["outcome"],
+                            "term": term,
+                            "n_notes": n_notes,
+                            "n_notes_with_any_keyword": n_events,
+                            "n_clusters": n_clusters,
+                            "status": "fit_failed",
+                            "fit_message": repr(exc),
+                        }
+                    )
+
+    return pd.DataFrame(rows)
 
 
 # Save only aggregate outputs; no raw note text or snippets are exported here.
@@ -254,6 +409,8 @@ def write_outputs(
     note_summary: pd.DataFrame,
     top_terms: pd.DataFrame,
     group_summary: pd.DataFrame,
+    note_hits: pd.DataFrame,
+    length_adjusted_models: pd.DataFrame,
 ) -> None:
     """Write aggregate outputs."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -267,6 +424,14 @@ def write_outputs(
     )
     group_summary.to_csv(
         OUTPUT_DIR / "keyword_group_summary_excluding_chief_complaint.csv",
+        index=False,
+    )
+    note_hits.to_csv(
+        OUTPUT_DIR / "keyword_family_note_level_hits_excluding_chief_complaint.csv",
+        index=False,
+    )
+    length_adjusted_models.to_csv(
+        OUTPUT_DIR / "keyword_family_length_adjusted_models_excluding_chief_complaint.csv",
         index=False,
     )
 
@@ -308,14 +473,28 @@ def main() -> None:
     top_terms = pd.concat(all_top_terms, ignore_index=True)
     group_summary = pd.concat(all_group_summaries, ignore_index=True)
     note_summary = build_note_summary(note_hits)
+    length_adjusted_models = fit_length_adjusted_keyword_models(note_hits)
 
-    write_outputs(note_summary, top_terms, group_summary)
+    write_outputs(
+        note_summary,
+        top_terms,
+        group_summary,
+        note_hits,
+        length_adjusted_models,
+    )
 
     print(f"Scanned {len(df)} matched discharge notes.")
     print("Excluded section: chief_complaint")
     print(f"Saved aggregate keyword summaries to: {OUTPUT_DIR}")
     print("\n=== Keyword Family Note Summary ===")
     print(note_summary.to_string(index=False))
+    print("\n=== Length-adjusted cohort model terms ===")
+    if not length_adjusted_models.empty:
+        print(
+            length_adjusted_models.loc[
+                length_adjusted_models["term"].eq("mhh1_psychotic")
+            ].to_string(index=False)
+        )
     print("\n=== Top Overall Terms ===")
     print(
         top_terms.loc[top_terms["cohort"].eq("overall")]

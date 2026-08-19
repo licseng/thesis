@@ -387,6 +387,11 @@ def scan_sections(
                     "matched_terms": " | ".join(sorted(matched_terms)),
                     "section_word_count": len(text.split()),
                     "section_char_length": len(text),
+                    "keyword_hits_per_1000_words": (
+                        1000.0 * len(hits) / len(text.split())
+                        if len(text.split()) > 0
+                        else pd.NA
+                    ),
                 }
             )
 
@@ -418,8 +423,11 @@ def build_section_summary(
             n_admissions_with_any_keyword=("hadm_id", "nunique"),
             n_section_rows_with_any_keyword=("section_name", "size"),
             total_keyword_hits=("n_keyword_hits", "sum"),
+            total_section_words=("section_word_count", "sum"),
             median_keyword_hits_per_hit_section=("n_keyword_hits", "median"),
             median_section_words=("section_word_count", "median"),
+            mean_keyword_hits_per_1000_words=("keyword_hits_per_1000_words", "mean"),
+            median_keyword_hits_per_1000_words=("keyword_hits_per_1000_words", "median"),
         )
         .sort_values(["cohort", "n_admissions_with_any_keyword"], ascending=[True, False])
     )
@@ -439,6 +447,9 @@ def build_section_summary(
         100.0
         * summary["n_admissions_with_any_keyword"]
         / summary["n_admissions_in_cohort"]
+    )
+    summary["aggregate_keyword_hits_per_1000_words"] = (
+        1000.0 * summary["total_keyword_hits"] / summary["total_section_words"]
     )
     return summary
 
@@ -518,7 +529,16 @@ def build_section_keyword_match_summary(
             n_admissions_with_any_selected_SL_keyword=("hadm_id", "nunique"),
             n_section_rows_with_any_selected_SL_keyword=("section_name", "size"),
             total_selected_SL_keyword_hits=("n_keyword_hits", "sum"),
+            total_section_words=("section_word_count", "sum"),
             median_selected_SL_keyword_hits_per_hit_section=("n_keyword_hits", "median"),
+            mean_selected_SL_keyword_hits_per_1000_words=(
+                "keyword_hits_per_1000_words",
+                "mean",
+            ),
+            median_selected_SL_keyword_hits_per_1000_words=(
+                "keyword_hits_per_1000_words",
+                "median",
+            ),
         )
         .merge(
             section_presence,
@@ -531,6 +551,11 @@ def build_section_keyword_match_summary(
         100.0
         * summary["n_admissions_with_any_selected_SL_keyword"]
         / summary["n_admissions_with_section"]
+    )
+    summary["aggregate_selected_SL_keyword_hits_per_1000_words"] = (
+        1000.0
+        * summary["total_selected_SL_keyword_hits"]
+        / summary["total_section_words"]
     )
     return (
         summary
