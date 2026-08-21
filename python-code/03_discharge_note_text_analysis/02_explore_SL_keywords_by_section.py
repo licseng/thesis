@@ -1,7 +1,7 @@
-"""Explore stigmatizing-language keyword hits across selected note sections.
+"""Explore stigmatizing-language keyword hits across parsed note sections.
 
 This is an exploratory keyword screen for potentially stigmatizing language
-(SL) in selected parsed matched discharge-note sections and writes local CSV
+(SL) in parsed matched discharge-note sections and writes local CSV
 summaries for manual review.
 
 The keyword list follows the provided three-group SL table, with clearly positive
@@ -50,19 +50,6 @@ OUTPUT_DIR = SCRIPT_DIR / "analysis_output_SL_keyword_exploration"
 SNIPPET_WINDOW_CHARS = 140
 MAX_SNIPPETS_PER_SECTION = 3
 MAX_HIT_ROWS_FOR_REVIEW = 5000
-SELECTED_SECTION_NAMES = [
-    "problems",
-    "review_of_systems",
-    "brief_hospital_course",
-    "pertinent_results",
-    "physical_exam",
-    "present_illness",
-    "discharge_instructions",
-    "discharge_disposition",
-    "major_surgical_or_invasive_procedure",
-    "discharge_diagnosis",
-]
-
 FULL_NOTE_FILES = [
     {
         "cohort": "MHH1_psychotic",
@@ -275,13 +262,9 @@ def keyword_pattern_label(pattern: re.Pattern[str], matched_text: str) -> str:
     return KEYWORD_PATTERN_LABELS.get(pattern.pattern, fallback)
 
 
-def selected_section_columns(parser: Any) -> list[str]:
-    """Return selected parser sections and fail clearly if a section changed."""
-    available_sections = set(parser.CANONICAL_SECTIONS)
-    missing = sorted(set(SELECTED_SECTION_NAMES) - available_sections)
-    if missing:
-        raise ValueError(f"Selected sections are not parsed: {', '.join(missing)}")
-    return SELECTED_SECTION_NAMES.copy()
+def section_columns_to_scan(parser: Any) -> list[str]:
+    """Return all parsed section columns used for section-level SL scanning."""
+    return list(parser.CANONICAL_SECTIONS) + ["unsectioned_text"]
 
 
 def load_full_note_outputs(section_columns: list[str]) -> pd.DataFrame:
@@ -630,9 +613,9 @@ def write_outputs(
 
 
 def main() -> None:
-    """Run SL keyword exploration over selected parsed sections."""
+    """Run SL keyword exploration over all parsed sections."""
     parser = load_parser_module()
-    section_columns = selected_section_columns(parser)
+    section_columns = section_columns_to_scan(parser)
     compiled_patterns = compile_keyword_patterns()
 
     df = load_full_note_outputs(section_columns)
@@ -663,7 +646,7 @@ def main() -> None:
     )
 
     print(f"Scanned {len(df)} matched discharge notes across both cohorts.")
-    print(f"Selected sections: {', '.join(section_columns)}")
+    print(f"Scanned sections: {', '.join(section_columns)}")
     print(f"Found SL keyword hits in {len(section_hits)} note-section rows.")
     print(f"Saved SL keyword exploration outputs to: {OUTPUT_DIR}")
     if not section_summary.empty:
