@@ -88,6 +88,18 @@ MODEL_NAME = os.environ.get(
 REQUEST_TIMEOUT_SECONDS = int(
     os.environ.get("DIAGNOSTIC_OVERSHADOWING_REQUEST_TIMEOUT_SECONDS", "240")
 )
+API_MAX_RETRIES = int(os.environ.get("DIAGNOSTIC_OVERSHADOWING_API_MAX_RETRIES", "5"))
+API_RETRY_BASE_SLEEP_SECONDS = float(
+    os.environ.get("DIAGNOSTIC_OVERSHADOWING_API_RETRY_BASE_SLEEP_SECONDS", "10")
+)
+API_RETRY_STATUS_CODES = {
+    int(code.strip())
+    for code in os.environ.get(
+        "DIAGNOSTIC_OVERSHADOWING_API_RETRY_STATUS_CODES",
+        "429,500,502,503,504",
+    ).split(",")
+    if code.strip()
+}
 MAX_NEW_TOKENS = int(os.environ.get("DIAGNOSTIC_OVERSHADOWING_MAX_NEW_TOKENS", "512"))
 API_JSON_MODE = os.environ.get("DIAGNOSTIC_OVERSHADOWING_API_JSON_MODE", "1").lower() not in {
     "0",
@@ -416,12 +428,40 @@ def call_openai_compatible(payload: dict[str, Any]) -> dict[str, Any]:
         },
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"API request failed with HTTP {exc.code}: {body}") from exc
+
+    for attempt in range(API_MAX_RETRIES + 1):
+        try:
+            with urllib.request.urlopen(
+                request,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            ) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            if exc.code not in API_RETRY_STATUS_CODES or attempt >= API_MAX_RETRIES:
+                raise RuntimeError(
+                    f"API request failed with HTTP {exc.code}: {body}"
+                ) from exc
+            sleep_seconds = API_RETRY_BASE_SLEEP_SECONDS * (2**attempt)
+            print(
+                "API request failed with transient HTTP "
+                f"{exc.code}; retrying in {sleep_seconds:.1f}s "
+                f"({attempt + 1}/{API_MAX_RETRIES}).",
+                flush=True,
+            )
+            time.sleep(sleep_seconds)
+        except urllib.error.URLError as exc:
+            if attempt >= API_MAX_RETRIES:
+                raise RuntimeError(f"API request failed: {exc}") from exc
+            sleep_seconds = API_RETRY_BASE_SLEEP_SECONDS * (2**attempt)
+            print(
+                "API request failed with connection error; retrying in "
+                f"{sleep_seconds:.1f}s ({attempt + 1}/{API_MAX_RETRIES}): {exc}",
+                flush=True,
+            )
+            time.sleep(sleep_seconds)
+
+    raise RuntimeError("API request failed after retry loop unexpectedly ended.")
 
 
 def check_model_available() -> None:
