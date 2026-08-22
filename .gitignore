@@ -86,6 +86,7 @@ python-code/06_classification/02_classification_diag_overshadowing/diagnostic_ov
 
 python-code/07_sentiment_analysis/sentiment_classifier_output*/
 python-code/07_sentiment_analysis/sentiment_llm_input/
+python-code/07_sentiment_analysis/sentiment_prompt_comparison_output/
 
 # Generated HTML visualization output
 html-visualization/
