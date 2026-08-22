@@ -175,6 +175,8 @@ Instead, evaluate whether the language used by the clinician towards or about th
 
 A negative tone includes language that is judgmental, dismissive, skeptical, adversarial, blaming, or unnecessarily derogatory.
 A positive tone includes language that is supportive, empathetic, respectful, or explicitly reassuring.
+Standard courteous discharge phrases such as “It was a pleasure caring for you,” “It was a privilege caring for you,” and “We wish you the best” count as positive sentiment. 
+Classify them as positive even if they appear templated or formulaic.
 Neutral tone is objective clinical documentation without clear interpersonal evaluation.
 Respond only with valid JSON.
 
@@ -221,6 +223,8 @@ Examples of POSITIVE sentiment include:
 - praise
 - appreciation of patient cooperation
 - respectful acknowledgement of patient concerns
+Standard courteous discharge phrases such as “It was a pleasure caring for you,” “It was a privilege caring for you,” and “We wish you the best” count as positive sentiment. 
+Classify them as positive even if they appear templated or formulaic.
 
 Objective factual documentation should be classified as NEUTRAL.
 If uncertain between categories, choose Neutral.

@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --nodes=1                # Ensure that all cores are on the same machine with nodes=1
 #SBATCH --partition=a100-galvani   # Which partition will run your job
-#SBATCH --time=0-00:20             # Allowed runtime in D-HH:MM
+#SBATCH --time=0-16:00             # Allowed runtime in D-HH:MM
 #SBATCH --gres=gpu:1               # (optional) Requesting type and number of GPUs
 #SBATCH --mem=32G                  # Total memory pool for all cores (see also --mem-per-cpu); exceeding this number will cause your job to fail.
 #SBATCH --output=logs/myjob-%j.out       # File to which STDOUT will be written - make sure this is not on $HOME
@@ -41,7 +41,7 @@ export SENTIMENT_PROMPT_VERSION=A
 export SENTIMENT_HF_MODEL_ID="Qwen/Qwen3-8B"
 export SENTIMENT_HF_DEVICE_MAP=auto
 export SENTIMENT_HF_TORCH_DTYPE=float16
-export SENTIMENT_MAX_NOTES=30
+export SENTIMENT_MAX_NOTES=none
 export SENTIMENT_CHUNK_WORDS=800
 export SENTIMENT_CHUNK_OVERLAP_WORDS=75
 export SENTIMENT_MAX_NEW_TOKENS=192
@@ -65,6 +65,6 @@ else
 fi
 
 SENTIMENT_SCRIPT_DIR="$(dirname "$SENTIMENT_SCRIPT")"
-export SENTIMENT_OUTPUT_DIR="${SENTIMENT_SCRIPT_DIR}/sentiment_classifier_output_prompt_${SENTIMENT_PROMPT_VERSION}_30"
+export SENTIMENT_OUTPUT_DIR="${SENTIMENT_SCRIPT_DIR}/sentiment_classifier_output_prompt_${SENTIMENT_PROMPT_VERSION}_all"
 
 srun python "$SENTIMENT_SCRIPT"
