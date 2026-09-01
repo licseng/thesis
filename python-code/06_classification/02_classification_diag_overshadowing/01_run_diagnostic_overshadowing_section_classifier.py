@@ -27,6 +27,7 @@ hosted chat-completions API.
 from __future__ import annotations
 
 from datetime import datetime
+import http.client
 import json
 import os
 import re
@@ -100,6 +101,18 @@ API_RETRY_STATUS_CODES = {
     ).split(",")
     if code.strip()
 }
+MODEL_RESPONSE_MAX_RETRIES = int(
+    os.environ.get(
+        "DIAGNOSTIC_OVERSHADOWING_MODEL_RESPONSE_MAX_RETRIES",
+        str(API_MAX_RETRIES),
+    )
+)
+MODEL_RESPONSE_RETRY_BASE_SLEEP_SECONDS = float(
+    os.environ.get(
+        "DIAGNOSTIC_OVERSHADOWING_MODEL_RESPONSE_RETRY_BASE_SLEEP_SECONDS",
+        str(API_RETRY_BASE_SLEEP_SECONDS),
+    )
+)
 MAX_NEW_TOKENS = int(os.environ.get("DIAGNOSTIC_OVERSHADOWING_MAX_NEW_TOKENS", "512"))
 API_JSON_MODE = os.environ.get("DIAGNOSTIC_OVERSHADOWING_API_JSON_MODE", "1").lower() not in {
     "0",
@@ -450,7 +463,7 @@ def call_openai_compatible(payload: dict[str, Any]) -> dict[str, Any]:
                 flush=True,
             )
             time.sleep(sleep_seconds)
-        except urllib.error.URLError as exc:
+        except (urllib.error.URLError, http.client.RemoteDisconnected) as exc:
             if attempt >= API_MAX_RETRIES:
                 raise RuntimeError(f"API request failed: {exc}") from exc
             sleep_seconds = API_RETRY_BASE_SLEEP_SECONDS * (2**attempt)
@@ -481,7 +494,7 @@ def check_model_available() -> None:
             payload["chat_template_kwargs"] = {"enable_thinking": False}
         try:
             call_openai_compatible(payload)
-        except urllib.error.URLError as exc:
+        except (urllib.error.URLError, http.client.RemoteDisconnected) as exc:
             raise RuntimeError(
                 "Could not reach the configured diagnostic-overshadowing API. "
                 "Check DIAGNOSTIC_OVERSHADOWING_API_URL and API access."
@@ -561,6 +574,35 @@ def parse_json_response(response_text: str) -> dict[str, Any]:
         return json.loads(match.group(0))
     except json.JSONDecodeError as exc:
         raise ValueError(f"Model returned invalid JSON: {response_text}") from exc
+
+
+def generate_and_parse_response(messages: list[dict[str, str]]) -> dict[str, Any]:
+    """Generate and parse one response, retrying transient malformed outputs."""
+    last_error: Exception | None = None
+    last_response_text = ""
+    for attempt in range(MODEL_RESPONSE_MAX_RETRIES + 1):
+        response_text = generate_response(messages)
+        last_response_text = response_text
+        try:
+            return parse_json_response(response_text)
+        except ValueError as exc:
+            last_error = exc
+            if attempt >= MODEL_RESPONSE_MAX_RETRIES:
+                break
+            sleep_seconds = MODEL_RESPONSE_RETRY_BASE_SLEEP_SECONDS * (2**attempt)
+            preview = re.sub(r"\s+", " ", response_text).strip()[:160]
+            print(
+                "Model returned malformed JSON; retrying in "
+                f"{sleep_seconds:.1f}s ({attempt + 1}/{MODEL_RESPONSE_MAX_RETRIES}). "
+                f"Response preview: {preview!r}",
+                flush=True,
+            )
+            time.sleep(sleep_seconds)
+
+    raise ValueError(
+        "Model returned malformed JSON after retries. "
+        f"Last response: {last_response_text}"
+    ) from last_error
 
 
 def normalize_model_result(result: dict[str, Any]) -> dict[str, Any]:
@@ -830,8 +872,7 @@ def classify_sections(
                 len(chunks),
                 system_prompt,
             )
-            response_text = generate_response(messages)
-            raw_result = parse_json_response(response_text)
+            raw_result = generate_and_parse_response(messages)
             normalized = normalize_model_result(raw_result)
             chunk_results.append(normalized)
             chunk_output_row = {
