@@ -49,6 +49,7 @@ python-code/02_cohort_matching/matched_cohort_dbeaver_exports/
 
 python-code/05_regression_analysis/analysis_output_utilization_readmission_adjusted/
 python-code/05_regression_analysis/analysis_output_subject_level_mortality_risk/
+python-code/05_regression_analysis/analysis_output_sentiment_regression/
 
 python-code/04_clustering_chief_complaints/chief_complaint_cluster_qc_output_old/
 python-code/04_clustering_chief_complaints/analysis_output_chief_complaint_subgroups/
