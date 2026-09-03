@@ -3,6 +3,7 @@
 **/.DS_Store
 
 run.sbatch
+*.sbatch
 *.env
 
 # Python cache files
