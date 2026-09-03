@@ -89,6 +89,8 @@ python-code/07_sentiment_analysis/sentiment_classifier_output*/
 python-code/07_sentiment_analysis/sentiment_llm_input/
 python-code/07_sentiment_analysis/sentiment_prompt_comparison_output/
 
+python-code/08_model_training/01_training_data_creation/analysis_output_current_matched_cohort_outcomes/
+
 # Generated HTML visualization output
 html-visualization/
 python-code/html-visualization/
