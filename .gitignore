@@ -9,6 +9,7 @@ run.sbatch
 __pycache__/
 **/__pycache__/
 *.py[cod]
+.matplotlib/
 
 # Archived pre-reorganization code and generated outputs
 python-code-old/
@@ -90,6 +91,10 @@ python-code/07_sentiment_analysis/sentiment_llm_input/
 python-code/07_sentiment_analysis/sentiment_prompt_comparison_output/
 
 python-code/08_model_training/01_training_data_creation/analysis_output_current_matched_cohort_outcomes/
+python-code/08_model_training/01_training_data_creation/analysis_output_patient_level_prediction_partitions/
+python-code/08_model_training/01_training_data_creation/analysis_output_prediction_model_dataset/
+python-code/08_model_training/01_training_data_creation/prediction_model_dataset/
+python-code/08_model_training/bioclinicalbert_los_classifier_output/
 
 # Generated HTML visualization output
 html-visualization/
