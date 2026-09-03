@@ -9,8 +9,12 @@
 --   3. From the remaining patients, randomly sample validation, targeting
 --      ~10,000 admissions.
 --   4. Leave remaining patients as test_pool.
---   5. Keep all admissions for the same subject_id in the same partition.
---   6. Report how many MHH1/MHC0 patients/admissions land in each partition.
+--   5. From test_pool, randomly flag a general test sample targeting ~20,000
+--      admissions. This is a test sample flag, not a new partition.
+--   6. Keep all admissions for the same subject_id in the same partition/test
+--      sample flag.
+--   7. Report how many MHH1/MHC0 patients/admissions land in each partition
+--      and how much the general test sample overlaps with MHH1/MHC0.
 --
 -- Important:
 --   This does not create prediction labels or model inputs yet.
@@ -31,6 +35,7 @@ CREATE OR REPLACE TEMP TABLE prediction_partition_settings AS
 SELECT
     80000::BIGINT AS target_train_admissions,
     10000::BIGINT AS target_validation_admissions,
+    20000::BIGINT AS target_general_test_admissions,
     'prediction_partition_seed_2026_09_03' AS seed_string;
 
 
@@ -160,7 +165,9 @@ FROM admission_flags;
 -- 3. Deterministic patient-level partitioning
 -- ---------------------------------------------------------------------------
 -- Patients are sampled into train first, then removed before validation.
--- The test_pool is every remaining patient.
+-- The test_pool is every remaining patient. A patient-level general test
+-- sample is then selected from test_pool without removing MHH1/MHC0 patients
+-- from the later fairness-evaluation view.
 
 CREATE OR REPLACE TABLE eligible_prediction_subjects AS
 SELECT
@@ -251,12 +258,59 @@ LEFT JOIN validation_subject_candidates validation
     ON s.subject_id = validation.subject_id;
 
 
+CREATE OR REPLACE TEMP TABLE general_test_subject_candidates AS
+WITH test_pool_subjects AS (
+    SELECT s.*
+    FROM eligible_prediction_subjects s
+    JOIN patient_partition p
+        ON s.subject_id = p.subject_id
+    WHERE p.partition = 'test_pool'
+),
+
+randomized AS (
+    SELECT
+        s.*,
+        hash(CAST(s.subject_id AS VARCHAR) || '|general_test|' || p.seed_string)
+            AS general_test_random_key
+    FROM test_pool_subjects s
+    CROSS JOIN prediction_partition_settings p
+),
+
+ordered AS (
+    SELECT
+        *,
+        SUM(n_eligible_admissions) OVER (
+            ORDER BY general_test_random_key, subject_id
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ) AS cumulative_admissions_before_subject
+    FROM randomized
+)
+
+SELECT *
+FROM ordered
+CROSS JOIN prediction_partition_settings p
+WHERE COALESCE(cumulative_admissions_before_subject, 0)
+    < p.target_general_test_admissions;
+
+
+CREATE OR REPLACE TABLE patient_partition_with_test_flags AS
+SELECT
+    p.subject_id,
+    p.partition,
+    CASE WHEN general_test.subject_id IS NOT NULL THEN 1 ELSE 0 END
+        AS selected_for_general_test
+FROM patient_partition p
+LEFT JOIN general_test_subject_candidates general_test
+    ON p.subject_id = general_test.subject_id;
+
+
 CREATE OR REPLACE TABLE eligible_prediction_admissions_with_partition AS
 SELECT
     e.*,
-    p.partition
+    p.partition,
+    p.selected_for_general_test
 FROM eligible_prediction_admissions_with_group_flags e
-JOIN patient_partition p
+JOIN patient_partition_with_test_flags p
     ON e.subject_id = p.subject_id;
 
 
@@ -352,6 +406,75 @@ WHERE partition = 'test_pool'
 ORDER BY group_name;
 
 
+CREATE OR REPLACE TABLE patient_partition_general_test_summary AS
+SELECT
+    selected_for_general_test,
+    COUNT(DISTINCT subject_id) AS n_subjects,
+    COUNT(DISTINCT hadm_id) AS n_admissions
+FROM eligible_prediction_admissions_with_partition
+WHERE partition = 'test_pool'
+GROUP BY selected_for_general_test
+ORDER BY selected_for_general_test DESC;
+
+
+CREATE OR REPLACE TABLE patient_partition_general_test_group_overlap AS
+WITH group_long AS (
+    SELECT
+        'MHH1_psychotic_full_cohort' AS group_name,
+        subject_id,
+        hadm_id
+    FROM eligible_prediction_admissions_with_partition
+    WHERE partition = 'test_pool'
+      AND selected_for_general_test = 1
+      AND is_mhh1_psychotic_subject = 1
+      AND is_mhh1_psychotic_admission = 1
+
+    UNION ALL
+
+    SELECT
+        'MHC0_full_cohort' AS group_name,
+        subject_id,
+        hadm_id
+    FROM eligible_prediction_admissions_with_partition
+    WHERE partition = 'test_pool'
+      AND selected_for_general_test = 1
+      AND is_mhc0_subject = 1
+      AND is_mhc0_admission = 1
+
+    UNION ALL
+
+    SELECT
+        'MHH1_psychotic_matched_cohort' AS group_name,
+        subject_id,
+        hadm_id
+    FROM eligible_prediction_admissions_with_partition
+    WHERE partition = 'test_pool'
+      AND selected_for_general_test = 1
+      AND is_matched_mhh1_psychotic_subject = 1
+      AND is_matched_mhh1_psychotic_admission = 1
+
+    UNION ALL
+
+    SELECT
+        'MHC0_matched_cohort' AS group_name,
+        subject_id,
+        hadm_id
+    FROM eligible_prediction_admissions_with_partition
+    WHERE partition = 'test_pool'
+      AND selected_for_general_test = 1
+      AND is_matched_mhc0_subject = 1
+      AND is_matched_mhc0_admission = 1
+)
+
+SELECT
+    group_name,
+    COUNT(DISTINCT subject_id) AS n_subjects_in_general_test,
+    COUNT(DISTINCT hadm_id) AS n_admissions_in_general_test
+FROM group_long
+GROUP BY group_name
+ORDER BY group_name;
+
+
 -- ---------------------------------------------------------------------------
 -- 5. Display results in DBeaver
 -- ---------------------------------------------------------------------------
@@ -365,6 +488,12 @@ FROM patient_partition_group_summary;
 SELECT *
 FROM patient_partition_unseen_fairness_pool_summary;
 
+SELECT *
+FROM patient_partition_general_test_summary;
+
+SELECT *
+FROM patient_partition_general_test_group_overlap;
+
 -- QC: no subject should appear in more than one partition.
 SELECT
     COUNT(*) AS n_subjects_with_multiple_partitions
@@ -377,3 +506,9 @@ FROM (
     HAVING COUNT(DISTINCT partition) > 1
 ) duplicated_subjects;
 
+-- QC: the general test sample should only come from test_pool.
+SELECT
+    COUNT(*) AS n_non_test_pool_subjects_selected_for_general_test
+FROM patient_partition_with_test_flags
+WHERE selected_for_general_test = 1
+  AND partition <> 'test_pool';
