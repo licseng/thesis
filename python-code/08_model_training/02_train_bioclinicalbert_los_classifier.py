@@ -1,7 +1,7 @@
 """Fine-tune Bio_ClinicalBERT for prolonged hospital length-of-stay prediction.
 
-This script trains a binary classifier using the model-ready parquet files
-created by:
+This script trains a chunk-based binary classifier using the model-ready parquet
+files created by:
 
     01_training_data_creation/03_create_prediction_model_dataset.py
 
@@ -14,6 +14,11 @@ Default inputs:
 
 Default model:
     emilyalsentzer/Bio_ClinicalBERT
+
+Each admission note is split into up to LOS_MAX_CHUNKS chunks of LOS_MAX_LENGTH
+tokens. Bio_ClinicalBERT encodes each chunk, chunk [CLS] representations are
+mean-pooled into one admission representation, and one classification head
+predicts the admission-level LOS label.
 
 The script is designed for cluster training, but it supports small local smoke
 tests through TRAIN_MAX_ROWS and VALIDATION_MAX_ROWS.
@@ -51,6 +56,7 @@ class RunConfig:
     text_column: str
     label_column: str
     max_length: int
+    max_chunks: int
     train_max_rows: int | None
     validation_max_rows: int | None
     learning_rate: float
@@ -127,6 +133,7 @@ def parse_args() -> RunConfig:
         default=os.environ.get("LOS_LABEL_COLUMN", "prolonged_los_gt_7d"),
     )
     parser.add_argument("--max-length", type=int, default=env_int("LOS_MAX_LENGTH", 512))
+    parser.add_argument("--max-chunks", type=int, default=env_int("LOS_MAX_CHUNKS", 4))
     parser.add_argument("--train-max-rows", type=int, default=env_int("TRAIN_MAX_ROWS"))
     parser.add_argument(
         "--validation-max-rows",
@@ -217,8 +224,8 @@ def load_split(path: Path, text_column: str, label_column: str, max_rows: int | 
     return table
 
 
-class TextClassificationDataset:
-    """Minimal PyTorch dataset that tokenizes clinical text on demand."""
+class ChunkedTextClassificationDataset:
+    """PyTorch dataset that converts each admission text into fixed chunk tensors."""
 
     def __init__(
         self,
@@ -226,23 +233,145 @@ class TextClassificationDataset:
         labels: list[int],
         tokenizer: Any,
         max_length: int,
+        max_chunks: int,
     ) -> None:
         self.texts = texts
         self.labels = labels
         self.tokenizer = tokenizer
         self.max_length = max_length
+        self.max_chunks = max_chunks
+        self.chunk_token_capacity = max_length - 2
+        if self.chunk_token_capacity < 1:
+            raise ValueError("max_length must allow room for special tokens.")
+        if self.max_chunks < 1:
+            raise ValueError("max_chunks must be >= 1.")
+        self.cls_token_id = tokenizer.cls_token_id
+        self.sep_token_id = tokenizer.sep_token_id
+        self.pad_token_id = tokenizer.pad_token_id
+        if self.cls_token_id is None or self.sep_token_id is None:
+            raise ValueError("Tokenizer must define CLS and SEP token IDs.")
+        if self.pad_token_id is None:
+            self.pad_token_id = 0
 
     def __len__(self) -> int:
         return len(self.texts)
 
     def __getitem__(self, index: int) -> dict[str, Any]:
-        encoded = self.tokenizer(
+        import torch
+
+        token_ids = self.tokenizer(
             self.texts[index],
-            truncation=True,
-            max_length=self.max_length,
-        )
-        encoded["labels"] = int(self.labels[index])
-        return encoded
+            add_special_tokens=False,
+            truncation=False,
+        )["input_ids"]
+        chunks = [
+            token_ids[start : start + self.chunk_token_capacity]
+            for start in range(0, len(token_ids), self.chunk_token_capacity)
+        ][: self.max_chunks]
+        if not chunks:
+            chunks = [[]]
+
+        input_ids = []
+        attention_masks = []
+        token_type_ids = []
+        chunk_attention_mask = []
+        for chunk in chunks:
+            ids = [self.cls_token_id] + chunk + [self.sep_token_id]
+            attention = [1] * len(ids)
+            padding = self.max_length - len(ids)
+            ids = ids + [self.pad_token_id] * padding
+            attention = attention + [0] * padding
+            input_ids.append(ids)
+            attention_masks.append(attention)
+            token_type_ids.append([0] * self.max_length)
+            chunk_attention_mask.append(1)
+
+        while len(input_ids) < self.max_chunks:
+            input_ids.append([self.pad_token_id] * self.max_length)
+            attention_masks.append([0] * self.max_length)
+            token_type_ids.append([0] * self.max_length)
+            chunk_attention_mask.append(0)
+
+        return {
+            "input_ids": torch.tensor(input_ids, dtype=torch.long),
+            "attention_mask": torch.tensor(attention_masks, dtype=torch.long),
+            "token_type_ids": torch.tensor(token_type_ids, dtype=torch.long),
+            "chunk_attention_mask": torch.tensor(chunk_attention_mask, dtype=torch.float32),
+            "labels": torch.tensor(int(self.labels[index]), dtype=torch.long),
+        }
+
+
+class ChunkMeanPooledBertClassifier:
+    """Bio_ClinicalBERT encoder with mean pooling over admission chunks."""
+
+    def __new__(cls, model_name: str, num_labels: int = 2, dropout: float | None = None) -> Any:
+        import torch
+        from transformers import AutoConfig, AutoModel
+        from transformers.modeling_outputs import SequenceClassifierOutput
+
+        class _ChunkMeanPooledBertClassifier(torch.nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.config = AutoConfig.from_pretrained(
+                    model_name,
+                    num_labels=num_labels,
+                    id2label={0: "LOS_LE_7_DAYS", 1: "LOS_GT_7_DAYS"},
+                    label2id={"LOS_LE_7_DAYS": 0, "LOS_GT_7_DAYS": 1},
+                )
+                self.num_labels = num_labels
+                self.encoder = AutoModel.from_pretrained(model_name, config=self.config)
+                dropout_prob = (
+                    dropout
+                    if dropout is not None
+                    else getattr(self.config, "classifier_dropout", None)
+                )
+                if dropout_prob is None:
+                    dropout_prob = getattr(self.config, "hidden_dropout_prob", 0.1)
+                self.dropout = torch.nn.Dropout(dropout_prob)
+                self.classifier = torch.nn.Linear(self.config.hidden_size, num_labels)
+
+            def forward(
+                self,
+                input_ids: torch.Tensor,
+                attention_mask: torch.Tensor,
+                chunk_attention_mask: torch.Tensor,
+                token_type_ids: torch.Tensor | None = None,
+                labels: torch.Tensor | None = None,
+            ) -> Any:
+                batch_size, max_chunks, seq_len = input_ids.shape
+                flat_input_ids = input_ids.view(batch_size * max_chunks, seq_len)
+                flat_attention_mask = attention_mask.view(batch_size * max_chunks, seq_len)
+                flat_token_type_ids = (
+                    token_type_ids.view(batch_size * max_chunks, seq_len)
+                    if token_type_ids is not None
+                    else None
+                )
+
+                encoder_kwargs = {
+                    "input_ids": flat_input_ids,
+                    "attention_mask": flat_attention_mask,
+                }
+                if flat_token_type_ids is not None:
+                    encoder_kwargs["token_type_ids"] = flat_token_type_ids
+                outputs = self.encoder(**encoder_kwargs)
+                chunk_cls = outputs.last_hidden_state[:, 0, :].view(
+                    batch_size,
+                    max_chunks,
+                    self.config.hidden_size,
+                )
+
+                weights = chunk_attention_mask.unsqueeze(-1).to(chunk_cls.dtype)
+                pooled = (chunk_cls * weights).sum(dim=1) / weights.sum(dim=1).clamp(min=1.0)
+                logits = self.classifier(self.dropout(pooled))
+
+                loss = None
+                if labels is not None:
+                    loss_fct = torch.nn.CrossEntropyLoss()
+                    loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+                return SequenceClassifierOutput(loss=loss, logits=logits)
+
+        return _ChunkMeanPooledBertClassifier()
 
 
 def summarize_split(table: pd.DataFrame, split_name: str) -> dict[str, Any]:
@@ -353,16 +482,15 @@ def build_trainer(
 ) -> Any:
     """Build a Trainer, optionally with inverse-frequency class weights."""
     import torch
-    from transformers import DataCollatorWithPadding, Trainer, TrainingArguments
+    from transformers import Trainer, TrainingArguments, default_data_collator
 
     training_args = TrainingArguments(**training_arguments_kwargs(config))
-    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
     base_trainer_kwargs = {
         "model": model,
         "args": training_args,
         "train_dataset": train_dataset,
         "eval_dataset": validation_dataset,
-        "data_collator": data_collator,
+        "data_collator": default_data_collator,
         "compute_metrics": make_compute_metrics(),
     }
     base_trainer_kwargs.update(trainer_tokenizer_kwargs(Trainer, tokenizer))
@@ -498,7 +626,7 @@ def main() -> None:
     config.output_dir.mkdir(parents=True, exist_ok=True)
     set_seed(config.seed)
 
-    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+    from transformers import AutoTokenizer
 
     train_table = load_split(
         config.train_path,
@@ -521,24 +649,21 @@ def main() -> None:
     split_summary.to_csv(config.output_dir / "training_split_summary.csv", index=False)
 
     tokenizer = AutoTokenizer.from_pretrained(config.model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        config.model_name,
-        num_labels=2,
-        id2label={0: "LOS_LE_7_DAYS", 1: "LOS_GT_7_DAYS"},
-        label2id={"LOS_LE_7_DAYS": 0, "LOS_GT_7_DAYS": 1},
-    )
+    model = ChunkMeanPooledBertClassifier(config.model_name, num_labels=2)
 
-    train_dataset = TextClassificationDataset(
+    train_dataset = ChunkedTextClassificationDataset(
         train_table[config.text_column].tolist(),
         train_table["labels"].astype(int).tolist(),
         tokenizer,
         config.max_length,
+        config.max_chunks,
     )
-    validation_dataset = TextClassificationDataset(
+    validation_dataset = ChunkedTextClassificationDataset(
         validation_table[config.text_column].tolist(),
         validation_table["labels"].astype(int).tolist(),
         tokenizer,
         config.max_length,
+        config.max_chunks,
     )
 
     with (config.output_dir / "run_config.json").open("w", encoding="utf-8") as handle:
