@@ -17,8 +17,9 @@ Default model:
 
 Each admission note is split into up to LOS_MAX_CHUNKS chunks of LOS_MAX_LENGTH
 tokens. Bio_ClinicalBERT encodes each chunk, chunk [CLS] representations are
-mean-pooled into one admission representation, and one classification head
-predicts the admission-level LOS label.
+pooled into one admission representation, and one classification head predicts
+the admission-level LOS label. The default pooling strategy concatenates
+element-wise mean and max pooled chunk representations.
 
 The script is designed for cluster training, but it supports small local smoke
 tests through TRAIN_MAX_ROWS and VALIDATION_MAX_ROWS.
@@ -57,6 +58,7 @@ class RunConfig:
     label_column: str
     max_length: int
     max_chunks: int
+    pooling_strategy: str
     train_max_rows: int | None
     validation_max_rows: int | None
     learning_rate: float
@@ -134,6 +136,11 @@ def parse_args() -> RunConfig:
     )
     parser.add_argument("--max-length", type=int, default=env_int("LOS_MAX_LENGTH", 512))
     parser.add_argument("--max-chunks", type=int, default=env_int("LOS_MAX_CHUNKS", 4))
+    parser.add_argument(
+        "--pooling-strategy",
+        choices=["mean", "max", "mean_max"],
+        default=os.environ.get("LOS_POOLING_STRATEGY", "mean_max"),
+    )
     parser.add_argument("--train-max-rows", type=int, default=env_int("TRAIN_MAX_ROWS"))
     parser.add_argument(
         "--validation-max-rows",
@@ -301,15 +308,84 @@ class ChunkedTextClassificationDataset:
         }
 
 
-class ChunkMeanPooledBertClassifier:
-    """Bio_ClinicalBERT encoder with mean pooling over admission chunks."""
+class ChunkPoolingFactory:
+    """Factory for chunk-pooling modules over `[batch, chunks, hidden]` tensors."""
 
-    def __new__(cls, model_name: str, num_labels: int = 2, dropout: float | None = None) -> Any:
+    @staticmethod
+    def build(strategy: str, hidden_size: int) -> Any:
+        import torch
+
+        class MeanChunkPooling(torch.nn.Module):
+            """Element-wise mean over active chunk representations."""
+
+            output_size = hidden_size
+
+            def forward(
+                self,
+                chunk_embeddings: torch.Tensor,
+                chunk_attention_mask: torch.Tensor,
+            ) -> torch.Tensor:
+                weights = chunk_attention_mask.unsqueeze(-1).to(chunk_embeddings.dtype)
+                return (chunk_embeddings * weights).sum(dim=1) / weights.sum(dim=1).clamp(min=1.0)
+
+        class MaxChunkPooling(torch.nn.Module):
+            """Element-wise maximum over active chunk representations."""
+
+            output_size = hidden_size
+
+            def forward(
+                self,
+                chunk_embeddings: torch.Tensor,
+                chunk_attention_mask: torch.Tensor,
+            ) -> torch.Tensor:
+                inactive = chunk_attention_mask.eq(0).unsqueeze(-1)
+                masked = chunk_embeddings.masked_fill(inactive, torch.finfo(chunk_embeddings.dtype).min)
+                pooled = masked.max(dim=1).values
+                return torch.where(torch.isfinite(pooled), pooled, torch.zeros_like(pooled))
+
+        class MeanMaxChunkPooling(torch.nn.Module):
+            """Concatenate element-wise mean and max over active chunks."""
+
+            output_size = hidden_size * 2
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.mean_pooling = MeanChunkPooling()
+                self.max_pooling = MaxChunkPooling()
+
+            def forward(
+                self,
+                chunk_embeddings: torch.Tensor,
+                chunk_attention_mask: torch.Tensor,
+            ) -> torch.Tensor:
+                mean_pooled = self.mean_pooling(chunk_embeddings, chunk_attention_mask)
+                max_pooled = self.max_pooling(chunk_embeddings, chunk_attention_mask)
+                return torch.cat([mean_pooled, max_pooled], dim=-1)
+
+        if strategy == "mean":
+            return MeanChunkPooling()
+        if strategy == "max":
+            return MaxChunkPooling()
+        if strategy == "mean_max":
+            return MeanMaxChunkPooling()
+        raise ValueError(f"Unsupported pooling strategy: {strategy}")
+
+
+class ChunkPooledBertClassifier:
+    """Bio_ClinicalBERT encoder with configurable pooling over admission chunks."""
+
+    def __new__(
+        cls,
+        model_name: str,
+        num_labels: int = 2,
+        pooling_strategy: str = "mean_max",
+        dropout: float | None = None,
+    ) -> Any:
         import torch
         from transformers import AutoConfig, AutoModel
         from transformers.modeling_outputs import SequenceClassifierOutput
 
-        class _ChunkMeanPooledBertClassifier(torch.nn.Module):
+        class _ChunkPooledBertClassifier(torch.nn.Module):
             def __init__(self) -> None:
                 super().__init__()
                 self.config = AutoConfig.from_pretrained(
@@ -327,8 +403,13 @@ class ChunkMeanPooledBertClassifier:
                 )
                 if dropout_prob is None:
                     dropout_prob = getattr(self.config, "hidden_dropout_prob", 0.1)
+                self.pooling_strategy = pooling_strategy
+                self.pooling = ChunkPoolingFactory.build(
+                    pooling_strategy,
+                    self.config.hidden_size,
+                )
                 self.dropout = torch.nn.Dropout(dropout_prob)
-                self.classifier = torch.nn.Linear(self.config.hidden_size, num_labels)
+                self.classifier = torch.nn.Linear(self.pooling.output_size, num_labels)
 
             def forward(
                 self,
@@ -360,8 +441,7 @@ class ChunkMeanPooledBertClassifier:
                     self.config.hidden_size,
                 )
 
-                weights = chunk_attention_mask.unsqueeze(-1).to(chunk_cls.dtype)
-                pooled = (chunk_cls * weights).sum(dim=1) / weights.sum(dim=1).clamp(min=1.0)
+                pooled = self.pooling(chunk_cls, chunk_attention_mask)
                 logits = self.classifier(self.dropout(pooled))
 
                 loss = None
@@ -371,7 +451,7 @@ class ChunkMeanPooledBertClassifier:
 
                 return SequenceClassifierOutput(loss=loss, logits=logits)
 
-        return _ChunkMeanPooledBertClassifier()
+        return _ChunkPooledBertClassifier()
 
 
 def summarize_split(table: pd.DataFrame, split_name: str) -> dict[str, Any]:
@@ -649,7 +729,11 @@ def main() -> None:
     split_summary.to_csv(config.output_dir / "training_split_summary.csv", index=False)
 
     tokenizer = AutoTokenizer.from_pretrained(config.model_name)
-    model = ChunkMeanPooledBertClassifier(config.model_name, num_labels=2)
+    model = ChunkPooledBertClassifier(
+        config.model_name,
+        num_labels=2,
+        pooling_strategy=config.pooling_strategy,
+    )
 
     train_dataset = ChunkedTextClassificationDataset(
         train_table[config.text_column].tolist(),
