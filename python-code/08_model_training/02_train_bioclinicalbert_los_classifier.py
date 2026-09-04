@@ -333,6 +333,16 @@ def training_arguments_kwargs(config: RunConfig) -> dict[str, Any]:
     return kwargs
 
 
+def trainer_tokenizer_kwargs(trainer_class: Any, tokenizer: Any) -> dict[str, Any]:
+    """Return tokenizer/processing_class kwargs compatible with this transformers version."""
+    signature = inspect.signature(trainer_class.__init__)
+    if "processing_class" in signature.parameters:
+        return {"processing_class": tokenizer}
+    if "tokenizer" in signature.parameters:
+        return {"tokenizer": tokenizer}
+    return {}
+
+
 def build_trainer(
     config: RunConfig,
     model: Any,
@@ -347,17 +357,18 @@ def build_trainer(
 
     training_args = TrainingArguments(**training_arguments_kwargs(config))
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+    base_trainer_kwargs = {
+        "model": model,
+        "args": training_args,
+        "train_dataset": train_dataset,
+        "eval_dataset": validation_dataset,
+        "data_collator": data_collator,
+        "compute_metrics": make_compute_metrics(),
+    }
+    base_trainer_kwargs.update(trainer_tokenizer_kwargs(Trainer, tokenizer))
 
     if not config.use_class_weights:
-        return Trainer(
-            model=model,
-            args=training_args,
-            train_dataset=train_dataset,
-            eval_dataset=validation_dataset,
-            tokenizer=tokenizer,
-            data_collator=data_collator,
-            compute_metrics=make_compute_metrics(),
-        )
+        return Trainer(**base_trainer_kwargs)
 
     counts = train_table["labels"].value_counts().reindex([0, 1], fill_value=0)
     if (counts == 0).any():
@@ -383,15 +394,9 @@ def build_trainer(
             loss = loss_fct(outputs.logits.view(-1, model.config.num_labels), labels.view(-1))
             return (loss, outputs) if return_outputs else loss
 
-    return WeightedTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=validation_dataset,
-        tokenizer=tokenizer,
-        data_collator=data_collator,
-        compute_metrics=make_compute_metrics(),
-    )
+    weighted_trainer_kwargs = dict(base_trainer_kwargs)
+    weighted_trainer_kwargs.update(trainer_tokenizer_kwargs(WeightedTrainer, tokenizer))
+    return WeightedTrainer(**weighted_trainer_kwargs)
 
 
 def save_validation_predictions(
