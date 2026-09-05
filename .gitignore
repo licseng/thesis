@@ -96,6 +96,8 @@ python-code/08_model_training/01_training_data_creation/analysis_output_patient_
 python-code/08_model_training/01_training_data_creation/analysis_output_prediction_model_dataset/
 python-code/08_model_training/01_training_data_creation/prediction_model_dataset/
 python-code/08_model_training/bioclinicalbert_los_classifier_output/
+python-code/08_model_training/bioclinicalbert_los_classifier_inference_output/
+python-code/08_model_training/analysis_output_los_threshold_tuning/
 
 # Generated HTML visualization output
 html-visualization/
