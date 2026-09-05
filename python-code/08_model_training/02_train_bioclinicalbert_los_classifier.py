@@ -74,6 +74,7 @@ class RunConfig:
     logging_steps: int
     save_total_limit: int
     use_class_weights: bool
+    save_safetensors: bool
 
 
 def env_int(name: str, default: int | None = None) -> int | None:
@@ -187,6 +188,11 @@ def parse_args() -> RunConfig:
         "--use-class-weights",
         action="store_true",
         default=env_bool("LOS_USE_CLASS_WEIGHTS", False),
+    )
+    parser.add_argument(
+        "--save-safetensors",
+        action="store_true",
+        default=env_bool("LOS_SAVE_SAFETENSORS", False),
     )
     args = parser.parse_args()
     return RunConfig(**vars(args))
@@ -535,6 +541,8 @@ def training_arguments_kwargs(config: RunConfig) -> dict[str, Any]:
         "gradient_accumulation_steps": config.gradient_accumulation_steps,
     }
     signature = inspect.signature(TrainingArguments.__init__)
+    if "save_safetensors" in signature.parameters:
+        kwargs["save_safetensors"] = config.save_safetensors
     if "eval_strategy" in signature.parameters:
         kwargs["eval_strategy"] = "epoch"
     else:
@@ -643,6 +651,16 @@ def save_validation_predictions(
     predictions_df.to_csv(output_dir / "validation_predictions.csv", index=False)
 
 
+def make_model_parameters_contiguous(model: Any) -> None:
+    """Pack any non-contiguous trainable tensors before checkpoint saving."""
+    import torch
+
+    with torch.no_grad():
+        for parameter in model.parameters():
+            if not parameter.is_contiguous():
+                parameter.data = parameter.data.contiguous()
+
+
 def save_training_curves(trainer: Any, output_dir: Path) -> None:
     """Save Trainer log history as CSV and simple training/evaluation plots."""
     import matplotlib.pyplot as plt
@@ -734,6 +752,7 @@ def main() -> None:
         num_labels=2,
         pooling_strategy=config.pooling_strategy,
     )
+    make_model_parameters_contiguous(model)
 
     train_dataset = ChunkedTextClassificationDataset(
         train_table[config.text_column].tolist(),
@@ -771,6 +790,7 @@ def main() -> None:
         train_table,
     )
     train_result = trainer.train()
+    make_model_parameters_contiguous(model)
     trainer.save_model(config.output_dir / "best_model")
     tokenizer.save_pretrained(config.output_dir / "best_model")
 
