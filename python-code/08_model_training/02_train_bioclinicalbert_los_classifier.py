@@ -72,6 +72,7 @@ class RunConfig:
     bf16: bool
     gradient_accumulation_steps: int
     logging_steps: int
+    eval_steps: int
     save_total_limit: int
     use_class_weights: bool
     save_safetensors: bool
@@ -179,6 +180,7 @@ def parse_args() -> RunConfig:
         default=env_int("LOS_GRADIENT_ACCUMULATION_STEPS", 1),
     )
     parser.add_argument("--logging-steps", type=int, default=env_int("LOS_LOGGING_STEPS", 50))
+    parser.add_argument("--eval-steps", type=int, default=env_int("LOS_EVAL_STEPS", 1000))
     parser.add_argument(
         "--save-total-limit",
         type=int,
@@ -528,7 +530,9 @@ def training_arguments_kwargs(config: RunConfig) -> dict[str, Any]:
         "weight_decay": config.weight_decay,
         "warmup_ratio": config.warmup_ratio,
         "logging_steps": config.logging_steps,
-        "save_strategy": "epoch",
+        "eval_steps": config.eval_steps,
+        "save_strategy": "steps",
+        "save_steps": config.eval_steps,
         "load_best_model_at_end": True,
         "metric_for_best_model": "auroc",
         "greater_is_better": True,
@@ -544,9 +548,9 @@ def training_arguments_kwargs(config: RunConfig) -> dict[str, Any]:
     if "save_safetensors" in signature.parameters:
         kwargs["save_safetensors"] = config.save_safetensors
     if "eval_strategy" in signature.parameters:
-        kwargs["eval_strategy"] = "epoch"
+        kwargs["eval_strategy"] = "steps"
     else:
-        kwargs["evaluation_strategy"] = "epoch"
+        kwargs["evaluation_strategy"] = "steps"
     return kwargs
 
 
