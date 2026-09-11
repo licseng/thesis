@@ -142,7 +142,7 @@ def load_covariates() -> pd.DataFrame:
     if not COVARIATE_PATH.exists():
         raise FileNotFoundError(
             "Missing regression covariate dataset. Run "
-            "05_regression_analysis/01_analyze_utilization_adjusted_for_readmission.py first: "
+            "09_regression_analysis/01_analyze_utilization_adjusted_for_readmission.py first: "
             f"{COVARIATE_PATH}"
         )
 

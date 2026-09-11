@@ -6,7 +6,7 @@ This script compares ICD diagnoses for:
     - admissions ending in in-hospital death
 
 It uses the admission-level mortality dataset produced by
-`05_regression_analysis/02_analyze_mortality_risk.py` and the matched-cohort
+`09_regression_analysis/02_analyze_mortality_risk.py` and the matched-cohort
 diagnosis export. Outputs are aggregate diagnosis counts plus an ID-level audit
 table. No note text or chief complaint text is written.
 """
@@ -22,7 +22,7 @@ import pandas as pd
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 COHORT_MATCHING_DIR = PROJECT_DIR / "02_cohort_matching"
-REGRESSION_DIR = PROJECT_DIR / "05_regression_analysis"
+REGRESSION_DIR = PROJECT_DIR / "09_regression_analysis"
 sys.path.insert(0, str(COHORT_MATCHING_DIR))
 
 import _matched_cohort_characterization_common as common  # noqa: E402
@@ -53,7 +53,7 @@ def load_mortality_dataset() -> pd.DataFrame:
     if not MORTALITY_DATASET_PATH.exists():
         raise FileNotFoundError(
             "Missing admission-level mortality dataset. Run "
-            "05_regression_analysis/02_analyze_mortality_risk.py first: "
+            "09_regression_analysis/02_analyze_mortality_risk.py first: "
             f"{MORTALITY_DATASET_PATH}"
         )
     data = pd.read_csv(MORTALITY_DATASET_PATH)

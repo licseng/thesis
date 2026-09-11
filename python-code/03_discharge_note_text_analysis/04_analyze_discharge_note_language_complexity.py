@@ -33,7 +33,7 @@ FULL_NOTE_DIR = PARSER_DIR / "full_discharge_note_sections"
 OUTPUT_DIR = SCRIPT_DIR / "analysis_output_language_complexity"
 REGRESSION_DATASET_PATH = (
     REPO_PYTHON_DIR
-    / "05_regression_analysis"
+    / "09_regression_analysis"
     / "analysis_output_utilization_readmission_adjusted"
     / "utilization_readmission_adjusted_model_dataset.csv"
 )
@@ -300,7 +300,7 @@ def load_regression_covariates() -> pd.DataFrame:
     if not REGRESSION_DATASET_PATH.exists():
         raise FileNotFoundError(
             "Missing regression covariate dataset. Run "
-            "05_regression_analysis/01_analyze_utilization_adjusted_for_readmission.py first: "
+            "09_regression_analysis/01_analyze_utilization_adjusted_for_readmission.py first: "
             f"{REGRESSION_DATASET_PATH}"
         )
 
