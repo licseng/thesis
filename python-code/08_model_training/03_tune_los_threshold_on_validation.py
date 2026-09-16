@@ -57,6 +57,14 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=float(os.environ.get("LOS_THRESHOLD_STEP", "0.005")),
     )
+    parser.add_argument(
+        "--output-prefix",
+        default=os.environ.get("LOS_THRESHOLD_OUTPUT_PREFIX", "los_validation"),
+    )
+    parser.add_argument(
+        "--task-label",
+        default=os.environ.get("LOS_THRESHOLD_TASK_LABEL", "Prolonged LOS"),
+    )
     return parser.parse_args()
 
 
@@ -156,7 +164,13 @@ def select_recommended_thresholds(metrics: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(recommendations)
 
 
-def plot_threshold_metrics(metrics: pd.DataFrame, output_dir: Path) -> None:
+def plot_threshold_metrics(
+    metrics: pd.DataFrame,
+    output_dir: Path,
+    *,
+    output_prefix: str,
+    task_label: str,
+) -> None:
     """Plot threshold-dependent metrics."""
     fig, ax = plt.subplots(figsize=(9, 6), constrained_layout=True)
     for column in ["precision", "recall_sensitivity", "specificity", "f1"]:
@@ -164,17 +178,17 @@ def plot_threshold_metrics(metrics: pd.DataFrame, output_dir: Path) -> None:
     ax.set_xlabel("Probability threshold")
     ax.set_ylabel("Metric")
     ax.set_ylim(0, 1)
-    ax.set_title("Validation Metrics Across LOS Probability Thresholds")
+    ax.set_title(f"Validation Metrics Across {task_label} Probability Thresholds")
     ax.legend()
-    fig.savefig(output_dir / "los_validation_threshold_metric_curves.png", dpi=200)
+    fig.savefig(output_dir / f"{output_prefix}_threshold_metric_curves.png", dpi=200)
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(9, 5), constrained_layout=True)
     ax.plot(metrics["threshold"], metrics["pct_predicted_positive"], color="#4c78a8")
     ax.set_xlabel("Probability threshold")
     ax.set_ylabel("Predicted positive (%)")
-    ax.set_title("Predicted Prolonged-LOS Rate by Threshold")
-    fig.savefig(output_dir / "los_validation_predicted_positive_by_threshold.png", dpi=200)
+    ax.set_title(f"Predicted {task_label} Rate by Threshold")
+    fig.savefig(output_dir / f"{output_prefix}_predicted_positive_by_threshold.png", dpi=200)
     plt.close(fig)
 
 
@@ -203,17 +217,22 @@ def main() -> None:
         "auprc": float(average_precision_score(labels, probabilities)),
     }
 
-    metrics.to_csv(args.output_dir / "los_validation_threshold_metrics.csv", index=False)
+    metrics.to_csv(args.output_dir / f"{args.output_prefix}_threshold_metrics.csv", index=False)
     recommendations.to_csv(
-        args.output_dir / "los_validation_recommended_thresholds.csv",
+        args.output_dir / f"{args.output_prefix}_recommended_thresholds.csv",
         index=False,
     )
-    with (args.output_dir / "los_validation_threshold_free_metrics.json").open(
+    with (args.output_dir / f"{args.output_prefix}_threshold_free_metrics.json").open(
         "w",
         encoding="utf-8",
     ) as handle:
         json.dump(threshold_free_metrics, handle, indent=2)
-    plot_threshold_metrics(metrics, args.output_dir)
+    plot_threshold_metrics(
+        metrics,
+        args.output_dir,
+        output_prefix=args.output_prefix,
+        task_label=args.task_label,
+    )
 
     print(f"Read validation predictions from: {args.input_path}")
     print(f"Wrote threshold tuning outputs to: {args.output_dir}")

@@ -56,6 +56,7 @@ class RunConfig:
     output_dir: Path
     text_column: str
     label_column: str
+    filter_column: str | None
     max_length: int
     max_chunks: int
     pooling_strategy: str
@@ -136,6 +137,14 @@ def parse_args() -> RunConfig:
         "--label-column",
         default=os.environ.get("LOS_LABEL_COLUMN", "prolonged_los_gt_7d"),
     )
+    parser.add_argument(
+        "--filter-column",
+        default=os.environ.get("LOS_FILTER_COLUMN") or None,
+        help=(
+            "Optional boolean column used to restrict rows before training/evaluation. "
+            "For 30-day readmission, use eligible_for_30d_readmission."
+        ),
+    )
     parser.add_argument("--max-length", type=int, default=env_int("LOS_MAX_LENGTH", 512))
     parser.add_argument("--max-chunks", type=int, default=env_int("LOS_MAX_CHUNKS", 4))
     parser.add_argument(
@@ -214,7 +223,24 @@ def set_seed(seed: int) -> None:
         pass
 
 
-def load_split(path: Path, text_column: str, label_column: str, max_rows: int | None) -> pd.DataFrame:
+def coerce_bool_series(series: pd.Series) -> pd.Series:
+    """Coerce a common boolean-like column to bool without treating missing as true."""
+    if pd.api.types.is_bool_dtype(series):
+        return series.fillna(False)
+    if pd.api.types.is_numeric_dtype(series):
+        return pd.to_numeric(series, errors="coerce").fillna(0).ne(0)
+
+    normalized = series.fillna("").astype(str).str.strip().str.lower()
+    return normalized.isin({"1", "true", "t", "yes", "y"})
+
+
+def load_split(
+    path: Path,
+    text_column: str,
+    label_column: str,
+    filter_column: str | None,
+    max_rows: int | None,
+) -> pd.DataFrame:
     """Load one parquet split and standardize text/label columns."""
     if not path.exists():
         raise FileNotFoundError(f"Missing parquet split: {path}")
@@ -224,10 +250,20 @@ def load_split(path: Path, text_column: str, label_column: str, max_rows: int | 
         text_column,
         label_column,
     ]
+    if filter_column:
+        required_columns.append(filter_column)
     table = pd.read_parquet(path)
     missing = sorted(set(required_columns) - set(table.columns))
     if missing:
         raise ValueError(f"{path} is missing required columns: {missing}")
+    if filter_column:
+        original_n = len(table)
+        table = table.loc[coerce_bool_series(table[filter_column])].copy()
+        print(
+            f"Applied filter {filter_column} to {path.name}: "
+            f"{len(table):,}/{original_n:,} rows kept",
+            flush=True,
+        )
     if max_rows is not None:
         table = table.head(max_rows).copy()
     table = table.loc[
@@ -639,7 +675,9 @@ def save_validation_predictions(
             "note_id",
             "hospital_los_days",
             "prolonged_los_gt_7d",
+            "eligible_for_30d_readmission",
             "readmission_within_30d",
+            "days_to_next_admission_after_discharge",
             "is_mhh1_psychotic_admission",
             "is_mhc0_admission",
             "is_matched_mhh1_psychotic_admission",
@@ -734,12 +772,14 @@ def main() -> None:
         config.train_path,
         config.text_column,
         config.label_column,
+        config.filter_column,
         config.train_max_rows,
     )
     validation_table = load_split(
         config.validation_path,
         config.text_column,
         config.label_column,
+        config.filter_column,
         config.validation_max_rows,
     )
     split_summary = pd.DataFrame(
