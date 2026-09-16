@@ -105,6 +105,9 @@ python-code/08_model_training/bioclinicalbert_los_classifier_output_3epoch_NOcla
 python-code/08_model_training/bioclinicalbert_los_classifier_output_2epoch_NOclassweights/
 python-code/08_model_training/bioclinicalbert_los_classifier_inference_output/
 python-code/08_model_training/analysis_output_los_threshold_tuning/
+python-code/08_model_training/analysis_output_los_model_comparison/
+python-code/08_model_training/bioclinicalbert_readmission_classifier_output*/
+python-code/08_model_training/bioclinicalbert_readmission_classifier_inference_output*/
 
 # Generated HTML visualization output
 html-visualization/
