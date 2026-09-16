@@ -239,9 +239,6 @@ def build_prefilter_note_annotation_sample(notes: pd.DataFrame) -> pd.DataFrame:
             "full_discharge_note": sampled["full_note_text"].map(format_text_for_csv_cell),
             "stage1_psychiatric_context": "",
             "stage2_diagnostic_overshadowing": "",
-            "unclear_or_notes": "",
-            "n_prefilter_section_rows": sampled["n_prefilter_section_rows"],
-            "total_psych_keyword_hits": sampled["total_psych_keyword_hits"],
         }
     )
 
