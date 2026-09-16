@@ -1,4 +1,4 @@
-"""Tune LOS classifier decision thresholds on validation predictions.
+"""Tune admission classifier decision thresholds on validation predictions.
 
 This script does not retrain the model. It reads validation probabilities from
 the trained Bio_ClinicalBERT output and recomputes threshold-dependent metrics
@@ -29,9 +29,9 @@ from sklearn.metrics import (
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-TRAINING_OUTPUT_DIR = SCRIPT_DIR / "bioclinicalbert_los_classifier_output"
+TRAINING_OUTPUT_DIR = SCRIPT_DIR / "bioclinicalbert_admission_classifier_output"
 DEFAULT_INPUT_PATH = TRAINING_OUTPUT_DIR / "validation_predictions.csv"
-DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "analysis_output_los_threshold_tuning"
+DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "analysis_output_admission_classifier_threshold_tuning"
 os.environ.setdefault("MPLCONFIGDIR", str(SCRIPT_DIR.parent / ".matplotlib"))
 
 import matplotlib.pyplot as plt
@@ -59,11 +59,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-prefix",
-        default=os.environ.get("LOS_THRESHOLD_OUTPUT_PREFIX", "los_validation"),
+        default=os.environ.get("LOS_THRESHOLD_OUTPUT_PREFIX", "admission_classifier_validation"),
     )
     parser.add_argument(
         "--task-label",
-        default=os.environ.get("LOS_THRESHOLD_TASK_LABEL", "Prolonged LOS"),
+        default=os.environ.get("LOS_THRESHOLD_TASK_LABEL", "Admission outcome"),
     )
     return parser.parse_args()
 

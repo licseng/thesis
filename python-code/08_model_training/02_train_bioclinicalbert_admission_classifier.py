@@ -1,12 +1,15 @@
-"""Fine-tune Bio_ClinicalBERT for prolonged hospital length-of-stay prediction.
+"""Fine-tune Bio_ClinicalBERT for admission-level binary prediction.
 
 This script trains a chunk-based binary classifier using the model-ready parquet
 files created by:
 
     01_training_data_creation/03_create_prediction_model_dataset.py
 
-Primary task:
-    Predict prolonged hospital length of stay, defined as LOS > 7 days.
+The label is configurable. The original task was prolonged length of stay, and
+the current task can be 30-day readmission by setting:
+
+    LOS_LABEL_COLUMN=readmission_within_30d
+    LOS_FILTER_COLUMN=eligible_for_30d_readmission
 
 Default inputs:
     01_training_data_creation/prediction_model_dataset/train.parquet
@@ -18,7 +21,7 @@ Default model:
 Each admission note is split into up to LOS_MAX_CHUNKS chunks of LOS_MAX_LENGTH
 tokens. Bio_ClinicalBERT encodes each chunk, chunk [CLS] representations are
 pooled into one admission representation, and one classification head predicts
-the admission-level LOS label. The default pooling strategy concatenates
+the admission-level binary label. The default pooling strategy concatenates
 element-wise mean and max pooled chunk representations.
 
 The script is designed for cluster training, but it supports small local smoke
@@ -42,7 +45,7 @@ import pandas as pd
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATASET_DIR = SCRIPT_DIR / "01_training_data_creation" / "prediction_model_dataset"
-DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "bioclinicalbert_los_classifier_output"
+DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "bioclinicalbert_admission_classifier_output"
 os.environ.setdefault("MPLCONFIGDIR", str(SCRIPT_DIR.parent / ".matplotlib"))
 
 
@@ -106,7 +109,7 @@ def env_bool(name: str, default: bool = False) -> bool:
 def parse_args() -> RunConfig:
     """Parse CLI arguments, using environment variables as defaults."""
     parser = argparse.ArgumentParser(
-        description="Fine-tune Bio_ClinicalBERT for LOS > 7 day prediction."
+        description="Fine-tune Bio_ClinicalBERT for admission-level binary prediction."
     )
     parser.add_argument(
         "--model-name",
@@ -435,8 +438,8 @@ class ChunkPooledBertClassifier:
                 self.config = AutoConfig.from_pretrained(
                     model_name,
                     num_labels=num_labels,
-                    id2label={0: "LOS_LE_7_DAYS", 1: "LOS_GT_7_DAYS"},
-                    label2id={"LOS_LE_7_DAYS": 0, "LOS_GT_7_DAYS": 1},
+                    id2label={0: "NEGATIVE", 1: "POSITIVE"},
+                    label2id={"NEGATIVE": 0, "POSITIVE": 1},
                 )
                 self.num_labels = num_labels
                 self.encoder = AutoModel.from_pretrained(model_name, config=self.config)

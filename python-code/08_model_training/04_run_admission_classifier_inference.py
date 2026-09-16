@@ -1,8 +1,8 @@
-"""Run inference with the chunk-pooled Bio_ClinicalBERT LOS classifier.
+"""Run inference with the chunk-pooled Bio_ClinicalBERT admission classifier.
 
 This script loads the trained model produced by:
 
-    02_train_bioclinicalbert_los_classifier.py
+    02_train_bioclinicalbert_admission_classifier.py
 
 It runs prediction on the held-out parquet files created by:
 
@@ -34,10 +34,10 @@ import pandas as pd
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATASET_DIR = SCRIPT_DIR / "01_training_data_creation" / "prediction_model_dataset"
-DEFAULT_TRAINING_OUTPUT_DIR = SCRIPT_DIR / "bioclinicalbert_los_classifier_output"
+DEFAULT_TRAINING_OUTPUT_DIR = SCRIPT_DIR / "bioclinicalbert_admission_classifier_output"
 DEFAULT_MODEL_DIR = DEFAULT_TRAINING_OUTPUT_DIR / "best_model"
-DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "bioclinicalbert_los_classifier_inference_output"
-TRAINING_SCRIPT_PATH = SCRIPT_DIR / "02_train_bioclinicalbert_los_classifier.py"
+DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "bioclinicalbert_admission_classifier_inference_output"
+TRAINING_SCRIPT_PATH = SCRIPT_DIR / "02_train_bioclinicalbert_admission_classifier.py"
 os.environ.setdefault("MPLCONFIGDIR", str(SCRIPT_DIR.parent / ".matplotlib"))
 
 
@@ -60,7 +60,7 @@ def env_bool(name: str, default: bool = False) -> bool:
 def parse_args() -> argparse.Namespace:
     """Parse inference arguments, using environment variables as defaults."""
     parser = argparse.ArgumentParser(
-        description="Run LOS classifier inference on held-out test parquet files."
+        description="Run admission classifier inference on held-out test parquet files."
     )
     parser.add_argument(
         "--model-dir",
@@ -122,11 +122,11 @@ def load_training_module() -> Any:
     """Load the training script so inference reuses the exact model classes."""
     if not TRAINING_SCRIPT_PATH.exists():
         raise FileNotFoundError(f"Missing training script: {TRAINING_SCRIPT_PATH}")
-    spec = importlib.util.spec_from_file_location("los_training_module", TRAINING_SCRIPT_PATH)
+    spec = importlib.util.spec_from_file_location("admission_training_module", TRAINING_SCRIPT_PATH)
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not import training script: {TRAINING_SCRIPT_PATH}")
     module = importlib.util.module_from_spec(spec)
-    sys.modules["los_training_module"] = module
+    sys.modules["admission_training_module"] = module
     spec.loader.exec_module(module)
     return module
 
@@ -484,7 +484,10 @@ def main() -> None:
         print(json.dumps(metrics, indent=2))
 
     metrics_df = pd.DataFrame(metrics_rows)
-    metrics_df.to_csv(args.output_dir / "los_inference_metrics_summary.csv", index=False)
+    metrics_df.to_csv(
+        args.output_dir / "admission_classifier_inference_metrics_summary.csv",
+        index=False,
+    )
     with (args.output_dir / "inference_config.json").open("w", encoding="utf-8") as handle:
         json.dump(
             {
