@@ -3,36 +3,8 @@
 
 CREATE OR REPLACE TABLE possible_overshadowing_admissions_psychiatric AS
 WITH psychiatric_code_categories AS (
-    SELECT icd_version, icd_code, 'psychotic' AS psych_category
-    FROM psychiatric_icd_codes_psychotic
-
-    UNION ALL
-    SELECT icd_version, icd_code, 'substance_related'
-    FROM psychiatric_icd_codes_substance_related
-
-    UNION ALL
-    SELECT icd_version, icd_code, 'internalizing'
-    FROM psychiatric_icd_codes_internalizing
-
-    UNION ALL
-    SELECT icd_version, icd_code, 'personality_behavioral'
-    FROM psychiatric_icd_codes_personality_behavioral
-
-    UNION ALL
-    SELECT icd_version, icd_code, 'neurodevelopmental'
-    FROM psychiatric_icd_codes_neurodevelopmental
-
-    UNION ALL
-    SELECT icd_version, icd_code, 'neurocognitive'
-    FROM psychiatric_icd_codes_neurocognitive
-
-    UNION ALL
-    SELECT icd_version, icd_code, 'suicide_self_harm'
-    FROM psychiatric_icd_codes_suicide_self_harm
-
-    UNION ALL
-    SELECT icd_version, icd_code, 'other'
-    FROM psychiatric_icd_codes_other
+    SELECT icd_version, icd_code, psych_category
+    FROM psychiatric_icd_code_subcategories
 ),
 
 same_admission_categories AS (
@@ -152,5 +124,4 @@ FROM admission_mhc a
 JOIN only_mhc1_subjects s
     ON a.subject_id = s.subject_id
 WHERE a.MHC = 1;
-
 

@@ -1,22 +1,16 @@
+-- Canonical psychotic-illness definition, including clinical extensions and
+-- the historical schizophrenia code used by the history-based MHH1 cohort.
 SELECT *
 FROM psychosis_icd_codes_extended
-ORDER BY icd_version, icd_code;
+ORDER BY definition_tier, diagnostic_group, icd_version, icd_code;
 
-SELECT *
-FROM psychosis_icd_codes_restricted
-ORDER BY icd_version, icd_code;
-
--- list of what has been removed from the extended list
 SELECT
-    e.icd_version,
-    e.icd_code,
-    e.long_title
-FROM psychosis_icd_codes_extended e
-LEFT JOIN psychosis_icd_codes_restricted r
-    ON e.icd_version = r.icd_version
-   AND e.icd_code = r.icd_code
-WHERE r.icd_code IS NULL
-ORDER BY e.icd_version, e.icd_code;
+    definition_tier,
+    diagnostic_group,
+    COUNT(*) AS n_codes
+FROM psychosis_icd_codes_extended
+GROUP BY definition_tier, diagnostic_group
+ORDER BY definition_tier, diagnostic_group;
 
 SELECT *
 FROM     psychiatric_icd_codes_psychotic

@@ -13,6 +13,13 @@ JOIN discharge d
     ON a.subject_id = d.subject_id
    AND a.hadm_id = d.hadm_id;
 
+--unique hospital admissions with a matching discharge note
+SELECT COUNT(DISTINCT a.hadm_id) AS n_admissions_with_discharge_note
+FROM admissions a
+JOIN discharge d
+    ON a.subject_id = d.subject_id
+   AND a.hadm_id = d.hadm_id;
+
 --unique unmatched patients ->  48 (from which 6 patients are both unmatched and matched for different notes)
 SELECT COUNT(DISTINCT d.subject_id) AS n_unmatched_subjects
 FROM discharge d
@@ -20,4 +27,3 @@ LEFT JOIN admissions a
     ON a.subject_id = d.subject_id
    AND a.hadm_id = d.hadm_id
 WHERE a.hadm_id IS NULL;
-
