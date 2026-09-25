@@ -18,6 +18,9 @@
 -- Eligibility retained from the original matching pipeline:
 --   * recorded binary sex in MIMIC-IV (F or M); and
 --   * age at admission from 18 through 120 years.
+--
+-- Stage 3 also excludes complete patient trajectories with more than 50 total
+-- MIMIC-IV hospital admissions. Both cohorts use the same restriction.
 
 
 -- ---------------------------------------------------------------------------
@@ -47,7 +50,7 @@ WITH mhc0_with_matching_fields AS (
         n.storetime,
         n.text
 
-    FROM finalized_MHC0 m
+    FROM finalized_MHC0_excluding_over_50_MIMIC_admissions m
     JOIN patients pat
         ON m.subject_id = pat.subject_id
     JOIN discharge n
@@ -95,7 +98,7 @@ WITH mhc1_psychosis_with_matching_fields AS (
         n.storetime,
         n.text
 
-    FROM finalized_MHC1_psychosis m
+    FROM finalized_MHC1_psychosis_excluding_over_50_MIMIC_admissions m
     JOIN patients pat
         ON m.subject_id = pat.subject_id
     JOIN discharge n
