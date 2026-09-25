@@ -15,6 +15,9 @@ __pycache__/
 # Archived pre-reorganization code and generated outputs
 python-code-old/
 
+# Local snapshots of generated analysis artifacts (may contain MIMIC data)
+analysis-archive/
+
 # Generated outputs from current Python analyses
 
 python-code/01_discharge_note_preprocessing/01_discharge_note_parsing/parsed_chief_complaints/
