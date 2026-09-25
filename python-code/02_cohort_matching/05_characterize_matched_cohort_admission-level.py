@@ -1,7 +1,7 @@
 """Admission-level characterization of the matched cohorts.
 
 This script summarizes admission-level descriptors and utilization for the
-matched MHH1_psychotic and MHC0 admissions. It uses the DBeaver-created DuckDB
+matched MHC1_psychotic and MHC0 admissions. It uses the DBeaver-created DuckDB
 tables or file exports handled by `_matched_cohort_characterization_common.py`.
 """
 

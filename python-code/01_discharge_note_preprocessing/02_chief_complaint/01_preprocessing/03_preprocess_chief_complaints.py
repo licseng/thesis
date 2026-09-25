@@ -7,7 +7,7 @@ psychiatric/substance/self-harm complaints with MedSpaCy rules, and
 extracts UMLS concepts with a local QuickUMLS index.
 
 Inputs:
-    chief_complaint_parquets/MHH1_psychotic_chief_complaints.parquet
+    chief_complaint_parquets/MHC1_psychotic_chief_complaints.parquet
     chief_complaint_parquets/MHC0_chief_complaints.parquet
 
 Outputs:
@@ -106,7 +106,7 @@ QUICKUMLS_ALLOWED_SEMTYPES = {
 
 # Input chief-complaint parquet files produced by the discharge-note parsing 
 INPUTS = {
-    "MHH1_psychotic": INPUT_DIR / "MHH1_psychotic_chief_complaints.parquet",
+    "MHC1_psychotic": INPUT_DIR / "MHC1_psychotic_chief_complaints.parquet",
     "MHC0": INPUT_DIR / "MHC0_chief_complaints.parquet",
 }
 

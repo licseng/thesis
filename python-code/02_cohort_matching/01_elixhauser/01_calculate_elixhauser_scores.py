@@ -9,7 +9,7 @@ The score is used later as a cohort-matching covariate together with chief
 complaint semantic similarity, age, and sex.
 
 Inputs:
-    DuckDB table admission_icd_lists_MHH_psychotic
+    DuckDB table admission_icd_lists_MHC1_psychotic
     DuckDB table admission_icd_lists_only_MHC0
 
 Expected input columns:
@@ -19,8 +19,8 @@ Expected input columns:
     icd_code
 
 Outputs:
-    elixhauser_scores_output/elixhauser_MHH_psychotic.parquet
-    elixhauser_scores_output/elixhauser_MHH_psychotic.csv
+    elixhauser_scores_output/elixhauser_MHC1_psychotic.parquet
+    elixhauser_scores_output/elixhauser_MHC1_psychotic.csv
     elixhauser_scores_output/elixhauser_only_MHC0.parquet
     elixhauser_scores_output/elixhauser_only_MHC0.csv
     elixhauser_scores_output/elixhauser_summary.csv
@@ -65,9 +65,9 @@ COMORBIDIPY_WEIGHTING = "vw"
 
 # Cohort-specific ICD diagnosis tables exported to DuckDB.
 INPUTS = {
-    "MHH_psychotic": {
-        "source_table": "admission_icd_lists_MHH_psychotic",
-        "output_basename": "elixhauser_MHH_psychotic",
+    "MHC1_psychotic": {
+        "source_table": "admission_icd_lists_MHC1_psychotic",
+        "output_basename": "elixhauser_MHC1_psychotic",
     },
     "only_MHC0": {
         "source_table": "admission_icd_lists_only_MHC0",

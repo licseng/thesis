@@ -88,13 +88,13 @@ DATASET_COLUMNS = [
     "gender",
     "anchor_age",
     "dod",
-    "is_mhh1_psychotic_admission",
+    "is_mhc1_psychotic_admission",
     "is_mhc0_admission",
-    "is_matched_mhh1_psychotic_admission",
+    "is_matched_mhc1_psychotic_admission",
     "is_matched_mhc0_admission",
-    "is_mhh1_psychotic_subject",
+    "is_mhc1_psychotic_subject",
     "is_mhc0_subject",
-    "is_matched_mhh1_psychotic_subject",
+    "is_matched_mhc1_psychotic_subject",
     "is_matched_mhc0_subject",
     "hospital_los_days",
     "prolonged_los_gt_7d",
@@ -115,7 +115,7 @@ SPLIT_OUTPUTS = {
     "train": "train.parquet",
     "validation": "validation.parquet",
     "test_general": "test_general.parquet",
-    "test_fairness_mhh1_mhc0": "test_fairness_mhh1_mhc0.parquet",
+    "test_fairness_mhc1_mhc0": "test_fairness_mhc1_mhc0.parquet",
 }
 
 
@@ -178,7 +178,7 @@ def selected_rows_sql() -> str:
                e.partition = 'test_pool'
                AND (
                    e.selected_for_general_test = 1
-                   OR e.is_matched_mhh1_psychotic_admission = 1
+                   OR e.is_matched_mhc1_psychotic_admission = 1
                    OR e.is_matched_mhc0_admission = 1
                )
            )
@@ -359,11 +359,11 @@ def dataset_split_views(parsed: pd.DataFrame) -> list[tuple[str, pd.DataFrame]]:
                 errors="coerce",
             ).fillna(0).eq(1)
         ),
-        "test_fairness_mhh1_mhc0": (
+        "test_fairness_mhc1_mhc0": (
             parsed["partition"].eq("test_pool")
             & (
                 pd.to_numeric(
-                    parsed["is_matched_mhh1_psychotic_admission"],
+                    parsed["is_matched_mhc1_psychotic_admission"],
                     errors="coerce",
                 ).fillna(0).eq(1)
                 | pd.to_numeric(
@@ -423,9 +423,9 @@ def write_summary_outputs(all_rows: list[pd.DataFrame]) -> None:
     group_rows = []
     for split, split_group in combined.groupby("dataset_split", dropna=False):
         for group_name, flag in [
-            ("MHH1_psychotic_full_cohort", "is_mhh1_psychotic_admission"),
+            ("MHC1_psychotic_full_cohort", "is_mhc1_psychotic_admission"),
             ("MHC0_full_cohort", "is_mhc0_admission"),
-            ("MHH1_psychotic_matched_cohort", "is_matched_mhh1_psychotic_admission"),
+            ("MHC1_psychotic_matched_cohort", "is_matched_mhc1_psychotic_admission"),
             ("MHC0_matched_cohort", "is_matched_mhc0_admission"),
         ]:
             subgroup = split_group.loc[pd.to_numeric(split_group[flag], errors="coerce").fillna(0).eq(1)]
@@ -455,7 +455,7 @@ def write_summary_outputs(all_rows: list[pd.DataFrame]) -> None:
         "train": "train",
         "validation": "validation",
         "test_general": "test_pool",
-        "test_fairness_mhh1_mhc0": "test_pool",
+        "test_fairness_mhc1_mhc0": "test_pool",
     }
     combined["base_partition_for_qc"] = combined["dataset_split"].map(
         split_to_base_partition
@@ -468,7 +468,7 @@ def write_summary_outputs(all_rows: list[pd.DataFrame]) -> None:
     subject_test_views = (
         combined.loc[
             combined["dataset_split"].isin(
-                ["test_general", "test_fairness_mhh1_mhc0"]
+                ["test_general", "test_fairness_mhc1_mhc0"]
             )
         ]
         .groupby("subject_id")["dataset_split"]

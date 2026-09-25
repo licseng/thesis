@@ -9,7 +9,7 @@ The main analysis is admission-level:
 
 The sensitivity analysis uses a subject-level matched-pair design:
 
-1. For each unique MHH1_psychotic subject, keep that subject's earliest matched
+1. For each unique MHC1_psychotic subject, keep that subject's earliest matched
    admission.
 2. Keep the matched MHC0 admission from the same pair.
 3. If an MHC0 subject appears in multiple selected pairs, keep only the earliest
@@ -54,7 +54,7 @@ ASSIGNMENT_PATH = (
 OUTPUT_DIR = SCRIPT_DIR / "analysis_output_subject_level_mortality_risk"
 
 ID_COLUMNS = ["cohort", "subject_id", "hadm_id"]
-MHH1_COHORT = "MHH1_psychotic"
+MHC1_COHORT = "MHC1_psychotic"
 MHC0_COHORT = "MHC0"
 ONE_YEAR_DAYS = 365
 
@@ -141,25 +141,25 @@ def load_descriptors() -> pd.DataFrame:
     return descriptors
 
 
-def select_first_mhh1_subject_pairs(descriptors: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Keep earliest matched MHH1 admission per MHH1 subject and its matched control."""
-    mhh1 = descriptors.loc[descriptors["cohort"].eq(MHH1_COHORT)].copy()
-    if mhh1.empty:
-        raise ValueError(f"No {MHH1_COHORT} rows found in descriptor table.")
+def select_first_mhc1_subject_pairs(descriptors: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Keep earliest matched MHC1 admission per MHC1 subject and its matched control."""
+    mhc1 = descriptors.loc[descriptors["cohort"].eq(MHC1_COHORT)].copy()
+    if mhc1.empty:
+        raise ValueError(f"No {MHC1_COHORT} rows found in descriptor table.")
 
-    selected_mhh1 = (
-        mhh1.sort_values(["subject_id", "admittime", "pair_id", "hadm_id"])
+    selected_mhc1 = (
+        mhc1.sort_values(["subject_id", "admittime", "pair_id", "hadm_id"])
         .drop_duplicates("subject_id", keep="first")
         .copy()
     )
-    selected_pair_ids = set(selected_mhh1["pair_id"])
+    selected_pair_ids = set(selected_mhc1["pair_id"])
     selected = descriptors.loc[descriptors["pair_id"].isin(selected_pair_ids)].copy()
 
     pair_cohort_counts = (
         selected.groupby(["pair_id", "cohort"])["hadm_id"].nunique().unstack(fill_value=0)
     )
     complete_pair_ids = pair_cohort_counts.loc[
-        pair_cohort_counts.get(MHH1_COHORT, 0).eq(1)
+        pair_cohort_counts.get(MHC1_COHORT, 0).eq(1)
         & pair_cohort_counts.get(MHC0_COHORT, 0).eq(1)
     ].index
     incomplete_pairs = sorted(selected_pair_ids - set(complete_pair_ids))
@@ -177,12 +177,12 @@ def select_first_mhh1_subject_pairs(descriptors: pd.DataFrame) -> tuple[pd.DataF
                 "value": descriptors["pair_id"].nunique(),
             },
             {
-                "metric": "original_mhh1_admissions",
-                "value": len(mhh1),
+                "metric": "original_mhc1_admissions",
+                "value": len(mhc1),
             },
             {
-                "metric": "unique_mhh1_subjects",
-                "value": mhh1["subject_id"].nunique(),
+                "metric": "unique_mhc1_subjects",
+                "value": mhc1["subject_id"].nunique(),
             },
             {
                 "metric": "selected_complete_pairs",
@@ -251,9 +251,9 @@ def restrict_to_unique_mhc0_subjects(
                 "value": len(restricted),
             },
             {
-                "metric": "unique_mhh1_subjects_after_unique_mhc0_restriction",
+                "metric": "unique_mhc1_subjects_after_unique_mhc0_restriction",
                 "value": restricted.loc[
-                    restricted["cohort"].eq(MHH1_COHORT), "subject_id"
+                    restricted["cohort"].eq(MHC1_COHORT), "subject_id"
                 ].nunique(),
             },
             {
@@ -461,7 +461,7 @@ def summarize_outcomes(analysis: pd.DataFrame, strata_columns: list[str] | None 
 
 
 def compare_cohorts(summary: pd.DataFrame, strata_columns: list[str] | None = None) -> pd.DataFrame:
-    """Compute MHH1-MHC0 risk difference and risk ratio from summary rows."""
+    """Compute MHC1-MHC0 risk difference and risk ratio from summary rows."""
     strata_columns = strata_columns or []
     index_columns = [*strata_columns, "outcome"]
     cohort_values = summary.pivot_table(
@@ -474,17 +474,17 @@ def compare_cohorts(summary: pd.DataFrame, strata_columns: list[str] | None = No
         f"{measure}_{cohort}" for measure, cohort in cohort_values.columns.to_flat_index()
     ]
     comparison = cohort_values.reset_index()
-    comparison["risk_difference_pct_points_mhh1_minus_mhc0"] = (
-        comparison.get(f"pct_positive_{MHH1_COHORT}", pd.NA)
+    comparison["risk_difference_pct_points_mhc1_minus_mhc0"] = (
+        comparison.get(f"pct_positive_{MHC1_COHORT}", pd.NA)
         - comparison.get(f"pct_positive_{MHC0_COHORT}", pd.NA)
     )
-    comparison["risk_ratio_mhh1_vs_mhc0"] = (
-        comparison.get(f"pct_positive_{MHH1_COHORT}", pd.NA)
+    comparison["risk_ratio_mhc1_vs_mhc0"] = (
+        comparison.get(f"pct_positive_{MHC1_COHORT}", pd.NA)
         / comparison.get(f"pct_positive_{MHC0_COHORT}", pd.NA)
     )
     comparison.loc[
         comparison.get(f"pct_positive_{MHC0_COHORT}", pd.Series(dtype=float)).eq(0),
-        "risk_ratio_mhh1_vs_mhc0",
+        "risk_ratio_mhc1_vs_mhc0",
     ] = pd.NA
     return comparison.sort_values(index_columns)
 
@@ -546,22 +546,22 @@ def summarize_covariates(analysis: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values(["measure", "cohort"])
 
 
-def standardized_mean_difference(mhh1_values: pd.Series, mhc0_values: pd.Series) -> float | pd.NA:
-    """Return MHH1-MHC0 standardized mean difference for one numeric covariate."""
-    mhh1 = pd.to_numeric(mhh1_values, errors="coerce").dropna()
+def standardized_mean_difference(mhc1_values: pd.Series, mhc0_values: pd.Series) -> float | pd.NA:
+    """Return MHC1-MHC0 standardized mean difference for one numeric covariate."""
+    mhc1 = pd.to_numeric(mhc1_values, errors="coerce").dropna()
     mhc0 = pd.to_numeric(mhc0_values, errors="coerce").dropna()
-    if len(mhh1) < 2 or len(mhc0) < 2:
+    if len(mhc1) < 2 or len(mhc0) < 2:
         return pd.NA
-    pooled_sd = ((mhh1.var(ddof=1) + mhc0.var(ddof=1)) / 2) ** 0.5
+    pooled_sd = ((mhc1.var(ddof=1) + mhc0.var(ddof=1)) / 2) ** 0.5
     if pooled_sd == 0:
         return pd.NA
-    return (mhh1.mean() - mhc0.mean()) / pooled_sd
+    return (mhc1.mean() - mhc0.mean()) / pooled_sd
 
 
 def summarize_covariate_smds(analysis: pd.DataFrame) -> pd.DataFrame:
-    """Compute MHH1-MHC0 SMDs for numeric matching covariates."""
+    """Compute MHC1-MHC0 SMDs for numeric matching covariates."""
     rows = []
-    mhh1 = analysis.loc[analysis["cohort"].eq(MHH1_COHORT)]
+    mhc1 = analysis.loc[analysis["cohort"].eq(MHC1_COHORT)]
     mhc0 = analysis.loc[analysis["cohort"].eq(MHC0_COHORT)]
     for column in COVARIATE_COLUMNS:
         if column not in analysis.columns:
@@ -569,8 +569,8 @@ def summarize_covariate_smds(analysis: pd.DataFrame) -> pd.DataFrame:
         rows.append(
             {
                 "measure": column,
-                "smd_mhh1_minus_mhc0": standardized_mean_difference(
-                    mhh1[column],
+                "smd_mhc1_minus_mhc0": standardized_mean_difference(
+                    mhc1[column],
                     mhc0[column],
                 ),
             }
@@ -716,7 +716,7 @@ def fit_clustered_logistic_model(
     """Fit logistic regression with cluster-robust SEs.
 
     Predictors are:
-        intercept + MHH1 indicator + age at admission per 10y + Elixhauser per 5 points
+        intercept + MHC1 indicator + age at admission per 10y + Elixhauser per 5 points
         + optional extra predictors
     """
     extra_predictor_columns = extra_predictor_columns or []
@@ -734,7 +734,7 @@ def fit_clustered_logistic_model(
         required_columns,
     ].copy()
     model_data[outcome] = model_data[outcome].astype(bool).astype(int)
-    model_data["mhh1_psychotic"] = model_data["cohort"].eq(MHH1_COHORT).astype(float)
+    model_data["mhc1_psychotic"] = model_data["cohort"].eq(MHC1_COHORT).astype(float)
     model_data["age_at_admission_per_10y"] = (
         pd.to_numeric(model_data["age_at_admission"], errors="coerce") / 10.0
     )
@@ -745,7 +745,7 @@ def fit_clustered_logistic_model(
     model_data = model_data.dropna(
         subset=[
             outcome,
-            "mhh1_psychotic",
+            "mhc1_psychotic",
             "age_at_admission_per_10y",
             "elixhauser_score_per_5pt",
             "cluster_id",
@@ -758,7 +758,7 @@ def fit_clustered_logistic_model(
     n_clusters = model_data["cluster_id"].nunique()
     coefficient_names = [
         "intercept",
-        "mhh1_psychotic",
+        "mhc1_psychotic",
         "age_at_admission_per_10y",
         "elixhauser_score_per_5pt",
         *extra_predictor_columns,
@@ -787,7 +787,7 @@ def fit_clustered_logistic_model(
         )
 
     predictor_columns = [
-        "mhh1_psychotic",
+        "mhc1_psychotic",
         "age_at_admission_per_10y",
         "elixhauser_score_per_5pt",
         *extra_predictor_columns,
@@ -1050,7 +1050,7 @@ def build_cohort_term_model_comparison(
     for subgroup_set, adjustment, model_table in model_sets:
         if model_table.empty:
             continue
-        cohort_rows = model_table.loc[model_table["term"].eq("mhh1_psychotic")].copy()
+        cohort_rows = model_table.loc[model_table["term"].eq("mhc1_psychotic")].copy()
         if cohort_rows.empty:
             continue
         if adjustment.endswith("prior_admissions_365d"):
@@ -1167,7 +1167,7 @@ def main() -> None:
         admission_combined_readmission_adjusted_models,
     )
 
-    selected, selection_summary = select_first_mhh1_subject_pairs(descriptors)
+    selected, selection_summary = select_first_mhc1_subject_pairs(descriptors)
     selected, selection_summary, dropped_repeated_mhc0_pairs = restrict_to_unique_mhc0_subjects(
         selected,
         selection_summary,
@@ -1308,7 +1308,7 @@ def main() -> None:
     print(admission_overall_comparison.to_string(index=False))
     print("\n=== Admission-level adjusted model, cohort term ===")
     cohort_model_rows = admission_adjusted_models.loc[
-        admission_adjusted_models["term"].eq("mhh1_psychotic")
+        admission_adjusted_models["term"].eq("mhc1_psychotic")
         & admission_adjusted_models["stratum"].eq("overall")
     ]
     print(cohort_model_rows.to_string(index=False))
@@ -1318,7 +1318,7 @@ def main() -> None:
     print(summarize_real_readmission_distribution(admission_level).to_string(index=False))
     print("\n=== Admission-level readmission-adjusted model, cohort term ===")
     readmission_cohort_model_rows = admission_readmission_adjusted_models.loc[
-        admission_readmission_adjusted_models["term"].eq("mhh1_psychotic")
+        admission_readmission_adjusted_models["term"].eq("mhc1_psychotic")
         & admission_readmission_adjusted_models["stratum"].eq("overall")
     ]
     print(readmission_cohort_model_rows.to_string(index=False))
@@ -1330,7 +1330,7 @@ def main() -> None:
     else:
         print(
             admission_combined_adjusted_models.loc[
-                admission_combined_adjusted_models["term"].eq("mhh1_psychotic")
+                admission_combined_adjusted_models["term"].eq("mhc1_psychotic")
             ].to_string(index=False)
         )
     print("\n=== Admission-level combined subgroup readmission-adjusted models, cohort term ===")
@@ -1340,7 +1340,7 @@ def main() -> None:
         print(
             admission_combined_readmission_adjusted_models.loc[
                 admission_combined_readmission_adjusted_models["term"].eq(
-                    "mhh1_psychotic"
+                    "mhc1_psychotic"
                 )
             ].to_string(index=False)
         )

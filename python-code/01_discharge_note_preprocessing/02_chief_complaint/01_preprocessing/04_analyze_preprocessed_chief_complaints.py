@@ -17,7 +17,7 @@ OUTPUT_DIR = SCRIPT_DIR / "analysis_output_chief_complaint_preprocessed"
 
  # Cohort-specific preprocessed parquet files to summarize.
 INPUTS = {
-    "MHH1_psychotic": INPUT_DIR / "MHH1_psychotic_chief_complaints_preprocessed.parquet",
+    "MHC1_psychotic": INPUT_DIR / "MHC1_psychotic_chief_complaints_preprocessed.parquet",
     "MHC0": INPUT_DIR / "MHC0_chief_complaints_preprocessed.parquet",
 }
 

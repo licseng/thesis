@@ -10,7 +10,7 @@ The model is downloaded from Hugging Face if needed, then runs locally with
 PyTorch. No chief-complaint text is sent to an external API.
 
 Inputs:
-    ../01_preprocessing/chief_complaint_final/MHH1_psychotic_chief_complaints_final.parquet
+    ../01_preprocessing/chief_complaint_final/MHC1_psychotic_chief_complaints_final.parquet
     ../01_preprocessing/chief_complaint_final/MHC0_chief_complaints_final.parquet
 
 Outputs:
@@ -41,7 +41,7 @@ BATCH_SIZE = 8
 MAX_LENGTH = 64
 
 INPUTS = {
-    "MHH1_psychotic": INPUT_DIR / "MHH1_psychotic_chief_complaints_final.parquet",
+    "MHC1_psychotic": INPUT_DIR / "MHC1_psychotic_chief_complaints_final.parquet",
     "MHC0": INPUT_DIR / "MHC0_chief_complaints_final.parquet",
 }
 

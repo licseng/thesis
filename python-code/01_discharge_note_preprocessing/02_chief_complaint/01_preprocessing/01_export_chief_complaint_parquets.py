@@ -10,11 +10,11 @@ needs three columns:
 
 Inputs:
     ../../01_discharge_note_parsing/parsed_chief_complaints/
-        MHH_psychotic_chief_complaints_from_discharge_notes.parquet
+        MHC1_psychotic_chief_complaints_from_discharge_notes.parquet
         MHC0_chief_complaints_from_discharge_notes.parquet
 
 Outputs:
-    chief_complaint_parquets/MHH1_psychotic_chief_complaints.parquet
+    chief_complaint_parquets/MHC1_psychotic_chief_complaints.parquet
     chief_complaint_parquets/MHC0_chief_complaints.parquet
 
 This script does not clean, normalize, embed, or classify chief complaints. It
@@ -34,8 +34,8 @@ OUTPUT_DIR = SCRIPT_DIR / "chief_complaint_parquets"
 
 # Input-to-output mapping
 EXPORTS = {
-    "MHH1_psychotic_chief_complaints.parquet": (
-        PARQUET_DIR / "MHH_psychotic_chief_complaints_from_discharge_notes.parquet"
+    "MHC1_psychotic_chief_complaints.parquet": (
+        PARQUET_DIR / "MHC1_psychotic_chief_complaints_from_discharge_notes.parquet"
     ),
     "MHC0_chief_complaints.parquet": (
         PARQUET_DIR / "MHC0_chief_complaints_from_discharge_notes.parquet"

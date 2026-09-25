@@ -28,8 +28,8 @@ OUTPUT_DIR = SCRIPT_DIR / "analysis_output_discharge_note_parsing"
 PARSER_PATH = SCRIPT_DIR / "02_parse_full_discharge_notes.py"
 FULL_NOTE_FILES = [
     {
-        "cohort": "MHH1_psychotic",
-        "path": FULL_NOTE_DIR / "MHH1_psychotic_matched_full_discharge_note_sections.parquet",
+        "cohort": "MHC1_psychotic",
+        "path": FULL_NOTE_DIR / "MHC1_psychotic_matched_full_discharge_note_sections.parquet",
     },
     {
         "cohort": "MHC0",

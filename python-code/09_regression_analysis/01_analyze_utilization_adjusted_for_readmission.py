@@ -1,6 +1,6 @@
 """Model utilization differences adjusted for true prior admission history.
 
-This analysis asks whether MHH1-vs-MHC0 differences in workup/utilization remain
+This analysis asks whether MHC1-vs-MHC0 differences in workup/utilization remain
 after accounting for real prior MIMIC admissions, not just repeated admissions
 inside the matched cohort.
 
@@ -93,24 +93,24 @@ def load_matching_covariates() -> pd.DataFrame:
         raise FileNotFoundError(f"Missing matched-pair output: {MATCHED_PAIRS_PATH}")
     pairs = pd.read_csv(MATCHED_PAIRS_PATH)
 
-    mhh = pairs.loc[
+    mhc1 = pairs.loc[
         :,
         [
             "pair_id",
-            "mhh_subject_id",
-            "mhh_hadm_id",
-            "mhh_age_at_admission",
-            "mhh_elixhauser_score",
+            "mhc1_subject_id",
+            "mhc1_hadm_id",
+            "mhc1_age_at_admission",
+            "mhc1_elixhauser_score",
         ],
     ].rename(
         columns={
-            "mhh_subject_id": "subject_id",
-            "mhh_hadm_id": "hadm_id",
-            "mhh_age_at_admission": "age_at_admission",
-            "mhh_elixhauser_score": "elixhauser_score",
+            "mhc1_subject_id": "subject_id",
+            "mhc1_hadm_id": "hadm_id",
+            "mhc1_age_at_admission": "age_at_admission",
+            "mhc1_elixhauser_score": "elixhauser_score",
         }
     )
-    mhh["cohort"] = "MHH1_psychotic"
+    mhc1["cohort"] = "MHC1_psychotic"
 
     mhc0 = pairs.loc[
         :,
@@ -131,7 +131,7 @@ def load_matching_covariates() -> pd.DataFrame:
     )
     mhc0["cohort"] = "MHC0"
 
-    covariates = pd.concat([mhh, mhc0], ignore_index=True)
+    covariates = pd.concat([mhc1, mhc0], ignore_index=True)
     covariates = common.validate_id_columns(covariates, "matching_covariates")
     covariates["pair_id"] = pd.to_numeric(covariates["pair_id"], errors="raise").astype(int)
     covariates["age_at_admission"] = pd.to_numeric(
@@ -325,7 +325,7 @@ def build_model_dataset() -> pd.DataFrame:
     output["log1p_prior_admissions_365d"] = np.log1p(
         output["n_prior_admissions_within_365d_for_subject"],
     )
-    output["mhh1_psychotic"] = output["cohort"].eq("MHH1_psychotic").astype(float)
+    output["mhc1_psychotic"] = output["cohort"].eq("MHC1_psychotic").astype(float)
     output["age_at_admission_per_10y"] = output["age_at_admission"] / 10.0
     output["elixhauser_score_per_5pt"] = output["elixhauser_score"] / 5.0
     output["cluster_id"] = (
@@ -363,15 +363,15 @@ def summarize_outcomes(model_data: pd.DataFrame, outcome_columns: list[str]) -> 
 def get_model_specs() -> list[tuple[str, list[str]]]:
     """Return nested adjustment sets used across utilization models."""
     return [
-        ("cohort_only", ["mhh1_psychotic"]),
+        ("cohort_only", ["mhc1_psychotic"]),
         (
             "age_elixhauser",
-            ["mhh1_psychotic", "age_at_admission_per_10y", "elixhauser_score_per_5pt"],
+            ["mhc1_psychotic", "age_at_admission_per_10y", "elixhauser_score_per_5pt"],
         ),
         (
             "age_elixhauser_prior365",
             [
-                "mhh1_psychotic",
+                "mhc1_psychotic",
                 "age_at_admission_per_10y",
                 "elixhauser_score_per_5pt",
                 "log1p_prior_admissions_365d",
@@ -380,7 +380,7 @@ def get_model_specs() -> list[tuple[str, list[str]]]:
         (
             "age_elixhauser_prior_all_mimic",
             [
-                "mhh1_psychotic",
+                "mhc1_psychotic",
                 "age_at_admission_per_10y",
                 "elixhauser_score_per_5pt",
                 "log1p_prior_all_mimic_admissions",
@@ -601,8 +601,8 @@ def fit_all_models(model_data: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_cohort_term_comparison(model_results: pd.DataFrame) -> pd.DataFrame:
-    """Put the MHH1 coefficient from each model side by side."""
-    cohort_rows = model_results.loc[model_results["term"].eq("mhh1_psychotic")].copy()
+    """Put the MHC1 coefficient from each model side by side."""
+    cohort_rows = model_results.loc[model_results["term"].eq("mhc1_psychotic")].copy()
     value_columns = [
         "n_admissions",
         "n_clusters",

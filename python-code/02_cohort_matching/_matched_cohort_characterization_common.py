@@ -2,7 +2,7 @@
 
 This script analyzes extra matched-cohort descriptors exported from DBeaver. It
 expects one small descriptor table and optional event/order tables already
-restricted to the matched MHH1_psychotic and MHC0 admissions.
+restricted to the matched MHC1_psychotic and MHC0 admissions.
 
 Default input folder:
     matched_cohort_dbeaver_exports/
@@ -311,7 +311,7 @@ def build_categorical_distribution(
 
 
 def build_categorical_balance(categorical_distribution: pd.DataFrame) -> pd.DataFrame:
-    """Pivot categorical percentages and compute MHH1-MHC0 percentage difference."""
+    """Pivot categorical percentages and compute MHC1-MHC0 percentage difference."""
     if categorical_distribution.empty:
         return categorical_distribution.copy()
     pivot = categorical_distribution.pivot_table(
@@ -326,10 +326,10 @@ def build_categorical_balance(categorical_distribution: pd.DataFrame) -> pd.Data
         for metric, cohort in pivot.columns.to_flat_index()
     ]
     pivot = pivot.reset_index()
-    mhh_pct = "pct_within_cohort_mhh1_psychotic"
+    mhc1_pct = "pct_within_cohort_mhc1_psychotic"
     mhc0_pct = "pct_within_cohort_mhc0"
-    if mhh_pct in pivot.columns and mhc0_pct in pivot.columns:
-        pivot["pct_point_difference_mhh1_minus_mhc0"] = pivot[mhh_pct] - pivot[mhc0_pct]
+    if mhc1_pct in pivot.columns and mhc0_pct in pivot.columns:
+        pivot["pct_point_difference_mhc1_minus_mhc0"] = pivot[mhc1_pct] - pivot[mhc0_pct]
     return pivot.sort_values(["variable", "category"])
 
 
@@ -1171,10 +1171,10 @@ def build_subject_categorical_balance(
         for metric, cohort in pivot.columns.to_flat_index()
     ]
     pivot = pivot.reset_index()
-    mhh_pct = "pct_within_cohort_mhh1_psychotic"
+    mhc1_pct = "pct_within_cohort_mhc1_psychotic"
     mhc0_pct = "pct_within_cohort_mhc0"
-    if mhh_pct in pivot.columns and mhc0_pct in pivot.columns:
-        pivot["pct_point_difference_mhh1_minus_mhc0"] = pivot[mhh_pct] - pivot[mhc0_pct]
+    if mhc1_pct in pivot.columns and mhc0_pct in pivot.columns:
+        pivot["pct_point_difference_mhc1_minus_mhc0"] = pivot[mhc1_pct] - pivot[mhc0_pct]
     return pivot.sort_values(["variable", "category"])
 
 

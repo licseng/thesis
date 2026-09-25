@@ -132,9 +132,9 @@ POINT_ALPHA = 0.80
 
 MATCHED_PAIR_REQUIRED_COLUMNS = {
     "pair_id",
-    "mhh_subject_id",
-    "mhh_hadm_id",
-    "mhh_chief_complaint_normalized",
+    "mhc1_subject_id",
+    "mhc1_hadm_id",
+    "mhc1_chief_complaint_normalized",
     "mhc0_subject_id",
     "mhc0_hadm_id",
     "mhc0_chief_complaint_normalized",
@@ -269,10 +269,10 @@ def create_admission_rows(matched_pairs: pd.DataFrame) -> pd.DataFrame:
         column for column in pair_metric_columns if column in matched_pairs.columns
     ]
 
-    mhh_columns = {
-        "mhh_subject_id": "subject_id",
-        "mhh_hadm_id": "hadm_id",
-        "mhh_chief_complaint_normalized": "chief_complaint_normalized",
+    mhc1_columns = {
+        "mhc1_subject_id": "subject_id",
+        "mhc1_hadm_id": "hadm_id",
+        "mhc1_chief_complaint_normalized": "chief_complaint_normalized",
     }
     mhc0_columns = {
         "mhc0_subject_id": "subject_id",
@@ -291,20 +291,20 @@ def create_admission_rows(matched_pairs: pd.DataFrame) -> pd.DataFrame:
     ]
 
     for suffix in optional_prefix_columns:
-        mhh_column = f"mhh_{suffix}"
+        mhc1_column = f"mhc1_{suffix}"
         mhc0_column = f"mhc0_{suffix}"
-        if mhh_column in matched_pairs.columns:
-            mhh_columns[mhh_column] = suffix
+        if mhc1_column in matched_pairs.columns:
+            mhc1_columns[mhc1_column] = suffix
         if mhc0_column in matched_pairs.columns:
             mhc0_columns[mhc0_column] = suffix
 
     base_columns = ["pair_id", *pair_metric_columns]
-    mhh = matched_pairs[base_columns + list(mhh_columns)].rename(columns=mhh_columns)
+    mhc1 = matched_pairs[base_columns + list(mhc1_columns)].rename(columns=mhc1_columns)
     mhc0 = matched_pairs[base_columns + list(mhc0_columns)].rename(columns=mhc0_columns)
-    mhh["cohort"] = "MHH1_psychotic"
+    mhc1["cohort"] = "MHC1_psychotic"
     mhc0["cohort"] = "MHC0"
 
-    admissions = pd.concat([mhh, mhc0], ignore_index=True)
+    admissions = pd.concat([mhc1, mhc0], ignore_index=True)
     admissions["subject_id"] = admissions["subject_id"].astype("int64")
     admissions["hadm_id"] = admissions["hadm_id"].astype("int64")
     admissions["chief_complaint_normalized"] = (
@@ -713,10 +713,10 @@ def build_lexical_parent_complaint_candidates(
                 "parent_exact_count": int(exact_count),
                 "total_group_admissions": len(group),
                 "n_unique_child_complaints": len(child_complaints),
-                "n_MHH1_psychotic": int(group["cohort"].eq("MHH1_psychotic").sum()),
+                "n_MHC1_psychotic": int(group["cohort"].eq("MHC1_psychotic").sum()),
                 "n_MHC0": int(group["cohort"].eq("MHC0").sum()),
-                "pct_MHH1_psychotic": 100.0
-                * group["cohort"].eq("MHH1_psychotic").mean(),
+                "pct_MHC1_psychotic": 100.0
+                * group["cohort"].eq("MHC1_psychotic").mean(),
                 "example_child_complaints": " | ".join(
                     sorted(child_complaints)[:LEXICAL_MAX_EXAMPLE_CHILDREN]
                 ),
@@ -776,12 +776,12 @@ def build_cluster_summary(
                 "cluster_label": int(label),
                 "is_noise": bool(label == -1),
                 "n_admissions": len(cluster_df),
-                "n_MHH1_psychotic": int(
-                    cluster_df["cohort"].eq("MHH1_psychotic").sum()
+                "n_MHC1_psychotic": int(
+                    cluster_df["cohort"].eq("MHC1_psychotic").sum()
                 ),
                 "n_MHC0": int(cluster_df["cohort"].eq("MHC0").sum()),
-                "pct_MHH1_psychotic": 100.0
-                * cluster_df["cohort"].eq("MHH1_psychotic").mean(),
+                "pct_MHC1_psychotic": 100.0
+                * cluster_df["cohort"].eq("MHC1_psychotic").mean(),
                 "most_frequent_normalized_chief_complaints": top_normalized_complaints(
                     cluster_df["chief_complaint_normalized"]
                 ),
@@ -820,47 +820,47 @@ def build_pair_agreement(admissions: pd.DataFrame, routes: set[str]) -> pd.DataF
             raise ValueError(f"pair_id {pair_id} has {len(pair_df)} admission rows")
 
         by_cohort = pair_df.set_index("cohort")
-        mhh = by_cohort.loc["MHH1_psychotic"]
+        mhc1 = by_cohort.loc["MHC1_psychotic"]
         mhc0 = by_cohort.loc["MHC0"]
 
         row = {
             "pair_id": pair_id,
-            "mhh_subject_id": mhh["subject_id"],
-            "mhh_hadm_id": mhh["hadm_id"],
+            "mhc1_subject_id": mhc1["subject_id"],
+            "mhc1_hadm_id": mhc1["hadm_id"],
             "mhc0_subject_id": mhc0["subject_id"],
             "mhc0_hadm_id": mhc0["hadm_id"],
-            "pair_cosine_similarity": mhh["cosine_similarity"],
-            "pair_embedding_distance": mhh["embedding_distance"],
+            "pair_cosine_similarity": mhc1["cosine_similarity"],
+            "pair_embedding_distance": mhc1["embedding_distance"],
         }
 
         if "bert" in routes:
             bert_either_noise = bool(
-                mhh["bert_cluster"] == -1 or mhc0["bert_cluster"] == -1
+                mhc1["bert_cluster"] == -1 or mhc0["bert_cluster"] == -1
             )
             row.update(
                 {
-                    "bert_mhh_cluster": int(mhh["bert_cluster"]),
+                    "bert_mhc1_cluster": int(mhc1["bert_cluster"]),
                     "bert_mhc0_cluster": int(mhc0["bert_cluster"]),
                     "bert_either_noise": bert_either_noise,
                     "bert_same_cluster": bool(
                         not bert_either_noise
-                        and mhh["bert_cluster"] == mhc0["bert_cluster"]
+                        and mhc1["bert_cluster"] == mhc0["bert_cluster"]
                     ),
                 }
             )
 
         if "tfidf" in routes:
             tfidf_either_noise = bool(
-                mhh["tfidf_cluster"] == -1 or mhc0["tfidf_cluster"] == -1
+                mhc1["tfidf_cluster"] == -1 or mhc0["tfidf_cluster"] == -1
             )
             row.update(
                 {
-                    "tfidf_mhh_cluster": int(mhh["tfidf_cluster"]),
+                    "tfidf_mhc1_cluster": int(mhc1["tfidf_cluster"]),
                     "tfidf_mhc0_cluster": int(mhc0["tfidf_cluster"]),
                     "tfidf_either_noise": tfidf_either_noise,
                     "tfidf_same_cluster": bool(
                         not tfidf_either_noise
-                        and mhh["tfidf_cluster"] == mhc0["tfidf_cluster"]
+                        and mhc1["tfidf_cluster"] == mhc0["tfidf_cluster"]
                     ),
                 }
             )
@@ -868,14 +868,14 @@ def build_pair_agreement(admissions: pd.DataFrame, routes: set[str]) -> pd.DataF
         if "agglomerative" in routes:
             for n_clusters in AGGLOMERATIVE_N_CLUSTERS_LIST:
                 cluster_column = f"agglomerative_k{n_clusters}_cluster"
-                mhh_cluster = int(mhh[cluster_column])
+                mhc1_cluster = int(mhc1[cluster_column])
                 mhc0_cluster = int(mhc0[cluster_column])
                 row.update(
                     {
-                        f"agglomerative_k{n_clusters}_mhh_cluster": mhh_cluster,
+                        f"agglomerative_k{n_clusters}_mhc1_cluster": mhc1_cluster,
                         f"agglomerative_k{n_clusters}_mhc0_cluster": mhc0_cluster,
                         f"agglomerative_k{n_clusters}_same_cluster": bool(
-                            mhh_cluster == mhc0_cluster
+                            mhc1_cluster == mhc0_cluster
                         ),
                     }
                 )
@@ -1057,25 +1057,25 @@ def build_bert_different_cluster_normalized_pairs(
         if len(pair_df) != 2:
             continue
         by_cohort = pair_df.set_index("cohort")
-        if "MHH1_psychotic" not in by_cohort.index or "MHC0" not in by_cohort.index:
+        if "MHC1_psychotic" not in by_cohort.index or "MHC0" not in by_cohort.index:
             continue
 
-        mhh = by_cohort.loc["MHH1_psychotic"]
+        mhc1 = by_cohort.loc["MHC1_psychotic"]
         mhc0 = by_cohort.loc["MHC0"]
-        mhh_cluster = int(mhh["bert_cluster"])
+        mhc1_cluster = int(mhc1["bert_cluster"])
         mhc0_cluster = int(mhc0["bert_cluster"])
-        if mhh_cluster == -1 or mhc0_cluster == -1:
+        if mhc1_cluster == -1 or mhc0_cluster == -1:
             continue
-        if mhh_cluster == mhc0_cluster:
+        if mhc1_cluster == mhc0_cluster:
             continue
 
         rows.append(
             {
                 "pair_id": pair_id,
-                "mhh_subject_id": mhh["subject_id"],
-                "mhh_hadm_id": mhh["hadm_id"],
-                "mhh_bert_cluster": mhh_cluster,
-                "mhh_chief_complaint_normalized": mhh[
+                "mhc1_subject_id": mhc1["subject_id"],
+                "mhc1_hadm_id": mhc1["hadm_id"],
+                "mhc1_bert_cluster": mhc1_cluster,
+                "mhc1_chief_complaint_normalized": mhc1[
                     "chief_complaint_normalized"
                 ],
                 "mhc0_subject_id": mhc0["subject_id"],
@@ -1137,23 +1137,23 @@ def build_bert_noise_pairs(admissions: pd.DataFrame) -> pd.DataFrame:
         if len(pair_df) != 2:
             continue
         by_cohort = pair_df.set_index("cohort")
-        if "MHH1_psychotic" not in by_cohort.index or "MHC0" not in by_cohort.index:
+        if "MHC1_psychotic" not in by_cohort.index or "MHC0" not in by_cohort.index:
             continue
 
-        mhh = by_cohort.loc["MHH1_psychotic"]
+        mhc1 = by_cohort.loc["MHC1_psychotic"]
         mhc0 = by_cohort.loc["MHC0"]
-        mhh_cluster = int(mhh["bert_cluster"])
+        mhc1_cluster = int(mhc1["bert_cluster"])
         mhc0_cluster = int(mhc0["bert_cluster"])
-        if mhh_cluster != -1 and mhc0_cluster != -1:
+        if mhc1_cluster != -1 and mhc0_cluster != -1:
             continue
 
         rows.append(
             {
                 "pair_id": pair_id,
-                "mhh_subject_id": mhh["subject_id"],
-                "mhh_hadm_id": mhh["hadm_id"],
-                "mhh_bert_cluster": mhh_cluster,
-                "mhh_chief_complaint_normalized": mhh[
+                "mhc1_subject_id": mhc1["subject_id"],
+                "mhc1_hadm_id": mhc1["hadm_id"],
+                "mhc1_bert_cluster": mhc1_cluster,
+                "mhc1_chief_complaint_normalized": mhc1[
                     "chief_complaint_normalized"
                 ],
                 "mhc0_subject_id": mhc0["subject_id"],
@@ -1162,7 +1162,7 @@ def build_bert_noise_pairs(admissions: pd.DataFrame) -> pd.DataFrame:
                 "mhc0_chief_complaint_normalized": mhc0[
                     "chief_complaint_normalized"
                 ],
-                "bert_both_noise": bool(mhh_cluster == -1 and mhc0_cluster == -1),
+                "bert_both_noise": bool(mhc1_cluster == -1 and mhc0_cluster == -1),
             }
         )
 
@@ -1182,9 +1182,9 @@ def build_agglomerative_pair_agreement_summary(
         cohort_counts = (
             admissions.groupby([cluster_column, "cohort"]).size().unstack(fill_value=0)
         )
-        has_mhh = cohort_counts.get("MHH1_psychotic", 0).gt(0)
+        has_mhc1 = cohort_counts.get("MHC1_psychotic", 0).gt(0)
         has_mhc0 = cohort_counts.get("MHC0", 0).gt(0)
-        has_both = has_mhh & has_mhc0
+        has_both = has_mhc1 & has_mhc0
 
         rows.append(
             {
@@ -1198,8 +1198,8 @@ def build_agglomerative_pair_agreement_summary(
                 "max_cluster_size": cluster_sizes.max(),
                 "n_clusters_with_both_cohorts": int(has_both.sum()),
                 "pct_clusters_with_both_cohorts": 100.0 * has_both.mean(),
-                "n_clusters_mhh_only": int((has_mhh & ~has_mhc0).sum()),
-                "n_clusters_mhc0_only": int((~has_mhh & has_mhc0).sum()),
+                "n_clusters_mhc1_only": int((has_mhc1 & ~has_mhc0).sum()),
+                "n_clusters_mhc0_only": int((~has_mhc1 & has_mhc0).sum()),
             }
         )
     return pd.DataFrame(rows)
@@ -1220,7 +1220,7 @@ def build_agglomerative_cluster_review_candidates(
             [
                 "cluster_label",
                 "n_admissions",
-                "n_MHH1_psychotic",
+                "n_MHC1_psychotic",
                 "n_MHC0",
                 "most_frequent_normalized_chief_complaints",
                 "top_terms",
@@ -1251,27 +1251,27 @@ def build_agglomerative_different_cluster_pairs(
         if len(pair_df) != 2:
             continue
         by_cohort = pair_df.set_index("cohort")
-        if "MHH1_psychotic" not in by_cohort.index or "MHC0" not in by_cohort.index:
+        if "MHC1_psychotic" not in by_cohort.index or "MHC0" not in by_cohort.index:
             continue
 
-        mhh = by_cohort.loc["MHH1_psychotic"]
+        mhc1 = by_cohort.loc["MHC1_psychotic"]
         mhc0 = by_cohort.loc["MHC0"]
-        mhh_cluster = int(mhh[cluster_column])
+        mhc1_cluster = int(mhc1[cluster_column])
         mhc0_cluster = int(mhc0[cluster_column])
-        if mhh_cluster == mhc0_cluster:
+        if mhc1_cluster == mhc0_cluster:
             continue
 
         rows.append(
             {
                 "pair_id": pair_id,
-                "cosine_similarity": mhh.get("cosine_similarity"),
-                "embedding_distance": mhh.get("embedding_distance"),
-                "mhh_subject_id": mhh["subject_id"],
-                "mhh_hadm_id": mhh["hadm_id"],
-                "mhh_chief_complaint_normalized": mhh[
+                "cosine_similarity": mhc1.get("cosine_similarity"),
+                "embedding_distance": mhc1.get("embedding_distance"),
+                "mhc1_subject_id": mhc1["subject_id"],
+                "mhc1_hadm_id": mhc1["hadm_id"],
+                "mhc1_chief_complaint_normalized": mhc1[
                     "chief_complaint_normalized"
                 ],
-                "mhh_cluster": mhh_cluster,
+                "mhc1_cluster": mhc1_cluster,
                 "mhc0_subject_id": mhc0["subject_id"],
                 "mhc0_hadm_id": mhc0["hadm_id"],
                 "mhc0_chief_complaint_normalized": mhc0[
@@ -1507,7 +1507,7 @@ def main() -> None:
                     "parent_exact_count",
                     "total_group_admissions",
                     "n_unique_child_complaints",
-                    "n_MHH1_psychotic",
+                    "n_MHC1_psychotic",
                     "n_MHC0",
                 ],
             ].to_string(index=False)

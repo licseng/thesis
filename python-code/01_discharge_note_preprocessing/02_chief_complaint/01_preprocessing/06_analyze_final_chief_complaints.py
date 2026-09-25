@@ -7,9 +7,9 @@ rows above the finalization cap, because those rows are removed before they can
 appear in the final files.
 
 Inputs:
-    chief_complaint_preprocessed/MHH1_psychotic_chief_complaints_preprocessed.parquet
+    chief_complaint_preprocessed/MHC1_psychotic_chief_complaints_preprocessed.parquet
     chief_complaint_preprocessed/MHC0_chief_complaints_preprocessed.parquet
-    chief_complaint_final/MHH1_psychotic_chief_complaints_final.parquet
+    chief_complaint_final/MHC1_psychotic_chief_complaints_final.parquet
     chief_complaint_final/MHC0_chief_complaints_final.parquet
 
 Outputs:
@@ -34,13 +34,13 @@ OUTPUT_DIR = SCRIPT_DIR / "analysis_output_chief_complaint_final"
 # Pre-finalized cohort files. These still contain rows removed by
 # `05_finalize_chief_complaints.py`, including rows above the QuickUMLS term cap.
 PRE_FINAL_INPUTS = {
-    "MHH1_psychotic": PRE_FINAL_INPUT_DIR / "MHH1_psychotic_chief_complaints_preprocessed.parquet",
+    "MHC1_psychotic": PRE_FINAL_INPUT_DIR / "MHC1_psychotic_chief_complaints_preprocessed.parquet",
     "MHC0": PRE_FINAL_INPUT_DIR / "MHC0_chief_complaints_preprocessed.parquet",
 }
 
 # Final cohort-specific chief-complaint files.
 FINAL_INPUTS = {
-    "MHH1_psychotic": FINAL_INPUT_DIR / "MHH1_psychotic_chief_complaints_final.parquet",
+    "MHC1_psychotic": FINAL_INPUT_DIR / "MHC1_psychotic_chief_complaints_final.parquet",
     "MHC0": FINAL_INPUT_DIR / "MHC0_chief_complaints_final.parquet",
 }
 

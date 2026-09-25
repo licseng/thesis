@@ -681,9 +681,9 @@ def save_validation_predictions(
             "eligible_for_30d_readmission",
             "readmission_within_30d",
             "days_to_next_admission_after_discharge",
-            "is_mhh1_psychotic_admission",
+            "is_mhc1_psychotic_admission",
             "is_mhc0_admission",
-            "is_matched_mhh1_psychotic_admission",
+            "is_matched_mhc1_psychotic_admission",
             "is_matched_mhc0_admission",
             "model_text_n_words",
         ]

@@ -206,7 +206,7 @@ def build_overall_summary(
             ~filter_summary["section_name"].eq("any_selected_section")
         ]
         n_filtered_admissions = int(filter_admissions["hadm_id"].nunique())
-        n_all_mhh1_admissions = (
+        n_all_mhc1_admissions = (
             int(overall_filter.iloc[0]["n_admissions"])
             if not overall_filter.empty
             else int(filter_admissions["hadm_id"].nunique())
@@ -217,7 +217,7 @@ def build_overall_summary(
         n_filtered_admissions = int(
             overall_filter_row["n_admissions_with_keyword_positive_section"]
         )
-        n_all_mhh1_admissions = int(overall_filter_row["n_admissions"])
+        n_all_mhc1_admissions = int(overall_filter_row["n_admissions"])
         n_filtered_sections = int(overall_filter_row["n_keyword_positive_section_rows"])
     n_classified_sections = len(section_results)
     n_classified_admissions = len(admission_results)
@@ -236,7 +236,7 @@ def build_overall_summary(
     return pd.DataFrame(
         [
             {
-                "n_all_mhh1_admissions": n_all_mhh1_admissions,
+                "n_all_mhc1_admissions": n_all_mhc1_admissions,
                 "n_keyword_prefilter_positive_admissions": n_filtered_admissions,
                 "n_keyword_prefilter_positive_sections": n_filtered_sections,
                 "n_classified_admissions": n_classified_admissions,
@@ -257,9 +257,9 @@ def build_overall_summary(
                     n_positive_admissions,
                     n_filtered_admissions,
                 ),
-                "pct_positive_admissions_of_all_mhh1_admissions": safe_pct(
+                "pct_positive_admissions_of_all_mhc1_admissions": safe_pct(
                     n_positive_admissions,
-                    n_all_mhh1_admissions,
+                    n_all_mhc1_admissions,
                 ),
                 "n_filter_admission_rows": len(filter_admissions),
                 "n_json_recovered_sections": n_recovered_json_sections,

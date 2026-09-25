@@ -69,8 +69,8 @@ NON_COGNITIVE_CHIEF_COMPLAINT_REVIEW_COLUMNS = [
 
 FULL_NOTE_FILES = [
     {
-        "cohort": "MHH1_psychotic",
-        "path": FULL_NOTE_DIR / "MHH1_psychotic_matched_full_discharge_note_sections.parquet",
+        "cohort": "MHC1_psychotic",
+        "path": FULL_NOTE_DIR / "MHC1_psychotic_matched_full_discharge_note_sections.parquet",
     },
     {
         "cohort": "MHC0",

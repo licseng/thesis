@@ -42,8 +42,8 @@ OUTPUT_DIR = SCRIPT_DIR / "analysis_output_keyword_summary_excluding_chief_compl
 
 FULL_NOTE_FILES = [
     {
-        "cohort": "MHH1_psychotic",
-        "path": FULL_NOTE_DIR / "MHH1_psychotic_matched_full_discharge_note_sections.parquet",
+        "cohort": "MHC1_psychotic",
+        "path": FULL_NOTE_DIR / "MHC1_psychotic_matched_full_discharge_note_sections.parquet",
     },
     {
         "cohort": "MHC0",
@@ -298,7 +298,7 @@ def fit_length_adjusted_keyword_models(note_hits: pd.DataFrame) -> pd.DataFrame:
         if model_data.empty:
             continue
 
-        model_data["mhh1_psychotic"] = model_data["cohort"].eq("MHH1_psychotic").astype(
+        model_data["mhc1_psychotic"] = model_data["cohort"].eq("MHC1_psychotic").astype(
             float
         )
         model_data["log_note_words"] = np.log(
@@ -320,7 +320,7 @@ def fit_length_adjusted_keyword_models(note_hits: pd.DataFrame) -> pd.DataFrame:
                 "outcome": "n_keyword_hits",
                 "family": sm.families.Poisson(),
                 "y": model_data["n_keyword_hits"].astype(float),
-                "predictors": ["mhh1_psychotic"],
+                "predictors": ["mhc1_psychotic"],
                 "offset": model_data["log_note_words"],
                 "effect_label": "rate_ratio",
             },
@@ -329,7 +329,7 @@ def fit_length_adjusted_keyword_models(note_hits: pd.DataFrame) -> pd.DataFrame:
                 "outcome": "has_keyword_hit",
                 "family": sm.families.Binomial(),
                 "y": model_data["has_keyword_hit"].astype(float),
-                "predictors": ["mhh1_psychotic", "log_note_words"],
+                "predictors": ["mhc1_psychotic", "log_note_words"],
                 "offset": None,
                 "effect_label": "odds_ratio",
             },
@@ -492,7 +492,7 @@ def main() -> None:
     if not length_adjusted_models.empty:
         print(
             length_adjusted_models.loc[
-                length_adjusted_models["term"].eq("mhh1_psychotic")
+                length_adjusted_models["term"].eq("mhc1_psychotic")
             ].to_string(index=False)
         )
     print("\n=== Top Overall Terms ===")

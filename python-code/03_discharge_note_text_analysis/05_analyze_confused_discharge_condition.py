@@ -1,7 +1,7 @@
 """Analyze `confused` documentation in discharge-condition sections.
 
 This script checks whether `confused` in the parsed discharge_condition section
-is associated with discharge location, separately for matched MHH1_psychotic and
+is associated with discharge location, separately for matched MHC1_psychotic and
 MHC0 admissions. It writes aggregate counts, percentages, risk differences, and
 risk ratios only. It does not write raw note text.
 """
@@ -28,8 +28,8 @@ import _matched_cohort_characterization_common as cohort_characterization  # noq
 
 FULL_NOTE_FILES = [
     {
-        "cohort": "MHH1_psychotic",
-        "path": FULL_NOTE_DIR / "MHH1_psychotic_matched_full_discharge_note_sections.parquet",
+        "cohort": "MHC1_psychotic",
+        "path": FULL_NOTE_DIR / "MHC1_psychotic_matched_full_discharge_note_sections.parquet",
     },
     {
         "cohort": "MHC0",
@@ -211,7 +211,7 @@ def build_cohort_comparison(
     location_summary: pd.DataFrame,
     location_column: str,
 ) -> pd.DataFrame:
-    """Compare MHH1 vs MHC0 confused risk within each discharge-location stratum."""
+    """Compare MHC1 vs MHC0 confused risk within each discharge-location stratum."""
     pivot = location_summary.pivot(
         index=location_column,
         columns="cohort",
@@ -221,11 +221,11 @@ def build_cohort_comparison(
     pivot = pivot.reset_index()
 
     required_columns = [
-        "n_admissions_MHH1_psychotic",
+        "n_admissions_MHC1_psychotic",
         "n_admissions_MHC0",
-        "n_confused_MHH1_psychotic",
+        "n_confused_MHC1_psychotic",
         "n_confused_MHC0",
-        "pct_confused_MHH1_psychotic",
+        "pct_confused_MHC1_psychotic",
         "pct_confused_MHC0",
     ]
     for column in required_columns:
@@ -233,22 +233,22 @@ def build_cohort_comparison(
             pivot[column] = 0
     pivot[required_columns] = pivot[required_columns].fillna(0)
 
-    pivot["risk_difference_pct_points_MHH1_minus_MHC0"] = (
-        pivot["pct_confused_MHH1_psychotic"] - pivot["pct_confused_MHC0"]
+    pivot["risk_difference_pct_points_MHC1_minus_MHC0"] = (
+        pivot["pct_confused_MHC1_psychotic"] - pivot["pct_confused_MHC0"]
     )
-    pivot["risk_ratio_MHH1_vs_MHC0"] = pivot.apply(
+    pivot["risk_ratio_MHC1_vs_MHC0"] = pivot.apply(
         lambda row: safe_ratio(
-            row["pct_confused_MHH1_psychotic"],
+            row["pct_confused_MHC1_psychotic"],
             row["pct_confused_MHC0"],
         ),
         axis=1,
     )
     pivot["low_count_flag"] = (
-        (pivot["n_admissions_MHH1_psychotic"] < MIN_STRATUM_DENOMINATOR)
+        (pivot["n_admissions_MHC1_psychotic"] < MIN_STRATUM_DENOMINATOR)
         | (pivot["n_admissions_MHC0"] < MIN_STRATUM_DENOMINATOR)
     )
     return pivot.sort_values(
-        ["low_count_flag", "n_admissions_MHH1_psychotic", "n_admissions_MHC0"],
+        ["low_count_flag", "n_admissions_MHC1_psychotic", "n_admissions_MHC0"],
         ascending=[True, False, False],
     )
 

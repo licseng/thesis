@@ -14,7 +14,7 @@ Keyword hits should be interpreted manually in context.
 
 Inputs:
     ../01_discharge_note_preprocessing/01_discharge_note_parsing/full_discharge_note_sections/
-        MHH1_psychotic_matched_full_discharge_note_sections.parquet
+        MHC1_psychotic_matched_full_discharge_note_sections.parquet
         MHC0_matched_full_discharge_note_sections.parquet
 
 Outputs:
@@ -52,8 +52,8 @@ MAX_SNIPPETS_PER_SECTION = 3
 MAX_HIT_ROWS_FOR_REVIEW = 5000
 FULL_NOTE_FILES = [
     {
-        "cohort": "MHH1_psychotic",
-        "path": FULL_NOTE_DIR / "MHH1_psychotic_matched_full_discharge_note_sections.parquet",
+        "cohort": "MHC1_psychotic",
+        "path": FULL_NOTE_DIR / "MHC1_psychotic_matched_full_discharge_note_sections.parquet",
     },
     {
         "cohort": "MHC0",

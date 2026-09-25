@@ -1,7 +1,7 @@
 """Analyze discharge-note language complexity by matched cohort.
 
 This script computes transparent readability/complexity proxies for matched
-MHH1_psychotic and MHC0 full discharge notes. It uses the parser's
+MHC1_psychotic and MHC0 full discharge notes. It uses the parser's
 `full_note_text` column, which preserves the original note text loaded from the
 source table and includes chief complaint. It writes numeric metrics only; no
 raw note text is written to output files.
@@ -40,8 +40,8 @@ REGRESSION_DATASET_PATH = (
 
 FULL_NOTE_FILES = [
     {
-        "cohort": "MHH1_psychotic",
-        "path": FULL_NOTE_DIR / "MHH1_psychotic_matched_full_discharge_note_sections.parquet",
+        "cohort": "MHC1_psychotic",
+        "path": FULL_NOTE_DIR / "MHC1_psychotic_matched_full_discharge_note_sections.parquet",
     },
     {
         "cohort": "MHC0",
@@ -320,7 +320,7 @@ def load_regression_covariates() -> pd.DataFrame:
     covariates = pd.read_csv(REGRESSION_DATASET_PATH, usecols=columns)
     covariates["subject_id"] = covariates["subject_id"].astype(str)
     covariates["hadm_id"] = covariates["hadm_id"].astype(str)
-    covariates["mhh1_psychotic"] = covariates["cohort"].eq("MHH1_psychotic").astype(int)
+    covariates["mhc1_psychotic"] = covariates["cohort"].eq("MHC1_psychotic").astype(int)
     covariates["age_at_admission_per_10y"] = (
         pd.to_numeric(covariates["age_at_admission"], errors="coerce") / 10.0
     )
@@ -370,7 +370,7 @@ def fit_ols_cluster_robust(
     """Fit one OLS model with subject-clustered robust standard errors."""
     required_columns = [outcome, *predictors, "cluster_id"]
     model_data = data.dropna(subset=required_columns).copy()
-    if len(model_data) < 20 or model_data["mhh1_psychotic"].nunique() < 2:
+    if len(model_data) < 20 or model_data["mhc1_psychotic"].nunique() < 2:
         return None
 
     y = pd.to_numeric(model_data[outcome], errors="coerce")
@@ -379,14 +379,14 @@ def fit_ols_cluster_robust(
     model_data = model_data.loc[complete].copy()
     y = y.loc[complete]
     x = sm.add_constant(x.loc[complete], has_constant="add")
-    if len(model_data) < 20 or model_data["mhh1_psychotic"].nunique() < 2:
+    if len(model_data) < 20 or model_data["mhc1_psychotic"].nunique() < 2:
         return None
 
     fit = sm.OLS(y, x).fit(
         cov_type="cluster",
         cov_kwds={"groups": model_data["cluster_id"]},
     )
-    term = "mhh1_psychotic"
+    term = "mhc1_psychotic"
     ci_low, ci_high = fit.conf_int().loc[term].tolist()
     return {
         **strata,
@@ -394,10 +394,10 @@ def fit_ols_cluster_robust(
         "model": model_name,
         "n_rows": int(fit.nobs),
         "n_subject_clusters": int(model_data["cluster_id"].nunique()),
-        "mhh1_coefficient": fit.params[term],
-        "mhh1_ci_low": ci_low,
-        "mhh1_ci_high": ci_high,
-        "mhh1_p_value": fit.pvalues[term],
+        "mhc1_coefficient": fit.params[term],
+        "mhc1_ci_low": ci_low,
+        "mhc1_ci_high": ci_high,
+        "mhc1_p_value": fit.pvalues[term],
         "fit_method": "statsmodels_ols_cluster_robust_by_subject",
         "predictors": " + ".join(predictors),
     }
@@ -413,14 +413,14 @@ def fit_language_complexity_regressions(
     section_data = add_regression_covariates(prose_section_metrics, covariates)
 
     model_specs = {
-        "unadjusted": ["mhh1_psychotic"],
+        "unadjusted": ["mhc1_psychotic"],
         "age_elixhauser": [
-            "mhh1_psychotic",
+            "mhc1_psychotic",
             "age_at_admission_per_10y",
             "elixhauser_score_per_5pt",
         ],
         "age_elixhauser_prior365": [
-            "mhh1_psychotic",
+            "mhc1_psychotic",
             "age_at_admission_per_10y",
             "elixhauser_score_per_5pt",
             "log1p_prior_admissions_365d",
@@ -459,8 +459,8 @@ def fit_language_complexity_regressions(
     section_results = pd.DataFrame(section_rows)
     for result in [note_results, section_results]:
         if not result.empty:
-            result["mhh1_p_value_fdr_bh"] = result.groupby("model")[
-                "mhh1_p_value"
+            result["mhc1_p_value_fdr_bh"] = result.groupby("model")[
+                "mhc1_p_value"
             ].transform(benjamini_hochberg)
 
     return note_results, section_results
@@ -548,18 +548,18 @@ def main() -> None:
     print(
         prose_section_summary.loc[:, section_display_columns].to_string(index=False)
     )
-    print("\n=== Note-Level Regression Results: MHH1 term ===")
+    print("\n=== Note-Level Regression Results: MHC1 term ===")
     if note_regression_results.empty:
         print("No note-level models were fit.")
     else:
         display_regression_columns = [
             "outcome",
             "model",
-            "mhh1_coefficient",
-            "mhh1_ci_low",
-            "mhh1_ci_high",
-            "mhh1_p_value",
-            "mhh1_p_value_fdr_bh",
+            "mhc1_coefficient",
+            "mhc1_ci_low",
+            "mhc1_ci_high",
+            "mhc1_p_value",
+            "mhc1_p_value_fdr_bh",
         ]
         print(note_regression_results.loc[:, display_regression_columns].to_string(index=False))
 

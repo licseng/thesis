@@ -32,7 +32,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 # Cohort export tables to search. The label is printed with the matching note so
 # it is clear which cohort table supplied the row.
 SOURCE_TABLES = {
-    "MHH_psychotic": "export_MHH_psychotic",
+    "MHC1_psychotic": "export_MHC1_psychotic",
     "MHC0": "export_only_MHC0",
 }
 

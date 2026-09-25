@@ -3,12 +3,12 @@
 This script creates two annotator-facing CSV files:
 
 1. Diagnostic-overshadowing annotation:
-   - samples 100 MHH1 admissions from the keyword-prefiltered section input
+   - samples 100 MHC1 admissions from the keyword-prefiltered section input
    - one row per sampled candidate section
    - annotators fill psychiatric-context and diagnostic-overshadowing yes/no/unclear labels
 
 2. Sentiment annotation:
-   - samples 50 MHH1 and 50 MHC0 admissions from the sentiment input dataset
+   - samples 50 MHC1 and 50 MHC0 admissions from the sentiment input dataset
    - one row per selected sentiment section
    - annotators fill positive/negative/neutral/mixed label
 
@@ -49,11 +49,11 @@ DIAGNOSTIC_FIRST_STAGE_INPUT_PATH = (
 SENTIMENT_INPUT_PATH = (
     SENTIMENT_DIR / "sentiment_llm_input" / "sentiment_selected_section_input.parquet"
 )
-MHH1_CHIEF_COMPLAINT_PATH = (
-    CHIEF_COMPLAINT_DIR / "MHH1_psychotic_chief_complaints_final.parquet"
+MHC1_CHIEF_COMPLAINT_PATH = (
+    CHIEF_COMPLAINT_DIR / "MHC1_psychotic_chief_complaints_final.parquet"
 )
 
-MHH1_COHORT = "MHH1_psychotic"
+MHC1_COHORT = "MHC1_psychotic"
 MHC0_COHORT = "MHC0"
 YES_NO_UNCLEAR = ["yes", "no", "unclear"]
 SENTIMENT_LABELS = ["positive", "negative", "neutral", "mixed"]
@@ -122,14 +122,14 @@ def sample_grouped_admissions(
     return data.loc[data["hadm_id"].isin(sampled_hadm_ids)].copy()
 
 
-def load_mhh1_chief_complaints() -> pd.DataFrame:
-    """Load chief complaint context for MHH1 diagnostic annotation rows."""
-    require_file(MHH1_CHIEF_COMPLAINT_PATH)
+def load_mhc1_chief_complaints() -> pd.DataFrame:
+    """Load chief complaint context for MHC1 diagnostic annotation rows."""
+    require_file(MHC1_CHIEF_COMPLAINT_PATH)
     chief = pd.read_parquet(
-        MHH1_CHIEF_COMPLAINT_PATH,
+        MHC1_CHIEF_COMPLAINT_PATH,
         columns=["subject_id", "hadm_id", "chief_complaint_raw", "chief_complaint_normalized"],
     )
-    chief = normalize_id_columns(chief.assign(cohort=MHH1_COHORT))
+    chief = normalize_id_columns(chief.assign(cohort=MHC1_COHORT))
     chief["chief_complaint"] = (
         chief["chief_complaint_raw"]
         .fillna(chief["chief_complaint_normalized"])
@@ -147,7 +147,7 @@ def build_diagnostic_annotation_tables() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     merged = pd.read_parquet(DIAGNOSTIC_FIRST_STAGE_INPUT_PATH)
     merged = normalize_id_columns(merged)
-    chief_complaints = load_mhh1_chief_complaints()
+    chief_complaints = load_mhc1_chief_complaints()
     merged = merged.merge(
         chief_complaints,
         on=["cohort", "subject_id", "hadm_id"],
@@ -157,7 +157,7 @@ def build_diagnostic_annotation_tables() -> tuple[pd.DataFrame, pd.DataFrame]:
     merged["chief_complaint"] = merged["chief_complaint"].fillna("").astype(str).str.strip()
     merged["section_text"] = merged["section_text"].fillna("").astype(str).str.strip()
     merged = merged.loc[
-        merged["cohort"].eq(MHH1_COHORT)
+        merged["cohort"].eq(MHC1_COHORT)
         & merged["section_text"].ne("")
     ].copy()
 
@@ -213,11 +213,11 @@ def build_sentiment_annotation_tables() -> tuple[pd.DataFrame, pd.DataFrame]:
     sentiment["section_text"] = sentiment["section_text"].fillna("").astype(str).str.strip()
     sentiment = sentiment.loc[sentiment["section_text"].ne("")].copy()
 
-    mhh1 = sample_grouped_admissions(
-        sentiment.loc[sentiment["cohort"].eq(MHH1_COHORT)].copy(),
+    mhc1 = sample_grouped_admissions(
+        sentiment.loc[sentiment["cohort"].eq(MHC1_COHORT)].copy(),
         N_SENTIMENT_ADMISSIONS_PER_COHORT,
         seed=RANDOM_SEED,
-        group_name="sentiment MHH1 annotation",
+        group_name="sentiment MHC1 annotation",
     )
     mhc0 = sample_grouped_admissions(
         sentiment.loc[sentiment["cohort"].eq(MHC0_COHORT)].copy(),
@@ -225,7 +225,7 @@ def build_sentiment_annotation_tables() -> tuple[pd.DataFrame, pd.DataFrame]:
         seed=RANDOM_SEED + 1,
         group_name="sentiment MHC0 annotation",
     )
-    sampled = pd.concat([mhh1, mhc0], ignore_index=True)
+    sampled = pd.concat([mhc1, mhc0], ignore_index=True)
     sampled = sampled.sample(frac=1, random_state=RANDOM_SEED + 2).reset_index(drop=True)
     sampled.insert(0, "annotation_row_id", range(1, len(sampled) + 1))
 

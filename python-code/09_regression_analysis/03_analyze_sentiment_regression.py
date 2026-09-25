@@ -1,4 +1,4 @@
-"""Regression checks for sentiment differences between MHH1 and MHC0.
+"""Regression checks for sentiment differences between MHC1 and MHC0.
 
 This script uses the completed sentiment-classifier output and the existing
 admission-level regression covariate dataset. It estimates:
@@ -66,27 +66,27 @@ BASE_COVARIATE_COLUMNS = [
     "n_prior_all_admissions_for_subject",
     "log1p_prior_admissions_365d",
     "log1p_prior_all_mimic_admissions",
-    "mhh1_psychotic",
+    "mhc1_psychotic",
     "age_at_admission_per_10y",
     "elixhauser_score_per_5pt",
     "cluster_id",
 ]
 
 MODEL_SPECS = {
-    "cohort_only": ["mhh1_psychotic"],
+    "cohort_only": ["mhc1_psychotic"],
     "age_elixhauser": [
-        "mhh1_psychotic",
+        "mhc1_psychotic",
         "age_at_admission_per_10y",
         "elixhauser_score_per_5pt",
     ],
     "age_elixhauser_prior365": [
-        "mhh1_psychotic",
+        "mhc1_psychotic",
         "age_at_admission_per_10y",
         "elixhauser_score_per_5pt",
         "log1p_prior_admissions_365d",
     ],
     "age_elixhauser_prior_all_mimic": [
-        "mhh1_psychotic",
+        "mhc1_psychotic",
         "age_at_admission_per_10y",
         "elixhauser_score_per_5pt",
         "log1p_prior_all_mimic_admissions",
@@ -105,18 +105,18 @@ CHIEF_COMPLAINT_SUBGROUPS = {
 
 NEGATIVE_COUNT_MODEL_SPECS = {
     "age_elixhauser": [
-        "mhh1_psychotic",
+        "mhc1_psychotic",
         "age_at_admission_per_10y",
         "elixhauser_score_per_5pt",
     ],
     "age_elixhauser_prior365": [
-        "mhh1_psychotic",
+        "mhc1_psychotic",
         "age_at_admission_per_10y",
         "elixhauser_score_per_5pt",
         "log1p_prior_admissions_365d",
     ],
     "age_elixhauser_prior_all_mimic": [
-        "mhh1_psychotic",
+        "mhc1_psychotic",
         "age_at_admission_per_10y",
         "elixhauser_score_per_5pt",
         "log1p_prior_all_mimic_admissions",
@@ -160,7 +160,7 @@ def load_covariates() -> pd.DataFrame:
         "n_prior_all_admissions_for_subject",
         "log1p_prior_admissions_365d",
         "log1p_prior_all_mimic_admissions",
-        "mhh1_psychotic",
+        "mhc1_psychotic",
         "age_at_admission_per_10y",
         "elixhauser_score_per_5pt",
     ]
@@ -730,9 +730,9 @@ def fit_section_models(sections: pd.DataFrame) -> pd.DataFrame:
 
 
 def extract_cohort_term_summary(model_results: pd.DataFrame) -> pd.DataFrame:
-    """Keep only the MHH1-vs-MHC0 coefficient for easier reading."""
+    """Keep only the MHC1-vs-MHC0 coefficient for easier reading."""
     return model_results.loc[
-        model_results["term"].eq("mhh1_psychotic"),
+        model_results["term"].eq("mhc1_psychotic"),
         [
             "model_level",
             "stratum",
@@ -775,7 +775,7 @@ def main() -> None:
         "negative_vs_all",
         "non_neutral_vs_all",
         "positive_vs_negative",
-        "mhh1_psychotic",
+        "mhc1_psychotic",
         "age_at_admission",
         "elixhauser_score",
         "n_prior_admissions_within_365d_for_subject",
@@ -795,7 +795,7 @@ def main() -> None:
         "any_negative",
         "any_mixed",
         "any_non_neutral",
-        "mhh1_psychotic",
+        "mhc1_psychotic",
         "age_at_admission",
         "elixhauser_score",
         "n_prior_admissions_within_365d_for_subject",
@@ -888,7 +888,7 @@ def main() -> None:
         count_models.loc[
             count_models["term"].isin(
                 [
-                    "mhh1_psychotic",
+                    "mhc1_psychotic",
                     "log1p_prior_admissions_365d",
                     "log1p_prior_all_mimic_admissions",
                 ]

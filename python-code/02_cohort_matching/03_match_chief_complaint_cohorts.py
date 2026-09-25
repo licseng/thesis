@@ -1,6 +1,6 @@
 """Create a 1:1 matched cohort for the diagnostic overshadowing analysis.
 
-This script matches each exposed `MHH_psychotic` admission to at most one
+This script matches each exposed `MHC1_psychotic` admission to at most one
 `only_MHC0` control admission without replacement. The primary matching signal
 is chief-complaint embedding similarity. Sex, insurance group, age bin,
 QuickUMLS concept overlap, and Elixhauser score are used as candidate
@@ -20,13 +20,13 @@ Matching order:
        similarity and using age/Elixhauser closeness as tie-breakers.
 
 Inputs:
-    02_matching_variables/matching_variable_tables_output/MHH_psychotic_matching_variables.parquet
+    02_matching_variables/matching_variable_tables_output/MHC1_psychotic_matching_variables.parquet
     02_matching_variables/matching_variable_tables_output/only_MHC0_matching_variables.parquet
 
 Outputs:
     matched_cohort_output/matched_pairs.parquet
     matched_cohort_output/matched_pairs.csv
-    matched_cohort_output/unmatched_MHH_psychotic.parquet
+    matched_cohort_output/unmatched_MHC1_psychotic.parquet
     matched_cohort_output/matching_summary.csv
 """
 
@@ -45,10 +45,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 MATCHING_VARIABLE_DIR = SCRIPT_DIR / "02_matching_variables" / "matching_variable_tables_output"
 OUTPUT_DIR = SCRIPT_DIR / "matched_cohort_output"
 
-EXPOSED_COHORT = "MHH_psychotic"
+EXPOSED_COHORT = "MHC1_psychotic"
 CONTROL_COHORT = "only_MHC0"
 
-MHH_INPUT = MATCHING_VARIABLE_DIR / "MHH_psychotic_matching_variables.parquet"
+MHC1_INPUT = MATCHING_VARIABLE_DIR / "MHC1_psychotic_matching_variables.parquet"
 MHC0_INPUT = MATCHING_VARIABLE_DIR / "only_MHC0_matching_variables.parquet"
 
 # Matching configuration.
@@ -471,19 +471,19 @@ def query_existing_index(
 # embedding nearest-neighbor retrieval, no-reuse rule, cosine threshold, and
 # Elixhauser caliper.
 def find_match_for_row(
-    mhh_row: pd.Series,
-    mhh_embedding: np.ndarray,
+    mhc1_row: pd.Series,
+    mhc1_embedding: np.ndarray,
     indexes: dict[tuple[str, str, str], dict[str, object]],
     used_control_keys: set[tuple[int, int]],
 ) -> tuple[dict[str, object] | None, str | None]:
-    age_bins = nearby_age_bins(mhh_row["age_bin"])
+    age_bins = nearby_age_bins(mhc1_row["age_bin"])
     candidate_parts = []
     fallback_strata = []
     used_quickumls_candidate_filter = USE_QUICKUMLS_CANDIDATE_FILTER
     used_quickumls_filter_fallback = False
 
     for age_bin in age_bins:
-        stratum = (mhh_row["sex"], mhh_row["insurance_group"], age_bin)
+        stratum = (mhc1_row["sex"], mhc1_row["insurance_group"], age_bin)
         if stratum not in indexes:
             continue
 
@@ -497,7 +497,7 @@ def find_match_for_row(
         fallback_strata.append((controls, model))
 
         if USE_QUICKUMLS_CANDIDATE_FILTER:
-            exposed_terms = mhh_row["_quickumls_overlap_term_set"]
+            exposed_terms = mhc1_row["_quickumls_overlap_term_set"]
             quickumls_filter = controls["_quickumls_overlap_term_set"].map(
                 lambda control_terms: passes_quickumls_candidate_filter(
                     exposed_terms,
@@ -512,10 +512,10 @@ def find_match_for_row(
             stratum_candidates = query_nearest_controls(
                 filtered_controls,
                 filtered_embeddings,
-                mhh_embedding,
+                mhc1_embedding,
             )
         else:
-            stratum_candidates = query_existing_index(controls, model, mhh_embedding)
+            stratum_candidates = query_existing_index(controls, model, mhc1_embedding)
 
         candidate_parts.append(stratum_candidates)
 
@@ -526,7 +526,7 @@ def find_match_for_row(
             return None, "no_quickumls_overlap_candidates"
 
         candidate_parts = [
-            query_existing_index(controls, model, mhh_embedding)
+            query_existing_index(controls, model, mhc1_embedding)
             for controls, model in fallback_strata
         ]
         used_quickumls_candidate_filter = False
@@ -534,19 +534,19 @@ def find_match_for_row(
 
     candidate_rows = pd.concat(candidate_parts, ignore_index=True)
     candidate_rows["abs_elixhauser_difference"] = (
-        candidate_rows["elixhauser_score"] - mhh_row["elixhauser_score"]
+        candidate_rows["elixhauser_score"] - mhc1_row["elixhauser_score"]
     ).abs()
-    candidate_rows["same_age_bin"] = candidate_rows["age_bin"].eq(mhh_row["age_bin"])
+    candidate_rows["same_age_bin"] = candidate_rows["age_bin"].eq(mhc1_row["age_bin"])
     candidate_rows["abs_age_difference"] = (
-        candidate_rows["age_at_admission"] - mhh_row["age_at_admission"]
+        candidate_rows["age_at_admission"] - mhc1_row["age_at_admission"]
     ).abs()
-    age_bin_position = AGE_BIN_ORDER.index(mhh_row["age_bin"])
+    age_bin_position = AGE_BIN_ORDER.index(mhc1_row["age_bin"])
     candidate_rows["age_bin_distance"] = candidate_rows["age_bin"].map(
         lambda value: abs(AGE_BIN_ORDER.index(value) - age_bin_position)
     )
     overlap_stats = candidate_rows["_quickumls_overlap_term_set"].map(
         lambda control_terms: quickumls_overlap_stats(
-            mhh_row["_quickumls_overlap_term_set"],
+            mhc1_row["_quickumls_overlap_term_set"],
             control_terms,
         )
     )
@@ -593,36 +593,36 @@ def find_match_for_row(
 # Convert one matched exposed/control pair into a flat output record.
 def pair_record(
     pair_id: int,
-    mhh_row: pd.Series,
+    mhc1_row: pd.Series,
     control_row: pd.Series,
     match_type: str,
 ) -> dict[str, object]:
     cosine_similarity = float(control_row["cosine_similarity"])
     shared_quickumls_terms = format_shared_quickumls_terms(
-        mhh_row["_quickumls_overlap_term_set"],
+        mhc1_row["_quickumls_overlap_term_set"],
         control_row["_quickumls_overlap_term_set"],
     )
     return {
         "pair_id": pair_id,
-        "mhh_subject_id": mhh_row["subject_id"],
-        "mhh_hadm_id": mhh_row["hadm_id"],
-        "mhh_chief_complaint_raw": mhh_row.get("chief_complaint_raw"),
-        "mhh_chief_complaint_normalized": mhh_row.get("chief_complaint_normalized"),
-        "mhh_quickumls_terms": mhh_row.get("quickumls_terms"),
-        "mhh_quickumls_term_count": len(mhh_row["_quickumls_original_term_set"]),
-        "mhh_derived_quickumls_overlap_terms": " | ".join(
-            sorted(mhh_row["_quickumls_overlap_term_set"])
+        "mhc1_subject_id": mhc1_row["subject_id"],
+        "mhc1_hadm_id": mhc1_row["hadm_id"],
+        "mhc1_chief_complaint_raw": mhc1_row.get("chief_complaint_raw"),
+        "mhc1_chief_complaint_normalized": mhc1_row.get("chief_complaint_normalized"),
+        "mhc1_quickumls_terms": mhc1_row.get("quickumls_terms"),
+        "mhc1_quickumls_term_count": len(mhc1_row["_quickumls_original_term_set"]),
+        "mhc1_derived_quickumls_overlap_terms": " | ".join(
+            sorted(mhc1_row["_quickumls_overlap_term_set"])
         ),
-        "mhh_derived_quickumls_overlap_term_count": len(
-            mhh_row["_quickumls_overlap_term_set"]
+        "mhc1_derived_quickumls_overlap_term_count": len(
+            mhc1_row["_quickumls_overlap_term_set"]
         ),
-        "mhh_quickumls_extracted_text": mhh_row.get("quickumls_extracted_text"),
-        "mhh_sex": mhh_row["sex"],
-        "mhh_insurance": mhh_row.get("insurance"),
-        "mhh_insurance_group": mhh_row["insurance_group"],
-        "mhh_age_at_admission": mhh_row["age_at_admission"],
-        "mhh_age_bin": mhh_row["age_bin"],
-        "mhh_elixhauser_score": mhh_row["elixhauser_score"],
+        "mhc1_quickumls_extracted_text": mhc1_row.get("quickumls_extracted_text"),
+        "mhc1_sex": mhc1_row["sex"],
+        "mhc1_insurance": mhc1_row.get("insurance"),
+        "mhc1_insurance_group": mhc1_row["insurance_group"],
+        "mhc1_age_at_admission": mhc1_row["age_at_admission"],
+        "mhc1_age_bin": mhc1_row["age_bin"],
+        "mhc1_elixhauser_score": mhc1_row["elixhauser_score"],
         "mhc0_subject_id": control_row["subject_id"],
         "mhc0_hadm_id": control_row["hadm_id"],
         "mhc0_chief_complaint_raw": control_row.get("chief_complaint_raw"),
@@ -645,7 +645,7 @@ def pair_record(
         "mhc0_age_bin": control_row["age_bin"],
         "mhc0_elixhauser_score": control_row["elixhauser_score"],
         "same_insurance_group": bool(
-            control_row["insurance_group"] == mhh_row["insurance_group"]
+            control_row["insurance_group"] == mhc1_row["insurance_group"]
         ),
         "same_age_bin": bool(control_row["same_age_bin"]),
         "age_bin_distance": int(control_row["age_bin_distance"]),
@@ -665,7 +665,7 @@ def pair_record(
             control_row["used_quickumls_filter_fallback"]
         ),
         "match_type": match_type,
-        "candidate_pool_size": int(mhh_row["candidate_pool_size"]),
+        "candidate_pool_size": int(mhc1_row["candidate_pool_size"]),
     }
 
 
@@ -690,17 +690,17 @@ def match_cohorts(
     unmatched_rows = []
     used_control_keys: set[tuple[int, int]] = set()
 
-    for position, mhh_row in exposed.iterrows():
+    for position, mhc1_row in exposed.iterrows():
         if (position + 1) % 500 == 0:
             print(
-                f"Processed {position + 1:,} of {len(exposed):,} MHH rows; "
+                f"Processed {position + 1:,} of {len(exposed):,} MHC1 rows; "
                 f"matched {len(matched_pairs):,}",
                 flush=True,
             )
 
-        embedding = exposed_embeddings[int(mhh_row["_embedding_position"])]
+        embedding = exposed_embeddings[int(mhc1_row["_embedding_position"])]
         match, reason = find_match_for_row(
-            mhh_row,
+            mhc1_row,
             embedding,
             indexes,
             used_control_keys,
@@ -713,9 +713,9 @@ def match_cohorts(
                     "_quickumls_original_term_set",
                     "_quickumls_overlap_term_set",
                 ]
-                if label in mhh_row.index
+                if label in mhc1_row.index
             ]
-            unmatched = mhh_row.drop(labels=drop_labels).to_dict()
+            unmatched = mhc1_row.drop(labels=drop_labels).to_dict()
             unmatched["unmatched_reason"] = reason
             unmatched_rows.append(unmatched)
             continue
@@ -726,7 +726,7 @@ def match_cohorts(
         matched_pairs.append(
             pair_record(
                 len(matched_pairs) + 1,
-                mhh_row,
+                mhc1_row,
                 control,
                 match["match_type"],
             )
@@ -739,9 +739,9 @@ def match_cohorts(
 def build_summary(
     matched_pairs: pd.DataFrame,
     unmatched: pd.DataFrame,
-    total_mhh_before_filtering: int,
+    total_mhc1_before_filtering: int,
     total_mhc0_before_filtering: int,
-    total_mhh_matchable: int,
+    total_mhc1_matchable: int,
     total_mhc0_matchable: int,
 ) -> pd.DataFrame:
     n_matched = len(matched_pairs)
@@ -750,14 +750,14 @@ def build_summary(
     cosine_q3 = matched_pairs["cosine_similarity"].quantile(0.75) if n_matched else np.nan
 
     row = {
-        "total_mhh_before_filtering": total_mhh_before_filtering,
+        "total_mhc1_before_filtering": total_mhc1_before_filtering,
         "total_mhc0_before_filtering": total_mhc0_before_filtering,
-        "total_mhh_matchable": total_mhh_matchable,
+        "total_mhc1_matchable": total_mhc1_matchable,
         "total_mhc0_matchable": total_mhc0_matchable,
         "n_matched": n_matched,
         "n_unmatched": n_unmatched,
-        "pct_matched": 100.0 * n_matched / total_mhh_matchable
-        if total_mhh_matchable
+        "pct_matched": 100.0 * n_matched / total_mhc1_matchable
+        if total_mhc1_matchable
         else np.nan,
         "median_cosine_similarity": matched_pairs["cosine_similarity"].median()
         if n_matched
@@ -839,10 +839,10 @@ def quality_checks(matched_pairs: pd.DataFrame) -> None:
         return
 
     assert not matched_pairs.duplicated(["mhc0_subject_id", "mhc0_hadm_id"]).any()
-    assert not matched_pairs.duplicated(["mhh_subject_id", "mhh_hadm_id"]).any()
-    assert (matched_pairs["mhh_sex"] == matched_pairs["mhc0_sex"]).all()
+    assert not matched_pairs.duplicated(["mhc1_subject_id", "mhc1_hadm_id"]).any()
+    assert (matched_pairs["mhc1_sex"] == matched_pairs["mhc0_sex"]).all()
     assert (
-        matched_pairs["mhh_insurance_group"]
+        matched_pairs["mhc1_insurance_group"]
         == matched_pairs["mhc0_insurance_group"]
     ).all()
 
@@ -888,7 +888,7 @@ def write_outputs(
     OUTPUT_DIR.mkdir(exist_ok=True)
     matched_pairs.to_parquet(OUTPUT_DIR / "matched_pairs.parquet", index=False)
     matched_pairs.to_csv(OUTPUT_DIR / "matched_pairs.csv", index=False)
-    unmatched.to_parquet(OUTPUT_DIR / "unmatched_MHH_psychotic.parquet", index=False)
+    unmatched.to_parquet(OUTPUT_DIR / "unmatched_MHC1_psychotic.parquet", index=False)
     summary.to_csv(OUTPUT_DIR / "matching_summary.csv", index=False)
     print(f"Saved matched cohort outputs to: {OUTPUT_DIR}", flush=True)
 
@@ -899,22 +899,22 @@ def main() -> None:
     np.random.seed(RANDOM_SEED)
 
     print("Loading matching-variable tables", flush=True)
-    mhh_raw = load_matching_variables(MHH_INPUT)
+    mhc1_raw = load_matching_variables(MHC1_INPUT)
     mhc0_raw = load_matching_variables(MHC0_INPUT)
 
-    mhh, total_mhh_before = prepare_matching_table(mhh_raw, MHH_INPUT)
+    mhc1, total_mhc1_before = prepare_matching_table(mhc1_raw, MHC1_INPUT)
     mhc0, total_mhc0_before = prepare_matching_table(mhc0_raw, MHC0_INPUT)
 
     embedding_cache: dict[str, np.ndarray] = {}
-    print("Loading MHH embeddings", flush=True)
-    mhh, mhh_embeddings = load_embeddings_for_rows(mhh, embedding_cache)
+    print("Loading MHC1 embeddings", flush=True)
+    mhc1, mhc1_embeddings = load_embeddings_for_rows(mhc1, embedding_cache)
     print("Loading MHC0 embeddings", flush=True)
     mhc0, mhc0_embeddings = load_embeddings_for_rows(mhc0, embedding_cache)
 
     print("Starting greedy 1:1 matching", flush=True)
     matched_pairs, unmatched = match_cohorts(
-        mhh,
-        mhh_embeddings,
+        mhc1,
+        mhc1_embeddings,
         mhc0,
         mhc0_embeddings,
     )
@@ -923,9 +923,9 @@ def main() -> None:
     summary = build_summary(
         matched_pairs,
         unmatched,
-        total_mhh_before,
+        total_mhc1_before,
         total_mhc0_before,
-        len(mhh),
+        len(mhc1),
         len(mhc0),
     )
     print("Matching summary:", flush=True)

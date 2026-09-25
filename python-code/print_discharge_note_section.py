@@ -6,7 +6,7 @@ without printing the full discharge note.
 Inputs:
     ../01_discharge_note_preprocessing/01_discharge_note_parsing/
         full_discharge_note_sections/
-            MHH1_psychotic_matched_full_discharge_note_sections.parquet
+            MHC1_psychotic_matched_full_discharge_note_sections.parquet
             MHC0_matched_full_discharge_note_sections.parquet
 
 Usage:
@@ -42,9 +42,9 @@ FULL_NOTE_SECTION_DIR = (
 
 SECTION_FILES = [
     {
-        "cohort": "MHH1_psychotic",
+        "cohort": "MHC1_psychotic",
         "path": FULL_NOTE_SECTION_DIR
-        / "MHH1_psychotic_matched_full_discharge_note_sections.parquet",
+        / "MHC1_psychotic_matched_full_discharge_note_sections.parquet",
     },
     {
         "cohort": "MHC0",

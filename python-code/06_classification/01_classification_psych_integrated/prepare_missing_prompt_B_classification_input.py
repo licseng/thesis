@@ -1,6 +1,6 @@
 """Prepare classifier input rows missing from the old prompt-B output.
 
-The current matched cohort is a subset/change of the earlier MHH1 cohort, so
+The current matched cohort is a subset/change of the earlier MHC1 cohort, so
 most prompt-B classifier outputs can be reused. This helper finds current
 prefilter rows that are absent from the old prompt-B full output by matching on
 subject_id + hadm_id + section_name, then writes a small parquet input for

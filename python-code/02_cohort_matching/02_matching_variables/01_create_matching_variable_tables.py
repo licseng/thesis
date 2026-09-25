@@ -13,11 +13,11 @@ For each cohort, it combines:
 Inputs:
     ../../01_discharge_note_preprocessing/02_chief_complaint/02_embedding/chief_complaint_embeddings/
     ../01_elixhauser/elixhauser_scores_output/
-    DuckDB tables export_MHH_psychotic and export_only_MHC0
+    DuckDB tables export_MHC1_psychotic and export_only_MHC0
 
 Outputs:
-    matching_variable_tables_output/MHH_psychotic_matching_variables.parquet
-    matching_variable_tables_output/MHH_psychotic_matching_variables.csv
+    matching_variable_tables_output/MHC1_psychotic_matching_variables.parquet
+    matching_variable_tables_output/MHC1_psychotic_matching_variables.csv
     matching_variable_tables_output/only_MHC0_matching_variables.parquet
     matching_variable_tables_output/only_MHC0_matching_variables.csv
     matching_variable_tables_output/matching_variables_summary.csv
@@ -50,10 +50,10 @@ OUTPUT_DIR = SCRIPT_DIR / "matching_variable_tables_output"
 
 # Cohort-specific source tables and matching-variable inputs.
 COHORTS = {
-    "MHH_psychotic": {
-        "source_table": "export_MHH_psychotic",
-        "embedding_group": "MHH1_psychotic",
-        "elixhauser_basename": "elixhauser_MHH_psychotic",
+    "MHC1_psychotic": {
+        "source_table": "export_MHC1_psychotic",
+        "embedding_group": "MHC1_psychotic",
+        "elixhauser_basename": "elixhauser_MHC1_psychotic",
     },
     "only_MHC0": {
         "source_table": "export_only_MHC0",

@@ -9,8 +9,8 @@ The broader full-discharge-note parser is separate:
 
 Inputs:
     DuckDB tables listed in `EXPORTS`, currently:
-        - export_MHH_psychotic
-        - export_MHH_history_only, if present
+        - export_MHC1_psychotic
+        - export_MHC1_history_only, if present
         - export_only_MHC0
 
 Outputs:
@@ -42,12 +42,12 @@ SAMPLE_SIZE = 5000
 # Cohort tables to parse
 EXPORTS = [
     {
-        "source_table": "export_MHH_psychotic",
-        "output_name": "MHH_psychotic_chief_complaints_from_discharge_notes",
+        "source_table": "export_MHC1_psychotic",
+        "output_name": "MHC1_psychotic_chief_complaints_from_discharge_notes",
     },
     {
-        "source_table": "export_MHH_history_only",
-        "output_name": "MHH_history_only_chief_complaints_from_discharge_notes",
+        "source_table": "export_MHC1_history_only",
+        "output_name": "MHC1_history_only_chief_complaints_from_discharge_notes",
         "optional": True,
     },
     {

@@ -1,6 +1,6 @@
 """Analyze SL keyword hits by matched and real readmission history.
 
-This script checks whether the MHH1-vs-MHC0 SL keyword difference is partly
+This script checks whether the MHC1-vs-MHC0 SL keyword difference is partly
 explained by repeated admissions. It reuses the SL keyword list and selected
 sections from ``02_explore_SL_keywords_by_section.py``, restricts to the current
 matched cohort, and summarizes keyword-hit rates by admission order within each
@@ -51,7 +51,7 @@ SL_SCRIPT_PATH = SCRIPT_DIR / "02_explore_SL_keywords_by_section.py"
 OUTPUT_DIR = SCRIPT_DIR / "analysis_output_SL_keyword_readmission_order"
 
 FULL_NOTE_FILES = [
-    FULL_NOTE_DIR / "MHH1_psychotic_matched_full_discharge_note_sections.parquet",
+    FULL_NOTE_DIR / "MHC1_psychotic_matched_full_discharge_note_sections.parquet",
     FULL_NOTE_DIR / "MHC0_matched_full_discharge_note_sections.parquet",
 ]
 
@@ -426,9 +426,9 @@ def fit_sl_keyword_prior_admission_models(admission_summary: pd.DataFrame) -> pd
     model_data["any_selected_SL_keyword"] = (
         model_data["any_selected_SL_keyword"].astype(bool).astype(int)
     )
-    model_data["mhh1_psychotic"] = model_data["cohort"].eq("MHH1_psychotic").astype(float)
+    model_data["mhc1_psychotic"] = model_data["cohort"].eq("MHC1_psychotic").astype(float)
     model_data["cohort_x_log1p_prior_all_mimic_admissions"] = (
-        model_data["mhh1_psychotic"]
+        model_data["mhc1_psychotic"]
         * model_data["log1p_prior_all_mimic_admissions"]
     )
     model_data["cluster_id"] = (
@@ -439,7 +439,7 @@ def fit_sl_keyword_prior_admission_models(admission_summary: pd.DataFrame) -> pd
     model_data = model_data.dropna(
         subset=[
             "any_selected_SL_keyword",
-            "mhh1_psychotic",
+            "mhc1_psychotic",
             "log1p_prior_all_mimic_admissions",
             "cluster_id",
         ]
@@ -448,12 +448,12 @@ def fit_sl_keyword_prior_admission_models(admission_summary: pd.DataFrame) -> pd
     model_specs = [
         (
             "cohort_plus_log1p_prior_all_mimic_admissions",
-            ["mhh1_psychotic", "log1p_prior_all_mimic_admissions"],
+            ["mhc1_psychotic", "log1p_prior_all_mimic_admissions"],
         ),
         (
             "cohort_x_log1p_prior_all_mimic_admissions",
             [
-                "mhh1_psychotic",
+                "mhc1_psychotic",
                 "log1p_prior_all_mimic_admissions",
                 "cohort_x_log1p_prior_all_mimic_admissions",
             ],

@@ -15,7 +15,7 @@ local output.
 Inputs:
     - 02_cohort_matching/matched_cohort_output/matched_pairs.parquet
     - DuckDB source tables for the two matched cohorts:
-        - export_MHH_psychotic
+        - export_MHC1_psychotic
         - export_only_MHC0
 
 Outputs:
@@ -54,11 +54,11 @@ SAMPLE_SIZE = 5000
 # the DuckDB table provides the full discharge-note text.
 MATCHED_EXPORTS = [
     {
-        "cohort": "MHH1_psychotic",
-        "source_table": "export_MHH_psychotic",
-        "subject_col": "mhh_subject_id",
-        "hadm_col": "mhh_hadm_id",
-        "output_name": "MHH1_psychotic_matched_full_discharge_note_sections",
+        "cohort": "MHC1_psychotic",
+        "source_table": "export_MHC1_psychotic",
+        "subject_col": "mhc1_subject_id",
+        "hadm_col": "mhc1_hadm_id",
+        "output_name": "MHC1_psychotic_matched_full_discharge_note_sections",
     },
     {
         "cohort": "MHC0",

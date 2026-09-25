@@ -1,7 +1,7 @@
 """Export matched admission IDs for DBeaver filtering.
 
 This script converts the matched-pair table into one row per matched admission:
-one MHH1_psychotic row and one MHC0 row per pair. The output is intended as a
+one MHC1_psychotic row and one MHC0 row per pair. The output is intended as a
 small helper table for DBeaver joins against larger MIMIC tables such as
 admissions, procedures_icd, poe, or labevents.
 
@@ -22,8 +22,8 @@ OUTPUT_PATH = OUTPUT_DIR / "matched_admission_ids_for_dbeaver.csv"
 
 REQUIRED_COLUMNS = {
     "pair_id",
-    "mhh_subject_id",
-    "mhh_hadm_id",
+    "mhc1_subject_id",
+    "mhc1_hadm_id",
     "mhc0_subject_id",
     "mhc0_hadm_id",
 }
@@ -45,17 +45,17 @@ def load_matched_pairs() -> pd.DataFrame:
 
 def build_matched_admission_ids(matched_pairs: pd.DataFrame) -> pd.DataFrame:
     """Return one row per matched admission with cohort and pair identifiers."""
-    mhh = matched_pairs.loc[
+    mhc1 = matched_pairs.loc[
         :,
-        ["pair_id", "mhh_subject_id", "mhh_hadm_id"],
+        ["pair_id", "mhc1_subject_id", "mhc1_hadm_id"],
     ].rename(
         columns={
-            "mhh_subject_id": "subject_id",
-            "mhh_hadm_id": "hadm_id",
+            "mhc1_subject_id": "subject_id",
+            "mhc1_hadm_id": "hadm_id",
         }
     )
-    mhh.insert(1, "matched_role", "case")
-    mhh.insert(2, "cohort", "MHH1_psychotic")
+    mhc1.insert(1, "matched_role", "case")
+    mhc1.insert(2, "cohort", "MHC1_psychotic")
 
     mhc0 = matched_pairs.loc[
         :,
@@ -69,7 +69,7 @@ def build_matched_admission_ids(matched_pairs: pd.DataFrame) -> pd.DataFrame:
     mhc0.insert(1, "matched_role", "control")
     mhc0.insert(2, "cohort", "MHC0")
 
-    matched_ids = pd.concat([mhh, mhc0], ignore_index=True)
+    matched_ids = pd.concat([mhc1, mhc0], ignore_index=True)
     matched_ids["pair_id"] = matched_ids["pair_id"].astype(int)
     matched_ids["subject_id"] = matched_ids["subject_id"].astype(int)
     matched_ids["hadm_id"] = matched_ids["hadm_id"].astype(int)

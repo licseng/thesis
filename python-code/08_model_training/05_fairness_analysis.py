@@ -1,7 +1,7 @@
-"""Summarize model inference results separately for MHH1 and MHC0.
+"""Summarize model inference results separately for MHC1 and MHC0.
 
 This is a descriptive summary, not yet a formal fairness analysis. It reads
-the held-out MHH1/MHC0 prediction CSV produced by the inference script and
+the held-out MHC1/MHC0 prediction CSV produced by the inference script and
 writes cohort-specific performance metrics into the same output directory.
 Formal fairness analyses can be added here later.
 """
@@ -33,13 +33,13 @@ INFERENCE_OUTPUT_DIRS = {
     / "bioclinicalbert_readmission_classifier_inference_output_2epoch_NOclassweights",
 }
 
-PREDICTIONS_FILENAME = "test_fairness_mhh1_mhc0_predictions.csv"
+PREDICTIONS_FILENAME = "test_fairness_mhc1_mhc0_predictions.csv"
 CONFIG_FILENAME = "inference_config.json"
-SUMMARY_FILENAME = "mhh1_mhc0_inference_metrics.csv"
-DIFFERENCE_FILENAME = "mhh1_minus_mhc0_inference_metric_differences.csv"
+SUMMARY_FILENAME = "mhc1_mhc0_inference_metrics.csv"
+DIFFERENCE_FILENAME = "mhc1_minus_mhc0_inference_metric_differences.csv"
 
 COHORTS = {
-    "MHH1": "is_mhh1_psychotic_admission",
+    "MHC1": "is_mhc1_psychotic_admission",
     "MHC0": "is_mhc0_admission",
 }
 
@@ -95,7 +95,7 @@ def load_threshold(output_dir: Path) -> float:
 
 
 def summarize_inference(task: str, output_dir: Path) -> None:
-    """Write MHH1/MHC0 summaries for one inference output directory."""
+    """Write MHC1/MHC0 summaries for one inference output directory."""
     predictions_path = output_dir / PREDICTIONS_FILENAME
     if not predictions_path.exists():
         raise FileNotFoundError(f"Missing fairness prediction file: {predictions_path}")
@@ -146,10 +146,10 @@ def summarize_inference(task: str, output_dir: Path) -> None:
     differences = pd.DataFrame(
         {
             "task": task,
-            "contrast": "MHH1_minus_MHC0",
+            "contrast": "MHC1_minus_MHC0",
             "metric": difference_metrics,
             "difference": [
-                indexed.loc["MHH1", metric] - indexed.loc["MHC0", metric]
+                indexed.loc["MHC1", metric] - indexed.loc["MHC0", metric]
                 for metric in difference_metrics
             ],
         }

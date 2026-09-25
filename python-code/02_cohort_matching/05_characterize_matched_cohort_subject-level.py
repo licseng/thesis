@@ -1,7 +1,7 @@
 """Subject-level characterization of the matched cohorts.
 
 This script summarizes repeated admissions, subject-level descriptor categories,
-and subject-level utilization for the matched MHH1_psychotic and MHC0 cohorts.
+and subject-level utilization for the matched MHC1_psychotic and MHC0 cohorts.
 Admission-level categorical values that vary within a subject are collapsed to
 `multiple_values`.
 """

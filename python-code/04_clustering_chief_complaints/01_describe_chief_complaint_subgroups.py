@@ -166,15 +166,15 @@ def load_matched_pairs() -> pd.DataFrame:
         raise FileNotFoundError(f"Missing matched pairs file: {MATCHED_PAIRS_PATH}")
     required_columns = [
         "pair_id",
-        "mhh_subject_id",
-        "mhh_hadm_id",
-        "mhh_chief_complaint_normalized",
-        "mhh_quickumls_terms",
-        "mhh_derived_quickumls_overlap_terms",
-        "mhh_sex",
-        "mhh_insurance_group",
-        "mhh_age_at_admission",
-        "mhh_elixhauser_score",
+        "mhc1_subject_id",
+        "mhc1_hadm_id",
+        "mhc1_chief_complaint_normalized",
+        "mhc1_quickumls_terms",
+        "mhc1_derived_quickumls_overlap_terms",
+        "mhc1_sex",
+        "mhc1_insurance_group",
+        "mhc1_age_at_admission",
+        "mhc1_elixhauser_score",
         "mhc0_subject_id",
         "mhc0_hadm_id",
         "mhc0_chief_complaint_normalized",
@@ -190,34 +190,34 @@ def load_matched_pairs() -> pd.DataFrame:
 
 def build_admission_level_complaints(matched_pairs: pd.DataFrame) -> pd.DataFrame:
     """Convert matched pairs to one row per admission with normalized complaint."""
-    mhh = matched_pairs.loc[
+    mhc1 = matched_pairs.loc[
         :,
         [
             "pair_id",
-            "mhh_subject_id",
-            "mhh_hadm_id",
-            "mhh_chief_complaint_normalized",
-            "mhh_quickumls_terms",
-            "mhh_derived_quickumls_overlap_terms",
-            "mhh_sex",
-            "mhh_insurance_group",
-            "mhh_age_at_admission",
-            "mhh_elixhauser_score",
+            "mhc1_subject_id",
+            "mhc1_hadm_id",
+            "mhc1_chief_complaint_normalized",
+            "mhc1_quickumls_terms",
+            "mhc1_derived_quickumls_overlap_terms",
+            "mhc1_sex",
+            "mhc1_insurance_group",
+            "mhc1_age_at_admission",
+            "mhc1_elixhauser_score",
         ],
     ].rename(
         columns={
-            "mhh_subject_id": "subject_id",
-            "mhh_hadm_id": "hadm_id",
-            "mhh_chief_complaint_normalized": "chief_complaint_normalized",
-            "mhh_quickumls_terms": "quickumls_terms",
-            "mhh_derived_quickumls_overlap_terms": "derived_quickumls_overlap_terms",
-            "mhh_sex": "sex",
-            "mhh_insurance_group": "insurance_group",
-            "mhh_age_at_admission": "age_at_admission",
-            "mhh_elixhauser_score": "elixhauser_score",
+            "mhc1_subject_id": "subject_id",
+            "mhc1_hadm_id": "hadm_id",
+            "mhc1_chief_complaint_normalized": "chief_complaint_normalized",
+            "mhc1_quickumls_terms": "quickumls_terms",
+            "mhc1_derived_quickumls_overlap_terms": "derived_quickumls_overlap_terms",
+            "mhc1_sex": "sex",
+            "mhc1_insurance_group": "insurance_group",
+            "mhc1_age_at_admission": "age_at_admission",
+            "mhc1_elixhauser_score": "elixhauser_score",
         }
     )
-    mhh["cohort"] = "MHH1_psychotic"
+    mhc1["cohort"] = "MHC1_psychotic"
 
     mhc0 = matched_pairs.loc[
         :,
@@ -248,7 +248,7 @@ def build_admission_level_complaints(matched_pairs: pd.DataFrame) -> pd.DataFram
     )
     mhc0["cohort"] = "MHC0"
 
-    admissions = pd.concat([mhh, mhc0], ignore_index=True)
+    admissions = pd.concat([mhc1, mhc0], ignore_index=True)
     admissions["chief_complaint_normalized"] = (
         admissions["chief_complaint_normalized"].fillna("").astype(str).str.strip()
     )
@@ -331,7 +331,7 @@ def add_subgroup_flags(admissions: pd.DataFrame) -> pd.DataFrame:
 def build_combined_group_counts(flagged: pd.DataFrame) -> pd.DataFrame:
     """Count the supervisor-requested combined chief-complaint groups."""
     rows = []
-    cohorts = ["MHH1_psychotic", "MHC0", "overall"]
+    cohorts = ["MHC1_psychotic", "MHC0", "overall"]
     for group_name, subgroup_names in COMBINED_CHIEF_COMPLAINT_GROUPS.items():
         flag_column = f"has_{group_name}"
         source_columns = [
@@ -418,7 +418,7 @@ def build_combined_group_pair_overlap(flagged: pd.DataFrame) -> pd.DataFrame:
     first_column = f"has_{first}"
     second_column = f"has_{second}"
     rows = []
-    for cohort in ["MHH1_psychotic", "MHC0", "overall"]:
+    for cohort in ["MHC1_psychotic", "MHC0", "overall"]:
         group = flagged if cohort == "overall" else flagged.loc[flagged["cohort"].eq(cohort)]
         n_admissions = len(group)
         n_first = int(group[first_column].sum())
@@ -589,7 +589,7 @@ def build_exclusive_group_counts(flagged: pd.DataFrame) -> pd.DataFrame:
     """Count mutually exclusive combined groups by cohort."""
     analysis = flagged.loc[flagged["exclusive_combined_group"].notna()].copy()
     rows = []
-    for cohort in ["MHH1_psychotic", "MHC0", "overall"]:
+    for cohort in ["MHC1_psychotic", "MHC0", "overall"]:
         group = analysis if cohort == "overall" else analysis.loc[analysis["cohort"].eq(cohort)]
         total_cohort = len(flagged) if cohort == "overall" else int(flagged["cohort"].eq(cohort).sum())
         for group_name, subgroup in group.groupby("exclusive_combined_group"):
@@ -610,7 +610,7 @@ def build_exclusive_group_counts(flagged: pd.DataFrame) -> pd.DataFrame:
 def build_subgroup_counts(flagged: pd.DataFrame) -> pd.DataFrame:
     """Count subgroup coverage by cohort and overall."""
     rows = []
-    cohorts = ["MHH1_psychotic", "MHC0", "overall"]
+    cohorts = ["MHC1_psychotic", "MHC0", "overall"]
     for subgroup, config in CHIEF_COMPLAINT_SUBGROUPS.items():
         flag_column = f"has_{subgroup.replace(' ', '_')}"
         for cohort in cohorts:

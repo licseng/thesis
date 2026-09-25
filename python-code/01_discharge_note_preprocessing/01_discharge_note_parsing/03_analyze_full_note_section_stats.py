@@ -27,8 +27,8 @@ OUTPUT_DIR = SCRIPT_DIR / "analysis_output_discharge_note_parsing"
 
 FULL_NOTE_FILES = [
     {
-        "cohort": "MHH1_psychotic",
-        "path": FULL_NOTE_DIR / "MHH1_psychotic_matched_full_discharge_note_sections.parquet",
+        "cohort": "MHC1_psychotic",
+        "path": FULL_NOTE_DIR / "MHC1_psychotic_matched_full_discharge_note_sections.parquet",
     },
     {
         "cohort": "MHC0",
@@ -136,39 +136,39 @@ def note_structure_summary_for_group(df: pd.DataFrame, cohort: str) -> dict[str,
 
 
 def build_section_comparison(summary: pd.DataFrame) -> pd.DataFrame:
-    """Create a side-by-side MHH1-vs-MHC0 section comparison table."""
-    mhh = summary[summary["cohort"] == "MHH1_psychotic"].set_index("section")
+    """Create a side-by-side MHC1-psychosis-vs-MHC0 section comparison table."""
+    mhc1 = summary[summary["cohort"] == "MHC1_psychotic"].set_index("section")
     mhc0 = summary[summary["cohort"] == "MHC0"].set_index("section")
-    shared_sections = [section for section in mhh.index if section in mhc0.index]
+    shared_sections = [section for section in mhc1.index if section in mhc0.index]
 
     rows = []
     for section in shared_sections:
-        mhh_row = mhh.loc[section]
+        mhc1_row = mhc1.loc[section]
         mhc0_row = mhc0.loc[section]
         rows.append(
             {
                 "section": section,
-                "mhh_n_with_section": int(mhh_row["n_with_section"]),
+                "mhc1_n_with_section": int(mhc1_row["n_with_section"]),
                 "mhc0_n_with_section": int(mhc0_row["n_with_section"]),
-                "mhh_pct_with_section": float(mhh_row["pct_with_section"]),
+                "mhc1_pct_with_section": float(mhc1_row["pct_with_section"]),
                 "mhc0_pct_with_section": float(mhc0_row["pct_with_section"]),
-                "pct_point_difference_mhh_minus_mhc0": float(
-                    mhh_row["pct_with_section"] - mhc0_row["pct_with_section"]
+                "pct_point_difference_mhc1_minus_mhc0": float(
+                    mhc1_row["pct_with_section"] - mhc0_row["pct_with_section"]
                 ),
-                "mhh_median_words_nonempty": float(mhh_row["words_nonempty_median"]),
+                "mhc1_median_words_nonempty": float(mhc1_row["words_nonempty_median"]),
                 "mhc0_median_words_nonempty": float(mhc0_row["words_nonempty_median"]),
-                "median_word_difference_mhh_minus_mhc0": float(
-                    mhh_row["words_nonempty_median"] - mhc0_row["words_nonempty_median"]
+                "median_word_difference_mhc1_minus_mhc0": float(
+                    mhc1_row["words_nonempty_median"] - mhc0_row["words_nonempty_median"]
                 ),
-                "mhh_median_chars_nonempty": float(mhh_row["chars_nonempty_median"]),
+                "mhc1_median_chars_nonempty": float(mhc1_row["chars_nonempty_median"]),
                 "mhc0_median_chars_nonempty": float(mhc0_row["chars_nonempty_median"]),
-                "median_char_difference_mhh_minus_mhc0": float(
-                    mhh_row["chars_nonempty_median"] - mhc0_row["chars_nonempty_median"]
+                "median_char_difference_mhc1_minus_mhc0": float(
+                    mhc1_row["chars_nonempty_median"] - mhc0_row["chars_nonempty_median"]
                 ),
             }
         )
     return pd.DataFrame(rows).sort_values(
-        "pct_point_difference_mhh_minus_mhc0",
+        "pct_point_difference_mhc1_minus_mhc0",
         key=lambda values: values.abs(),
         ascending=False,
     )

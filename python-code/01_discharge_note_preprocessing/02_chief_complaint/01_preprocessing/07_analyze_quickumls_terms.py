@@ -5,7 +5,7 @@ chief-complaint files. It is a quality-control step for understanding which
 clinical concepts are most common after preprocessing and final filtering.
 
 Inputs:
-    chief_complaint_final/MHH1_psychotic_chief_complaints_final.parquet
+    chief_complaint_final/MHC1_psychotic_chief_complaints_final.parquet
     chief_complaint_final/MHC0_chief_complaints_final.parquet
 
 Outputs:
@@ -30,7 +30,7 @@ OUTPUT_DIR = SCRIPT_DIR / "analysis_output_chief_complaint_final"
 
 # Finalized cohort files produced by `05_finalize_chief_complaints.py`.
 INPUTS = {
-    "MHH1_psychotic": INPUT_DIR / "MHH1_psychotic_chief_complaints_final.parquet",
+    "MHC1_psychotic": INPUT_DIR / "MHC1_psychotic_chief_complaints_final.parquet",
     "MHC0": INPUT_DIR / "MHC0_chief_complaints_final.parquet",
 }
 

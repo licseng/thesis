@@ -10,7 +10,7 @@ It runs prediction on the held-out parquet files created by:
 
 Default evaluation files:
     - test_general.parquet
-    - test_fairness_mhh1_mhc0.parquet
+    - test_fairness_mhc1_mhc0.parquet
 
 Outputs:
     - one prediction CSV per evaluation split
@@ -95,7 +95,7 @@ def parse_args() -> argparse.Namespace:
         default=Path(
             os.environ.get(
                 "LOS_TEST_FAIRNESS_PATH",
-                DATASET_DIR / "test_fairness_mhh1_mhc0.parquet",
+                DATASET_DIR / "test_fairness_mhc1_mhc0.parquet",
             )
         ),
     )
@@ -385,13 +385,13 @@ def run_inference_for_split(
             "eligible_for_30d_readmission",
             "readmission_within_30d",
             "days_to_next_admission_after_discharge",
-            "is_mhh1_psychotic_admission",
+            "is_mhc1_psychotic_admission",
             "is_mhc0_admission",
-            "is_matched_mhh1_psychotic_admission",
+            "is_matched_mhc1_psychotic_admission",
             "is_matched_mhc0_admission",
-            "is_mhh1_psychotic_subject",
+            "is_mhc1_psychotic_subject",
             "is_mhc0_subject",
-            "is_matched_mhh1_psychotic_subject",
+            "is_matched_mhc1_psychotic_subject",
             "is_matched_mhc0_subject",
             "model_text_n_words",
             "n_model_sections_present",
@@ -458,7 +458,7 @@ def main() -> None:
 
     split_paths = {
         "test_general": args.test_general_path,
-        "test_fairness_mhh1_mhc0": args.test_fairness_path,
+        "test_fairness_mhc1_mhc0": args.test_fairness_path,
     }
     metrics_rows = []
     for split_name, path in split_paths.items():

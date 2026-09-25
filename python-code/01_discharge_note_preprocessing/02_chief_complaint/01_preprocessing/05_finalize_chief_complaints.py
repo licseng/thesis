@@ -12,12 +12,12 @@ The goal is to create a clean chief-complaint dataset for downstream semantic
 embedding and cohort matching.
 
 Inputs:
-    chief_complaint_preprocessed/MHH1_psychotic_chief_complaints_preprocessed.parquet
+    chief_complaint_preprocessed/MHC1_psychotic_chief_complaints_preprocessed.parquet
     chief_complaint_preprocessed/MHC0_chief_complaints_preprocessed.parquet
 
 Outputs:
-    chief_complaint_final/MHH1_psychotic_chief_complaints_final.parquet
-    chief_complaint_final/MHH1_psychotic_chief_complaints_final.csv
+    chief_complaint_final/MHC1_psychotic_chief_complaints_final.parquet
+    chief_complaint_final/MHC1_psychotic_chief_complaints_final.csv
     chief_complaint_final/MHC0_chief_complaints_final.parquet
     chief_complaint_final/MHC0_chief_complaints_final.csv
 """
@@ -36,7 +36,7 @@ OUTPUT_DIR = SCRIPT_DIR / "chief_complaint_final"
 
 # Cohort-specific preprocessed parquet files.
 INPUTS = {
-    "MHH1_psychotic": INPUT_DIR / "MHH1_psychotic_chief_complaints_preprocessed.parquet",
+    "MHC1_psychotic": INPUT_DIR / "MHC1_psychotic_chief_complaints_preprocessed.parquet",
     "MHC0": INPUT_DIR / "MHC0_chief_complaints_preprocessed.parquet",
 }
 

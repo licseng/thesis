@@ -2,7 +2,7 @@
 
 This script is an early planning check for the clinical prediction model. It
 does not build the full training population yet. It only asks whether the
-current matched MHH1/MHC0 cohort has enough outcome events for:
+current matched MHC1/MHC0 cohort has enough outcome events for:
 
     - 30-day readmission after discharge
     - prolonged hospital length of stay, defined as LOS > 7 days

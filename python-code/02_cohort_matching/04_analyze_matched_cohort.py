@@ -61,15 +61,15 @@ SELECTED_CHIEF_COMPLAINT_PHRASE_GROUPS = {
 # Columns expected in the matched-pairs output.
 REQUIRED_COLUMNS = {
     "pair_id",
-    "mhh_subject_id",
-    "mhh_hadm_id",
-    "mhh_chief_complaint_raw",
-    "mhh_chief_complaint_normalized",
-    "mhh_sex",
-    "mhh_age_at_admission",
-    "mhh_age_bin",
-    "mhh_insurance_group",
-    "mhh_elixhauser_score",
+    "mhc1_subject_id",
+    "mhc1_hadm_id",
+    "mhc1_chief_complaint_raw",
+    "mhc1_chief_complaint_normalized",
+    "mhc1_sex",
+    "mhc1_age_at_admission",
+    "mhc1_age_bin",
+    "mhc1_insurance_group",
+    "mhc1_elixhauser_score",
     "mhc0_subject_id",
     "mhc0_hadm_id",
     "mhc0_chief_complaint_raw",
@@ -102,15 +102,15 @@ LOWEST_COSINE_REVIEW_COLUMNS = [
     "used_quickumls_candidate_filter",
     "used_quickumls_filter_fallback",
     "candidate_pool_size",
-    "mhh_subject_id",
-    "mhh_hadm_id",
-    "mhh_chief_complaint_raw",
-    "mhh_quickumls_terms",
-    "mhh_quickumls_term_count",
-    "mhh_derived_quickumls_overlap_terms",
-    "mhh_derived_quickumls_overlap_term_count",
-    "mhh_quickumls_extracted_text",
-    "mhh_elixhauser_score",
+    "mhc1_subject_id",
+    "mhc1_hadm_id",
+    "mhc1_chief_complaint_raw",
+    "mhc1_quickumls_terms",
+    "mhc1_quickumls_term_count",
+    "mhc1_derived_quickumls_overlap_terms",
+    "mhc1_derived_quickumls_overlap_term_count",
+    "mhc1_quickumls_extracted_text",
+    "mhc1_elixhauser_score",
     "mhc0_subject_id",
     "mhc0_hadm_id",
     "mhc0_chief_complaint_raw",
@@ -181,27 +181,27 @@ def build_match_quality_summary(matched_pairs: pd.DataFrame) -> pd.DataFrame:
             - matched_pairs["abs_age_difference"].quantile(0.25)
         ),
         "max_abs_age_difference": matched_pairs["abs_age_difference"].max(),
-        "mean_mhh_age": matched_pairs["mhh_age_at_admission"].mean(),
+        "mean_mhc1_age": matched_pairs["mhc1_age_at_admission"].mean(),
         "mean_mhc0_age": matched_pairs["mhc0_age_at_admission"].mean(),
         "smd_age": standardized_mean_difference(
-            matched_pairs["mhh_age_at_admission"],
+            matched_pairs["mhc1_age_at_admission"],
             matched_pairs["mhc0_age_at_admission"],
         ),
-        "mean_mhh_elixhauser": matched_pairs["mhh_elixhauser_score"].mean(),
+        "mean_mhc1_elixhauser": matched_pairs["mhc1_elixhauser_score"].mean(),
         "mean_mhc0_elixhauser": matched_pairs["mhc0_elixhauser_score"].mean(),
         "smd_elixhauser": standardized_mean_difference(
-            matched_pairs["mhh_elixhauser_score"],
+            matched_pairs["mhc1_elixhauser_score"],
             matched_pairs["mhc0_elixhauser_score"],
         ),
         "n_same_sex_pairs": int(
-            (matched_pairs["mhh_sex"] == matched_pairs["mhc0_sex"]).sum()
+            (matched_pairs["mhc1_sex"] == matched_pairs["mhc0_sex"]).sum()
         ),
         "n_same_age_bin_pairs": int(
-            (matched_pairs["mhh_age_bin"] == matched_pairs["mhc0_age_bin"]).sum()
+            (matched_pairs["mhc1_age_bin"] == matched_pairs["mhc0_age_bin"]).sum()
         ),
         "n_same_insurance_group_pairs": int(
             (
-                matched_pairs["mhh_insurance_group"]
+                matched_pairs["mhc1_insurance_group"]
                 == matched_pairs["mhc0_insurance_group"]
             ).sum()
         ),
@@ -225,7 +225,7 @@ def build_match_type_counts(matched_pairs: pd.DataFrame) -> pd.DataFrame:
 def build_elixhauser_score_summary(matched_pairs: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for cohort_label, column in [
-        ("MHH_psychotic", "mhh_elixhauser_score"),
+        ("MHC1_psychotic", "mhc1_elixhauser_score"),
         ("only_MHC0", "mhc0_elixhauser_score"),
     ]:
         scores = pd.to_numeric(matched_pairs[column], errors="coerce")
@@ -251,11 +251,11 @@ def build_elixhauser_score_summary(matched_pairs: pd.DataFrame) -> pd.DataFrame:
             }
         )
 
-    exposed = pd.to_numeric(matched_pairs["mhh_elixhauser_score"], errors="coerce")
+    exposed = pd.to_numeric(matched_pairs["mhc1_elixhauser_score"], errors="coerce")
     control = pd.to_numeric(matched_pairs["mhc0_elixhauser_score"], errors="coerce")
     rows.append(
         {
-            "cohort": "balance_MHH_minus_MHC0",
+            "cohort": "balance_MHC1_minus_MHC0",
             "n_pairs": len(matched_pairs),
             "mean_elixhauser_score": exposed.mean() - control.mean(),
             "sd_elixhauser_score": pd.NA,
@@ -303,17 +303,17 @@ def build_elixhauser_difference_counts(matched_pairs: pd.DataFrame) -> pd.DataFr
 # Cross-tab exposed/control Elixhauser scores to inspect exact score pairings.
 def build_elixhauser_score_pair_counts(matched_pairs: pd.DataFrame) -> pd.DataFrame:
     counts = (
-        matched_pairs.groupby(["mhh_elixhauser_score", "mhc0_elixhauser_score"])
+        matched_pairs.groupby(["mhc1_elixhauser_score", "mhc0_elixhauser_score"])
         .agg(n_pairs=("pair_id", "size"))
         .reset_index()
         .sort_values(
-            ["n_pairs", "mhh_elixhauser_score", "mhc0_elixhauser_score"],
+            ["n_pairs", "mhc1_elixhauser_score", "mhc0_elixhauser_score"],
             ascending=[False, True, True],
         )
     )
     counts["pct_pairs"] = 100.0 * counts["n_pairs"] / len(matched_pairs)
     counts["elixhauser_score_difference"] = (
-        counts["mhh_elixhauser_score"] - counts["mhc0_elixhauser_score"]
+        counts["mhc1_elixhauser_score"] - counts["mhc0_elixhauser_score"]
     )
     counts["abs_elixhauser_score_difference"] = counts[
         "elixhauser_score_difference"
@@ -326,7 +326,7 @@ def build_elixhauser_score_pair_counts(matched_pairs: pd.DataFrame) -> pd.DataFr
 def build_insurance_group_distribution(matched_pairs: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for cohort_label, column in [
-        ("MHH_psychotic", "mhh_insurance_group"),
+        ("MHC1_psychotic", "mhc1_insurance_group"),
         ("only_MHC0", "mhc0_insurance_group"),
     ]:
         counts = (
@@ -425,22 +425,22 @@ def build_age_year_distance_counts(matched_pairs: pd.DataFrame) -> pd.DataFrame:
 # summaries. This keeps the exposed and control complaint distributions visible
 # separately while also allowing overall counts.
 def build_admission_level_complaints(matched_pairs: pd.DataFrame) -> pd.DataFrame:
-    mhh = matched_pairs.loc[
+    mhc1 = matched_pairs.loc[
         :,
         [
             "pair_id",
-            "mhh_subject_id",
-            "mhh_hadm_id",
-            "mhh_chief_complaint_normalized",
+            "mhc1_subject_id",
+            "mhc1_hadm_id",
+            "mhc1_chief_complaint_normalized",
         ],
     ].rename(
         columns={
-            "mhh_subject_id": "subject_id",
-            "mhh_hadm_id": "hadm_id",
-            "mhh_chief_complaint_normalized": "chief_complaint_normalized",
+            "mhc1_subject_id": "subject_id",
+            "mhc1_hadm_id": "hadm_id",
+            "mhc1_chief_complaint_normalized": "chief_complaint_normalized",
         }
     )
-    mhh["cohort"] = "MHH_psychotic"
+    mhc1["cohort"] = "MHC1_psychotic"
 
     mhc0 = matched_pairs.loc[
         :,
@@ -459,7 +459,7 @@ def build_admission_level_complaints(matched_pairs: pd.DataFrame) -> pd.DataFram
     )
     mhc0["cohort"] = "only_MHC0"
 
-    admissions = pd.concat([mhh, mhc0], ignore_index=True)
+    admissions = pd.concat([mhc1, mhc0], ignore_index=True)
     admissions["chief_complaint_normalized"] = (
         admissions["chief_complaint_normalized"].fillna("").astype(str).str.strip()
     )
@@ -530,7 +530,7 @@ def contains_token_phrase(text: str, phrase: str) -> bool:
 def build_selected_phrase_counts(matched_pairs: pd.DataFrame) -> pd.DataFrame:
     """Count manually selected complaint phrase groups by matched cohort side."""
     admissions = build_admission_level_complaints(matched_pairs)
-    cohorts = ["MHH_psychotic", "only_MHC0", "overall"]
+    cohorts = ["MHC1_psychotic", "only_MHC0", "overall"]
     rows = []
 
     for phrase_group, phrases in SELECTED_CHIEF_COMPLAINT_PHRASE_GROUPS.items():

@@ -31,8 +31,8 @@ FULL_NOTE_DIR = (
 PREFILTER_INPUT_PATH = (
     PSYCH_DIR / "psych_history_llm_input" / "filtered_psych_keyword_section_input.parquet"
 )
-FULL_MHH1_NOTES_PATH = (
-    FULL_NOTE_DIR / "MHH1_psychotic_matched_full_discharge_note_sections.parquet"
+FULL_MHC1_NOTES_PATH = (
+    FULL_NOTE_DIR / "MHC1_psychotic_matched_full_discharge_note_sections.parquet"
 )
 SECOND_STAGE_RESULTS_PATH = (
     DIAGNOSTIC_DIR
@@ -40,7 +40,7 @@ SECOND_STAGE_RESULTS_PATH = (
     / "diagnostic_overshadowing_section_classifier_results.csv"
 )
 
-MHH1_COHORT = "MHH1_psychotic"
+MHC1_COHORT = "MHC1_psychotic"
 RANDOM_SEED = 20260916
 N_PREFILTER_NOTES = 20
 N_POSITIVE_NOTES = 15
@@ -83,11 +83,11 @@ def normalize_ids(table: pd.DataFrame) -> pd.DataFrame:
     return output
 
 
-def load_full_mhh1_notes() -> pd.DataFrame:
-    """Load one full discharge note row per MHH1 admission."""
-    require_file(FULL_MHH1_NOTES_PATH)
+def load_full_mhc1_notes() -> pd.DataFrame:
+    """Load one full discharge note row per MHC1 admission."""
+    require_file(FULL_MHC1_NOTES_PATH)
     notes = pd.read_parquet(
-        FULL_MHH1_NOTES_PATH,
+        FULL_MHC1_NOTES_PATH,
         columns=[
             "cohort",
             "subject_id",
@@ -102,7 +102,7 @@ def load_full_mhh1_notes() -> pd.DataFrame:
     )
     notes = normalize_ids(notes)
     notes = notes.loc[
-        notes["cohort"].eq(MHH1_COHORT)
+        notes["cohort"].eq(MHC1_COHORT)
         & notes["full_note_text"].fillna("").astype(str).str.strip().ne("")
     ].copy()
     notes = notes.drop_duplicates(subset=["cohort", "subject_id", "hadm_id"])
@@ -124,7 +124,7 @@ def load_prefilter_admission_ids() -> pd.DataFrame:
         ],
     )
     prefilter = normalize_ids(prefilter)
-    prefilter = prefilter.loc[prefilter["cohort"].eq(MHH1_COHORT)].copy()
+    prefilter = prefilter.loc[prefilter["cohort"].eq(MHC1_COHORT)].copy()
     grouped = (
         prefilter.groupby(["cohort", "subject_id", "hadm_id"], as_index=False)
         .agg(
@@ -357,7 +357,7 @@ def main() -> None:
     """Build and save note-level diagnostic annotation/inspection CSVs."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    notes = load_full_mhh1_notes()
+    notes = load_full_mhc1_notes()
     results = load_second_stage_results()
 
     prefilter_notes = build_prefilter_note_annotation_sample(notes)

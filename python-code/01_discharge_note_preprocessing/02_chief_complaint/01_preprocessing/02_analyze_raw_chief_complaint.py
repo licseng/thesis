@@ -4,7 +4,7 @@ This script is a quality-control step before chief-complaint
 preprocessing. 
 
 Inputs:
-    chief_complaint_parquets/MHH1_psychotic_chief_complaints.parquet
+    chief_complaint_parquets/MHC1_psychotic_chief_complaints.parquet
     chief_complaint_parquets/MHC0_chief_complaints.parquet
 
 Outputs:
@@ -24,7 +24,7 @@ OUTPUT_DIR = SCRIPT_DIR / "analysis_output_chief_complaint_raw"
 
 # Input parquet files produced by the chief-complaint export step.
 INPUTS = {
-    "MHH1_psychotic": INPUT_DIR / "MHH1_psychotic_chief_complaints.parquet",
+    "MHC1_psychotic": INPUT_DIR / "MHC1_psychotic_chief_complaints.parquet",
     "MHC0": INPUT_DIR / "MHC0_chief_complaints.parquet",
 }
 

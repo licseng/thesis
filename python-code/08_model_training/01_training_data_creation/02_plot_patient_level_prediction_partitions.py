@@ -122,7 +122,7 @@ def plot_partition_totals(summary: pd.DataFrame) -> None:
 
 
 def plot_group_partition_counts(group_summary: pd.DataFrame) -> None:
-    """Plot MHH1/MHC0 full and matched cohort counts by partition."""
+    """Plot MHC1/MHC0 full and matched cohort counts by partition."""
     group_summary = add_partition_order(group_summary)
     group_order = sorted(group_summary["group_name"].unique())
     fig, axes = plt.subplots(2, 1, figsize=(12, 8), constrained_layout=True)
@@ -149,13 +149,13 @@ def plot_group_partition_counts(group_summary: pd.DataFrame) -> None:
         ax.tick_params(axis="x", labelrotation=25)
         ax.legend(title="Partition")
         annotate_bars(ax)
-    fig.suptitle("MHH1/MHC0 Representation in Prediction Partitions")
+    fig.suptitle("MHC1/MHC0 Representation in Prediction Partitions")
     fig.savefig(OUTPUT_DIR / "patient_partition_group_counts.png", dpi=200)
     plt.close(fig)
 
 
 def plot_unseen_fairness_pool(unseen: pd.DataFrame) -> None:
-    """Plot unseen test-pool MHH1/MHC0 counts available for fairness work."""
+    """Plot unseen test-pool MHC1/MHC0 counts available for fairness work."""
     unseen = unseen.sort_values("group_name")
     fig, axes = plt.subplots(1, 2, figsize=(12, 4), constrained_layout=True)
     for ax, column, title in [
@@ -193,7 +193,7 @@ def plot_general_test_summary(general_test: pd.DataFrame) -> None:
 
 
 def plot_general_test_group_overlap(overlap: pd.DataFrame) -> None:
-    """Plot MHH1/MHC0 rows that also landed in the general test sample."""
+    """Plot MHC1/MHC0 rows that also landed in the general test sample."""
     overlap = overlap.sort_values("group_name")
     fig, axes = plt.subplots(1, 2, figsize=(12, 4), constrained_layout=True)
     for ax, column, title in [
@@ -206,7 +206,7 @@ def plot_general_test_group_overlap(overlap: pd.DataFrame) -> None:
         ax.set_ylabel("Count")
         ax.tick_params(axis="x", labelrotation=25)
         annotate_bars(ax)
-    fig.suptitle("MHH1/MHC0 Overlap With General Test Sample")
+    fig.suptitle("MHC1/MHC0 Overlap With General Test Sample")
     fig.savefig(OUTPUT_DIR / "patient_partition_general_test_group_overlap.png", dpi=200)
     plt.close(fig)
 
@@ -229,11 +229,11 @@ def main() -> None:
     print(f"Wrote CSV summaries and plots to: {OUTPUT_DIR}")
     print("\nPartition summary:")
     print(tables["patient_partition_summary"].to_string(index=False))
-    print("\nMHH1/MHC0 partition summary:")
+    print("\nMHC1/MHC0 partition summary:")
     print(tables["patient_partition_group_summary"].to_string(index=False))
     print("\nGeneral test sample summary:")
     print(tables["patient_partition_general_test_summary"].to_string(index=False))
-    print("\nMHH1/MHC0 overlap with general test sample:")
+    print("\nMHC1/MHC0 overlap with general test sample:")
     print(tables["patient_partition_general_test_group_overlap"].to_string(index=False))
 
 
