@@ -74,7 +74,7 @@ def load_subject_admission_history() -> pd.DataFrame:
     if history is None:
         raise FileNotFoundError(
             "Missing subject admission history table. Rerun "
-            "sql-scripts/06_save_tables/02_Additional_info_export_on_cohort.sql."
+            "sql-scripts/Finalized-cohort/06-Import_matched_cohort_and_export_additional_information.sql."
         )
     history = history.copy()
     history["subject_id"] = pd.to_numeric(history["subject_id"], errors="raise").astype(int)

@@ -496,7 +496,7 @@ def build_prior_all_mimic_admission_summary(descriptors: pd.DataFrame) -> pd.Dat
     if missing:
         raise ValueError(
             "descriptors is missing full-admission-history columns. "
-            f"Rerun sql-scripts/06_save_tables/02_Additional_info_export_on_cohort.sql. "
+            f"Rerun sql-scripts/Finalized-cohort/06-Import_matched_cohort_and_export_additional_information.sql. "
             f"Missing: {missing}"
         )
     clean = descriptors.copy()
@@ -541,7 +541,7 @@ def build_prior_all_mimic_admission_distribution(
     if missing:
         raise ValueError(
             "descriptors is missing full-admission-history columns. "
-            f"Rerun sql-scripts/06_save_tables/02_Additional_info_export_on_cohort.sql. "
+            f"Rerun sql-scripts/Finalized-cohort/06-Import_matched_cohort_and_export_additional_information.sql. "
             f"Missing: {missing}"
         )
     clean = descriptors.copy()
@@ -614,7 +614,7 @@ def build_prior_all_mimic_window_summary(descriptors: pd.DataFrame) -> pd.DataFr
     if missing:
         raise ValueError(
             "descriptors is missing recent full-admission-history columns. "
-            f"Rerun sql-scripts/06_save_tables/02_Additional_info_export_on_cohort.sql. "
+            f"Rerun sql-scripts/Finalized-cohort/06-Import_matched_cohort_and_export_additional_information.sql. "
             f"Missing: {missing}"
         )
     clean = descriptors.copy()
@@ -680,7 +680,7 @@ def build_prior_all_mimic_interval_summary(descriptors: pd.DataFrame) -> pd.Data
     if missing:
         raise ValueError(
             "descriptors is missing full-admission interval columns. "
-            f"Rerun sql-scripts/06_save_tables/02_Additional_info_export_on_cohort.sql. "
+            f"Rerun sql-scripts/Finalized-cohort/06-Import_matched_cohort_and_export_additional_information.sql. "
             f"Missing: {missing}"
         )
 
@@ -770,7 +770,7 @@ def build_prior_all_mimic_interval_bucket_distribution(
     if missing:
         raise ValueError(
             "descriptors is missing prior discharge interval columns. "
-            f"Rerun sql-scripts/06_save_tables/02_Additional_info_export_on_cohort.sql. "
+            f"Rerun sql-scripts/Finalized-cohort/06-Import_matched_cohort_and_export_additional_information.sql. "
             f"Missing: {missing}"
         )
 
@@ -833,7 +833,7 @@ def build_prior_all_mimic_admission_rate_summary(
     if missing:
         raise ValueError(
             "descriptors is missing rate-denominator columns. "
-            f"Rerun sql-scripts/06_save_tables/02_Additional_info_export_on_cohort.sql. "
+            f"Rerun sql-scripts/Finalized-cohort/06-Import_matched_cohort_and_export_additional_information.sql. "
             f"Missing: {missing}"
         )
 
@@ -923,7 +923,7 @@ def add_prior_all_mimic_admission_rates(descriptors: pd.DataFrame) -> pd.DataFra
     if missing:
         raise ValueError(
             "descriptors is missing prior admission columns. "
-            f"Rerun sql-scripts/06_save_tables/02_Additional_info_export_on_cohort.sql. "
+            f"Rerun sql-scripts/Finalized-cohort/06-Import_matched_cohort_and_export_additional_information.sql. "
             f"Missing: {missing}"
         )
     clean = descriptors.copy()

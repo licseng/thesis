@@ -270,7 +270,7 @@ def build_model_dataset() -> pd.DataFrame:
     if missing:
         raise ValueError(
             "Descriptor table is missing utilization/readmission covariates. "
-            "Rerun sql-scripts/06_save_tables/02_Additional_info_export_on_cohort.sql. "
+            "Rerun sql-scripts/Finalized-cohort/06-Import_matched_cohort_and_export_additional_information.sql. "
             f"Missing: {missing}"
         )
 
