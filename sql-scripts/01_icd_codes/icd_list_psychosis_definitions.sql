@@ -92,11 +92,17 @@ SELECT DISTINCT
         WHEN d.icd_version = 10 AND d.icd_code LIKE 'F25%'
             THEN 'schizoaffective_disorder'
         WHEN d.icd_version = 10
-             AND d.icd_code IN ('F302', 'F312', 'F315', 'F3164')
+             AND d.icd_code IN ('F302', 'F312')
             THEN 'bipolar_manic_with_psychosis'
         WHEN d.icd_version = 9
-             AND d.icd_code IN ('29604', '29614', '29644', '29654', '29664')
+             AND d.icd_code IN ('29604', '29614', '29644')
             THEN 'bipolar_manic_with_psychosis'
+        WHEN (d.icd_version = 10 AND d.icd_code = 'F315')
+          OR (d.icd_version = 9 AND d.icd_code = '29654')
+            THEN 'bipolar_depressed_with_psychosis'
+        WHEN (d.icd_version = 10 AND d.icd_code = 'F3164')
+          OR (d.icd_version = 9 AND d.icd_code = '29664')
+            THEN 'bipolar_mixed_with_psychosis'
         WHEN d.icd_version = 10 AND d.icd_code IN ('F323', 'F333')
             THEN 'major_depression_with_psychosis'
         WHEN d.icd_version = 9 AND d.icd_code IN ('29624', '29634')
