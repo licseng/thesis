@@ -22,5 +22,5 @@ SELECT * FROM read_csv_auto('${mimic_dirs}/mimic-iv-note/2.2/note/discharge.csv.
 
 @set cohort_dirs=/Users/licseng/Downloads/thesis/thesis_code/python-code/
 
-CREATE TABLE IF NOT EXISTS matched_cohort AS
+CREATE OR REPLACE TABLE matched_cohort AS
 SELECT * FROM read_csv_auto('${cohort_dirs}02_cohort_matching/matched_cohort_output/matched_admission_ids_for_dbeaver.csv');
