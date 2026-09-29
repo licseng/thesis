@@ -390,8 +390,10 @@ def compute_candidate_pool_sizes(
 
 
 # Select the best candidate after cosine and Elixhauser filtering. Candidates
-# within `COSINE_TIE_TOLERANCE` of the best cosine similarity are tie-broken by
-# closer age, same age bin, and closer Elixhauser score.
+# within `COSINE_TIE_TOLERANCE` of the best cosine similarity are treated as
+# approximately equivalent semantic matches. Among them, prefer closer age,
+# then closer Elixhauser score; use cosine similarity only as the final
+# deterministic tie-breaker.
 def choose_best_candidate(
     candidates: pd.DataFrame,
     caliper: float,
@@ -410,11 +412,10 @@ def choose_best_candidate(
     eligible = eligible.sort_values(
         [
             "abs_age_difference",
-            "same_age_bin",
-            "cosine_similarity",
             "abs_elixhauser_difference",
+            "cosine_similarity",
         ],
-        ascending=[True, False, False, True],
+        ascending=[True, True, False],
     )
     return eligible.iloc[0]
 
