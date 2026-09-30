@@ -10,6 +10,9 @@ Default input folder:
 Expected file basenames, with .csv or .parquet extension:
     export_matched_cohort_descriptors
     export_matched_cohort_diagnoses
+    export_matched_cohort_subject_admission_history
+    export_matched_MHC1_psychosis_context
+    export_matched_MHC1_subject_diagnosis_history
     export_matched_cohort_labevents
     export_matched_cohort_microbiologyevents
     export_matched_cohort_poe
@@ -67,6 +70,8 @@ EXPORT_BASENAMES = {
     "descriptors": "export_matched_cohort_descriptors",
     "diagnoses": "export_matched_cohort_diagnoses",
     "subject_admission_history": "export_matched_cohort_subject_admission_history",
+    "psychosis_context": "export_matched_MHC1_psychosis_context",
+    "subject_diagnosis_history": "export_matched_MHC1_subject_diagnosis_history",
     "labevents": "export_matched_cohort_labevents",
     "microbiologyevents": "export_matched_cohort_microbiologyevents",
     "poe": "export_matched_cohort_poe",
@@ -1231,6 +1236,449 @@ def build_subject_utilization_summary(
                 }
             )
     return pd.DataFrame(rows).sort_values(["measure", "cohort"])
+
+
+# ---------------------------------------------------------------------------
+# Matched MHC1 psychosis context and psychiatric comorbidity
+# ---------------------------------------------------------------------------
+
+
+def classify_psychiatric_icd(row: pd.Series) -> str | None:
+    """Assign one mutually exclusive psychiatric category to an ICD code."""
+    if int(row.get("is_psychiatric_icd", 0) or 0) != 1:
+        return None
+    if int(row.get("is_psychosis_icd", 0) or 0) == 1:
+        return "psychotic"
+
+    version = int(row["icd_version"])
+    code = str(row["icd_code"]).strip().upper().replace(".", "")
+    title = str(row.get("long_title", "")).casefold()
+
+    if (
+        version == 10 and code.startswith(tuple(f"F{i:02d}" for i in range(10, 20)))
+    ) or (
+        version == 9
+        and (
+            code.startswith(("291", "292", "303", "304", "305"))
+            or code == "V113"
+        )
+    ):
+        return "substance_related"
+
+    if (
+        version == 10
+        and code.startswith(
+            (
+                "F30", "F31", "F32", "F33", "F34", "F38", "F39",
+                "F40", "F41", "F42", "F43", "F44", "F45", "F48", "F50",
+            )
+        )
+    ) or (
+        version == 9
+        and (
+            code.startswith(("296", "300", "306", "308", "309", "3071", "3132"))
+            or code in {"311", "3130", "3131", "V111", "V112", "V114"}
+        )
+    ):
+        return "internalizing"
+
+    if (
+        version == 10
+        and code.startswith(
+            (
+                "F60", "F61", "F62", "F63", "F64", "F65", "F66", "F68",
+                "F69", "F51", "F52", "F53", "F54", "F55", "F59",
+            )
+        )
+    ) or (
+        version == 9
+        and (
+            code.startswith(
+                (
+                    "301", "302", "3070", "3073", "3074", "3075", "3076",
+                    "3077", "3078", "3079", "312", "3133", "3138",
+                )
+            )
+            or code == "3139"
+        )
+    ):
+        return "personality_behavioral"
+
+    if (
+        version == 10
+        and code.startswith(
+            (
+                "F70", "F71", "F72", "F73", "F78", "F79", "F80", "F81",
+                "F82", "F83", "F84", "F88", "F89", "F90", "F91", "F92",
+                "F93", "F94", "F95", "F98",
+            )
+        )
+    ) or (
+        version == 9
+        and code.startswith(("299", "3072", "314", "315", "317", "318", "319"))
+    ):
+        return "neurodevelopmental"
+
+    if (
+        version == 10 and code.startswith(("F01", "F02", "F03"))
+    ) or (
+        version == 9
+        and (
+            code.startswith(("290", "2941", "2942"))
+            or code in {"2948", "2949"}
+        )
+    ):
+        return "neurocognitive"
+
+    if any(
+        phrase in title
+        for phrase in ("suicid", "self-harm", "self harm", "intentional self")
+    ):
+        return "suicide_self_harm"
+    return "other"
+
+
+def build_psychosis_context_summary(context: pd.DataFrame) -> pd.DataFrame:
+    """Summarize mutually exclusive psychosis-context versions."""
+    required = {
+        "subject_id",
+        "hadm_id",
+        "psychosis_context_version",
+    }
+    missing = sorted(required - set(context.columns))
+    if missing:
+        raise ValueError(f"psychosis_context is missing columns: {missing}")
+    clean = context.drop_duplicates(["subject_id", "hadm_id"]).copy()
+    n_subjects = clean["subject_id"].nunique()
+    n_admissions = clean["hadm_id"].nunique()
+    summary = (
+        clean.groupby("psychosis_context_version", dropna=False, as_index=False)
+        .agg(
+            n_subjects=("subject_id", "nunique"),
+            n_admissions=("hadm_id", "nunique"),
+        )
+    )
+    summary["pct_matched_MHC1_subjects"] = 100 * summary["n_subjects"] / n_subjects
+    summary["pct_matched_MHC1_admissions"] = (
+        100 * summary["n_admissions"] / n_admissions
+    )
+    return summary.sort_values("n_admissions", ascending=False)
+
+
+def build_matched_MHC1_comorbidity_outputs(
+    context: pd.DataFrame,
+    diagnosis_history: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Build aggregate nonpsychotic psychiatric-comorbidity summaries."""
+    context_required = {"subject_id", "hadm_id", "admittime"}
+    history_required = {
+        "subject_id",
+        "hadm_id",
+        "admittime",
+        "seq_num",
+        "icd_version",
+        "icd_code",
+        "long_title",
+        "is_psychiatric_icd",
+        "is_psychosis_icd",
+    }
+    missing_context = sorted(context_required - set(context.columns))
+    missing_history = sorted(history_required - set(diagnosis_history.columns))
+    if missing_context or missing_history:
+        raise ValueError(
+            "Missing comorbidity inputs: "
+            f"context={missing_context}, diagnosis_history={missing_history}"
+        )
+
+    targets = context.loc[:, ["subject_id", "hadm_id", "admittime"]].drop_duplicates()
+    targets = targets.rename(
+        columns={"hadm_id": "target_hadm_id", "admittime": "target_admittime"}
+    )
+    targets["target_admittime"] = pd.to_datetime(
+        targets["target_admittime"], errors="coerce"
+    )
+
+    history = diagnosis_history.copy()
+    history["admittime"] = pd.to_datetime(history["admittime"], errors="coerce")
+    history["seq_num"] = pd.to_numeric(history["seq_num"], errors="coerce")
+    history["psych_category"] = history.apply(classify_psychiatric_icd, axis=1)
+    history = history.loc[
+        history["psych_category"].notna()
+        & history["psych_category"].ne("psychotic")
+    ].copy()
+
+    joined = targets.merge(history, on="subject_id", how="left")
+    joined["has_current_secondary_comorbidity"] = (
+        joined["hadm_id"].eq(joined["target_hadm_id"])
+        & joined["seq_num"].gt(1)
+    )
+    joined["has_prior_comorbidity"] = joined["admittime"].lt(
+        joined["target_admittime"]
+    )
+    joined = joined.loc[
+        joined["has_current_secondary_comorbidity"]
+        | joined["has_prior_comorbidity"]
+    ].copy()
+
+    if joined.empty:
+        empty = pd.DataFrame()
+        return empty, empty, empty
+
+    admission_categories = (
+        joined.groupby(
+            ["subject_id", "target_hadm_id", "psych_category"],
+            as_index=False,
+        )
+        .agg(
+            has_prior_comorbidity=("has_prior_comorbidity", "max"),
+            has_current_secondary_comorbidity=(
+                "has_current_secondary_comorbidity",
+                "max",
+            ),
+        )
+        .rename(
+            columns={
+                "target_hadm_id": "hadm_id",
+                "psych_category": "comorbidity_category",
+            }
+        )
+    )
+
+    n_subjects = targets["subject_id"].nunique()
+    n_admissions = targets["target_hadm_id"].nunique()
+    category_summary = (
+        admission_categories.groupby("comorbidity_category", as_index=False)
+        .agg(
+            n_subjects=("subject_id", "nunique"),
+            n_admissions=("hadm_id", "nunique"),
+        )
+    )
+    category_summary["pct_matched_MHC1_subjects"] = (
+        100 * category_summary["n_subjects"] / n_subjects
+    )
+    category_summary["pct_matched_MHC1_admissions"] = (
+        100 * category_summary["n_admissions"] / n_admissions
+    )
+    category_summary = category_summary.sort_values(
+        "n_admissions", ascending=False
+    )
+
+    def context_label(row: pd.Series) -> str:
+        if row["has_prior_comorbidity"] and row["has_current_secondary_comorbidity"]:
+            return "prior_and_current"
+        if row["has_prior_comorbidity"]:
+            return "prior_only"
+        return "current_secondary_only"
+
+    admission_categories["comorbidity_context"] = admission_categories.apply(
+        context_label,
+        axis=1,
+    )
+    context_summary = (
+        admission_categories.groupby(
+            ["comorbidity_category", "comorbidity_context"], as_index=False
+        )
+        .agg(
+            n_subjects=("subject_id", "nunique"),
+            n_admissions=("hadm_id", "nunique"),
+        )
+        .sort_values(["comorbidity_category", "comorbidity_context"])
+    )
+
+    category_counts = (
+        admission_categories.groupby(["subject_id", "hadm_id"])[
+            "comorbidity_category"
+        ]
+        .nunique()
+        .rename("n_comorbidity_categories")
+        .reset_index()
+    )
+    all_targets = targets.rename(columns={"target_hadm_id": "hadm_id"})[
+        ["subject_id", "hadm_id"]
+    ]
+    category_counts = all_targets.merge(
+        category_counts,
+        on=["subject_id", "hadm_id"],
+        how="left",
+    )
+    category_counts["n_comorbidity_categories"] = (
+        category_counts["n_comorbidity_categories"].fillna(0).astype(int)
+    )
+    count_distribution = (
+        category_counts.groupby("n_comorbidity_categories", as_index=False)
+        .agg(
+            n_subjects=("subject_id", "nunique"),
+            n_admissions=("hadm_id", "nunique"),
+        )
+        .sort_values("n_comorbidity_categories")
+    )
+    return category_summary, context_summary, count_distribution
+
+
+# ---------------------------------------------------------------------------
+# Future readmissions and complete subject-level MIMIC utilization
+# ---------------------------------------------------------------------------
+
+
+def build_future_readmission_summary(
+    matched_ids: pd.DataFrame,
+    descriptors: pd.DataFrame,
+    admission_history: pd.DataFrame,
+) -> pd.DataFrame:
+    """Summarize subsequent MIMIC admissions after each matched discharge."""
+    targets = matched_ids.merge(
+        descriptors[["cohort", "subject_id", "hadm_id", "dischtime"]],
+        on=["cohort", "subject_id", "hadm_id"],
+        how="left",
+        validate="one_to_one",
+    )
+    targets["dischtime"] = pd.to_datetime(targets["dischtime"], errors="coerce")
+    targets = targets.rename(
+        columns={"hadm_id": "target_hadm_id", "dischtime": "target_dischtime"}
+    )
+
+    history = admission_history.copy()
+    if "matched_cohort" in history.columns and "cohort" not in history.columns:
+        history = history.rename(columns={"matched_cohort": "cohort"})
+    history = history[["cohort", "subject_id", "hadm_id", "admittime"]].drop_duplicates()
+    history["admittime"] = pd.to_datetime(history["admittime"], errors="coerce")
+    history = history.rename(
+        columns={"hadm_id": "next_hadm_id", "admittime": "next_admittime"}
+    )
+
+    possible = targets.merge(history, on=["cohort", "subject_id"], how="left")
+    possible["days_to_next_admission"] = (
+        possible["next_admittime"] - possible["target_dischtime"]
+    ).dt.total_seconds() / 86400.0
+    subsequent = possible.loc[possible["days_to_next_admission"].gt(0)].copy()
+
+    key = ["cohort", "subject_id", "target_hadm_id"]
+    if subsequent.empty:
+        counts = targets[key].copy()
+        counts["n_subsequent_admissions"] = 0
+        counts["days_to_next_admission"] = pd.NA
+        for days in (30, 90, 365):
+            counts[f"has_readmission_within_{days}d"] = 0
+    else:
+        counts = (
+            subsequent.groupby(key, as_index=False)
+            .agg(
+                n_subsequent_admissions=("next_hadm_id", "nunique"),
+                days_to_next_admission=("days_to_next_admission", "min"),
+            )
+        )
+        for days in (30, 90, 365):
+            flags = (
+                subsequent.assign(
+                    flag=subsequent["days_to_next_admission"].le(days).astype(int)
+                )
+                .groupby(key, as_index=False)["flag"]
+                .max()
+                .rename(columns={"flag": f"has_readmission_within_{days}d"})
+            )
+            counts = counts.merge(flags, on=key, how="left")
+        counts = targets[key].merge(counts, on=key, how="left")
+        counts["n_subsequent_admissions"] = (
+            counts["n_subsequent_admissions"].fillna(0).astype(int)
+        )
+        for days in (30, 90, 365):
+            column = f"has_readmission_within_{days}d"
+            counts[column] = counts[column].fillna(0).astype(int)
+
+    rows = []
+    for cohort, group in counts.groupby("cohort"):
+        observed_next = group.loc[group["days_to_next_admission"].notna()]
+        rows.append(
+            {
+                "cohort": cohort,
+                "n_subjects": group["subject_id"].nunique(),
+                "n_matched_admissions": group["target_hadm_id"].nunique(),
+                "mean_subsequent_MIMIC_admissions": group[
+                    "n_subsequent_admissions"
+                ].mean(),
+                "median_subsequent_MIMIC_admissions": group[
+                    "n_subsequent_admissions"
+                ].median(),
+                "pct_readmitted_within_30d": 100
+                * group["has_readmission_within_30d"].mean(),
+                "pct_readmitted_within_90d": 100
+                * group["has_readmission_within_90d"].mean(),
+                "pct_readmitted_within_365d": 100
+                * group["has_readmission_within_365d"].mean(),
+                "median_days_to_next_admission_if_any": observed_next[
+                    "days_to_next_admission"
+                ].median(),
+            }
+        )
+    return pd.DataFrame(rows).sort_values("cohort")
+
+
+def build_total_MIMIC_admissions_per_subject_outputs(
+    matched_ids: pd.DataFrame,
+    admission_history: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Summarize matched and total-MIMIC admissions with one row per subject."""
+    history = admission_history.copy()
+    if "matched_cohort" in history.columns and "cohort" not in history.columns:
+        history = history.rename(columns={"matched_cohort": "cohort"})
+    totals = (
+        history.groupby(["cohort", "subject_id"], as_index=False)
+        .agg(n_total_MIMIC_admissions=("hadm_id", "nunique"))
+    )
+    matched = (
+        matched_ids.groupby(["cohort", "subject_id"], as_index=False)
+        .agg(n_matched_admissions=("hadm_id", "nunique"))
+    )
+    per_subject = matched.merge(
+        totals,
+        on=["cohort", "subject_id"],
+        how="left",
+        validate="one_to_one",
+    )
+    rows = []
+    for cohort, group in per_subject.groupby("cohort"):
+        rows.append(
+            {
+                "cohort": cohort,
+                "n_subjects": group["subject_id"].nunique(),
+                "n_matched_admissions": int(group["n_matched_admissions"].sum()),
+                "mean_matched_admissions_per_subject": group[
+                    "n_matched_admissions"
+                ].mean(),
+                "median_matched_admissions_per_subject": group[
+                    "n_matched_admissions"
+                ].median(),
+                "max_matched_admissions_per_subject": group[
+                    "n_matched_admissions"
+                ].max(),
+                "mean_total_MIMIC_admissions_per_subject": group[
+                    "n_total_MIMIC_admissions"
+                ].mean(),
+                "median_total_MIMIC_admissions_per_subject": group[
+                    "n_total_MIMIC_admissions"
+                ].median(),
+                "q1_total_MIMIC_admissions_per_subject": group[
+                    "n_total_MIMIC_admissions"
+                ].quantile(0.25),
+                "q3_total_MIMIC_admissions_per_subject": group[
+                    "n_total_MIMIC_admissions"
+                ].quantile(0.75),
+                "max_total_MIMIC_admissions_per_subject": group[
+                    "n_total_MIMIC_admissions"
+                ].max(),
+            }
+        )
+    summary = pd.DataFrame(rows).sort_values("cohort")
+    distribution = (
+        per_subject.groupby(["cohort", "n_total_MIMIC_admissions"], as_index=False)
+        .agg(n_subjects=("subject_id", "nunique"))
+        .sort_values(["cohort", "n_total_MIMIC_admissions"])
+    )
+    denominators = per_subject.groupby("cohort")["subject_id"].nunique().to_dict()
+    distribution["pct_subjects"] = distribution.apply(
+        lambda row: 100 * row["n_subjects"] / denominators[row["cohort"]], axis=1
+    )
+    return summary, distribution
 
 
 def write_outputs(

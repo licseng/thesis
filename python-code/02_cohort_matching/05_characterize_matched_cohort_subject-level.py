@@ -27,6 +27,7 @@ def main() -> None:
         "poe": common.load_optional_table("poe"),
         "poe_detail": common.load_optional_table("poe_detail"),
     }
+    admission_history = common.load_required_table("subject_admission_history")
 
     admissions_per_subject_summary = common.build_admissions_per_subject_summary(
         matched_ids,
@@ -76,6 +77,13 @@ def main() -> None:
     )
     subject_utilization_summary = common.build_subject_utilization_summary(
         subject_utilization_counts,
+    )
+    (
+        total_MIMIC_admissions_per_subject_summary,
+        total_MIMIC_admissions_per_subject_distribution,
+    ) = common.build_total_MIMIC_admissions_per_subject_outputs(
+        matched_ids,
+        admission_history,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -143,6 +151,16 @@ def main() -> None:
         output_dir / "matched_cohort_subject_utilization_summary.csv",
         index=False,
     )
+    total_MIMIC_admissions_per_subject_summary.to_csv(
+        output_dir
+        / "matched_cohort_total_MIMIC_admissions_per_subject_summary.csv",
+        index=False,
+    )
+    total_MIMIC_admissions_per_subject_distribution.to_csv(
+        output_dir
+        / "matched_cohort_total_MIMIC_admissions_per_subject_distribution.csv",
+        index=False,
+    )
 
     print(f"Saved subject-level characterization outputs to: {output_dir}")
     print("\n=== Admissions Per Subject Summary ===")
@@ -167,6 +185,8 @@ def main() -> None:
     print(readmission_cap_pair_loss.to_string(index=False))
     print("\n=== Subject-Level Utilization Summary ===")
     print(subject_utilization_summary.to_string(index=False))
+    print("\n=== Matched and Total MIMIC Admissions Per Subject ===")
+    print(total_MIMIC_admissions_per_subject_summary.to_string(index=False))
 
 
 if __name__ == "__main__":

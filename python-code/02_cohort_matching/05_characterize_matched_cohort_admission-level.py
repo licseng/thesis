@@ -28,6 +28,9 @@ def main() -> None:
         "poe": common.load_optional_table("poe"),
         "poe_detail": common.load_optional_table("poe_detail"),
     }
+    psychosis_context = common.load_required_table("psychosis_context")
+    diagnosis_history = common.load_required_table("subject_diagnosis_history")
+    admission_history = common.load_required_table("subject_admission_history")
 
     descriptor_completeness = common.build_descriptor_completeness(
         matched_ids,
@@ -60,6 +63,22 @@ def main() -> None:
         ],
         ignore_index=True,
     )
+    psychosis_context_summary = common.build_psychosis_context_summary(
+        psychosis_context
+    )
+    (
+        psychiatric_comorbidity_summary,
+        psychiatric_comorbidity_context_summary,
+        psychiatric_comorbidity_count_distribution,
+    ) = common.build_matched_MHC1_comorbidity_outputs(
+        psychosis_context,
+        diagnosis_history,
+    )
+    future_readmission_summary = common.build_future_readmission_summary(
+        matched_ids,
+        descriptors,
+        admission_history,
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     descriptor_completeness.to_csv(
@@ -86,12 +105,39 @@ def main() -> None:
         output_dir / "matched_cohort_optional_category_distribution.csv",
         index=False,
     )
+    psychosis_context_summary.to_csv(
+        output_dir / "matched_MHC1_psychosis_context_summary.csv",
+        index=False,
+    )
+    psychiatric_comorbidity_summary.to_csv(
+        output_dir / "matched_MHC1_psychiatric_comorbidity_summary.csv",
+        index=False,
+    )
+    psychiatric_comorbidity_context_summary.to_csv(
+        output_dir / "matched_MHC1_psychiatric_comorbidity_context_summary.csv",
+        index=False,
+    )
+    psychiatric_comorbidity_count_distribution.to_csv(
+        output_dir
+        / "matched_MHC1_psychiatric_comorbidity_count_distribution.csv",
+        index=False,
+    )
+    future_readmission_summary.to_csv(
+        output_dir / "matched_cohort_future_readmission_summary.csv",
+        index=False,
+    )
 
     print(f"Saved admission-level characterization outputs to: {output_dir}")
     print("\n=== Descriptor Completeness ===")
     print(descriptor_completeness.to_string(index=False))
     print("\n=== Admission-Level Utilization Summary ===")
     print(utilization_summary.to_string(index=False))
+    print("\n=== Matched MHC1 Psychosis Context ===")
+    print(psychosis_context_summary.to_string(index=False))
+    print("\n=== Matched MHC1 Psychiatric Comorbidity ===")
+    print(psychiatric_comorbidity_summary.to_string(index=False))
+    print("\n=== Future Readmission Summary ===")
+    print(future_readmission_summary.to_string(index=False))
 
 
 if __name__ == "__main__":
