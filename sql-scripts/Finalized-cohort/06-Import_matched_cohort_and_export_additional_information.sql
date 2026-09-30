@@ -464,3 +464,82 @@ LEFT JOIN psychiatric_icd_codes p
 LEFT JOIN grey_zone_physical_icd_codes g
     ON d.icd_version = g.icd_version
    AND d.icd_code = g.icd_code;
+
+
+-- 7. Psychosis-context flags for matched MHC1 admissions
+-- One row per matched MHC1-psychosis admission. These flags allow Python to
+-- characterize prior-only, current-secondary-only, and combined context.
+CREATE OR REPLACE TABLE export_matched_MHC1_psychosis_context AS
+SELECT
+    mc.pair_id,
+    mc.matched_role,
+    mc.cohort,
+    mc.subject_id,
+    mc.hadm_id,
+    m.admittime,
+    m.has_prior_psychiatric_history,
+    m.has_current_secondary_psychiatric_icd,
+    m.mhc1_version,
+    m.has_prior_psychosis,
+    m.has_current_secondary_psychosis,
+    m.psychosis_context_version
+FROM matched_cohort mc
+JOIN finalized_MHC1_psychosis_excluding_over_50_MIMIC_admissions m
+    ON mc.subject_id = m.subject_id
+   AND mc.hadm_id = m.hadm_id
+WHERE mc.cohort = 'MHC1_psychotic'
+  AND mc.matched_role = 'case';
+
+
+-- 8. Complete coded-diagnosis history for matched MHC1 subjects
+-- This contains structured ICD data only; it contains no note text. Previous
+-- admissions are required to distinguish prior from current comorbidity.
+CREATE OR REPLACE TABLE export_matched_MHC1_subject_diagnosis_history AS
+WITH matched_MHC1_subjects AS (
+    SELECT DISTINCT subject_id
+    FROM matched_cohort
+    WHERE cohort = 'MHC1_psychotic'
+      AND matched_role = 'case'
+)
+SELECT
+    ms.subject_id,
+    a.hadm_id,
+    a.admittime,
+    a.dischtime,
+    d.seq_num,
+    d.icd_version,
+    d.icd_code,
+    dd.long_title,
+    CASE WHEN p.icd_code IS NOT NULL THEN 1 ELSE 0 END
+        AS is_psychiatric_icd,
+    CASE WHEN psy.icd_code IS NOT NULL THEN 1 ELSE 0 END
+        AS is_psychosis_icd
+FROM matched_MHC1_subjects ms
+JOIN admissions a
+    ON ms.subject_id = a.subject_id
+JOIN diagnoses_icd d
+    ON a.subject_id = d.subject_id
+   AND a.hadm_id = d.hadm_id
+LEFT JOIN d_icd_diagnoses dd
+    ON d.icd_version = dd.icd_version
+   AND d.icd_code = dd.icd_code
+LEFT JOIN psychiatric_icd_codes p
+    ON d.icd_version = p.icd_version
+   AND d.icd_code = p.icd_code
+LEFT JOIN finalized_psychosis_icd_codes_extended psy
+    ON d.icd_version = psy.icd_version
+   AND d.icd_code = psy.icd_code;
+
+
+SELECT
+    (SELECT COUNT(*) FROM export_matched_MHC1_psychosis_context)
+        AS n_matched_MHC1_context_rows,
+    (SELECT COUNT(DISTINCT hadm_id)
+     FROM export_matched_MHC1_psychosis_context)
+        AS n_matched_MHC1_context_admissions,
+    (SELECT COUNT(DISTINCT subject_id)
+     FROM export_matched_MHC1_subject_diagnosis_history)
+        AS n_MHC1_subjects_with_diagnosis_history,
+    (SELECT COUNT(DISTINCT hadm_id)
+     FROM export_matched_MHC1_subject_diagnosis_history)
+        AS n_MHC1_history_admissions_with_diagnoses;

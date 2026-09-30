@@ -7,8 +7,8 @@
 --
 -- This script contains descriptive analyses of the complete eligible
 -- pre-matching MHC1-psychosis pool, including its psychosis-code composition.
--- Matched-cohort psychiatric comorbidity and utilization are analyzed only in
--- 07-Matched_cohort_characterization.sql.
+-- Matched-cohort psychiatric comorbidity and utilization are analyzed by the
+-- Python admission- and subject-level characterization scripts after stage 6.
 -- Characterization uses the stage-3 cohort excluding subjects with more than
 -- 50 total MIMIC-IV hospital admissions.
 -- Add further cohort-characterization analyses below.
