@@ -202,7 +202,10 @@ def table_columns(con: duckdb.DuckDBPyConnection, table_name: str) -> list[str]:
 
 def metadata_columns(con: duckdb.DuckDBPyConnection, table_name: str) -> list[str]:
     """Identify source columns that should be copied through as metadata."""
-    excluded_columns = {"subject_id", "hadm_id", "text"}
+    # `cohort` is assigned from MATCHED_EXPORTS below so the parser has one
+    # stable label even when the finalized SQL export already carries its own
+    # cohort column.
+    excluded_columns = {"subject_id", "hadm_id", "text", "cohort"}
     return [column for column in table_columns(con, table_name) if column not in excluded_columns]
 
 
