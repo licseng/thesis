@@ -36,6 +36,7 @@ def main() -> None:
         matched_ids,
         descriptors,
     )
+    numeric_demographic_summary = common.build_matched_numeric_demographic_summary()
     categorical_distribution = common.build_categorical_distribution(descriptors)
     categorical_balance = common.build_categorical_balance(categorical_distribution)
     utilization_counts = common.build_event_counts_by_admission(
@@ -85,6 +86,10 @@ def main() -> None:
         output_dir / "matched_cohort_descriptor_completeness.csv",
         index=False,
     )
+    numeric_demographic_summary.to_csv(
+        output_dir / "matched_cohort_numeric_demographic_summary.csv",
+        index=False,
+    )
     categorical_distribution.to_csv(
         output_dir / "matched_cohort_categorical_distribution.csv",
         index=False,
@@ -130,6 +135,8 @@ def main() -> None:
     print(f"Saved admission-level characterization outputs to: {output_dir}")
     print("\n=== Descriptor Completeness ===")
     print(descriptor_completeness.to_string(index=False))
+    print("\n=== Numeric Demographics ===")
+    print(numeric_demographic_summary.to_string(index=False))
     print("\n=== Admission-Level Utilization Summary ===")
     print(utilization_summary.to_string(index=False))
     print("\n=== Matched MHC1 Psychosis Context ===")

@@ -41,6 +41,7 @@ DB_PATH = Path(
     )
 )
 MATCHED_IDS_PATH = SCRIPT_DIR / "matched_cohort_output" / "matched_admission_ids_for_dbeaver.csv"
+MATCHED_PAIRS_PATH = SCRIPT_DIR / "matched_cohort_output" / "matched_pairs.csv"
 INPUT_DIR = Path(
     os.environ.get(
         "MATCHED_COHORT_CHARACTERIZATION_INPUT_DIR",
@@ -81,6 +82,7 @@ SUPPORTED_SUFFIXES = [".parquet", ".csv", ".csv.gz"]
 ID_COLUMNS = ["cohort", "subject_id", "hadm_id"]
 
 CATEGORICAL_DESCRIPTOR_COLUMNS = [
+    "gender",
     "insurance",
     "race",
     "race_group",
@@ -92,6 +94,49 @@ CATEGORICAL_DESCRIPTOR_COLUMNS = [
     "admission_location",
     "discharge_location",
 ]
+
+
+def build_matched_numeric_demographic_summary() -> pd.DataFrame:
+    """Summarize age and Elixhauser score for each matched admission cohort."""
+    if not MATCHED_PAIRS_PATH.exists():
+        raise FileNotFoundError(f"Missing matched-pairs file: {MATCHED_PAIRS_PATH}")
+
+    matched_pairs = pd.read_csv(
+        MATCHED_PAIRS_PATH,
+        usecols=[
+            "mhc0_age_at_admission",
+            "mhc0_elixhauser_score",
+            "mhc1_age_at_admission",
+            "mhc1_elixhauser_score",
+        ],
+    )
+    rows: list[dict[str, object]] = []
+    for cohort, prefix in [("MHC0", "mhc0"), ("MHC1_psychotic", "mhc1")]:
+        for variable, suffix in [
+            ("age_at_admission", "age_at_admission"),
+            ("elixhauser_score", "elixhauser_score"),
+        ]:
+            values = pd.to_numeric(
+                matched_pairs[f"{prefix}_{suffix}"], errors="coerce"
+            )
+            observed = values.dropna()
+            rows.append(
+                {
+                    "variable": variable,
+                    "cohort": cohort,
+                    "n_admissions": len(values),
+                    "n_observed": len(observed),
+                    "n_missing": int(values.isna().sum()),
+                    "mean": observed.mean(),
+                    "sd": observed.std(ddof=1),
+                    "median": observed.median(),
+                    "q1": observed.quantile(0.25),
+                    "q3": observed.quantile(0.75),
+                    "min": observed.min(),
+                    "max": observed.max(),
+                }
+            )
+    return pd.DataFrame(rows)
 
 
 def find_export_path(basename: str, required: bool = False) -> Path | None:
