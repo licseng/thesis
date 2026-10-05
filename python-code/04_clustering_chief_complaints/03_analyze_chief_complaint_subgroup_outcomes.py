@@ -1,19 +1,10 @@
-"""Analyze outcomes/utilization inside chief-complaint subgroups.
+"""Describe work-up and stay duration within five complete pure-CC pairs.
 
-This script starts from the exclusive chief-complaint subgroup assignments made
-by `01_describe_chief_complaint_subgroups.py` and summarizes the 2x2 cells:
-
-    cohort x exclusive_combined_group
-
-The current exclusive groups are:
-    - abdominal_pain_nausea_vomiting
-    - chest_pain_shortness_of_breath
-
-Admissions that matched both groups are excluded by the upstream assignment
-script, so the two chief-complaint groups are non-overlapping here.
-
-Outputs are aggregate summaries plus one ID-level analysis dataset. No raw chief
-complaint text or discharge-note text is written by this script.
+Run 01_describe_chief_complaint_subgroups.py first. The primary summaries retain
+both members of an original matched pair with valid values for each outcome.
+Missing/negative stay durations are excluded per outcome, without converting
+missing event counts to zero. Event counts represent recorded database rows.
+No inference or clinical free-text export is performed.
 """
 
 from __future__ import annotations
@@ -429,48 +420,74 @@ def build_pair_membership_summary(analysis: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values(GROUP_COLUMN)
 
 
-def main() -> None:
-    """Write chief-complaint subgroup outcome/utilization summaries."""
-    assignments = load_subgroup_assignments()
+
+# Current paired pure-subgroup analysis. Existing helper functions remain
+# available to the optional all-pure-admission exploration script.
+PAIRED_INPUT_DIR = SCRIPT_DIR / "analysis_output_complete_top_five_cc_pairs"
+PAIRED_WORKUP_OUTPUT_DIR = SCRIPT_DIR / "analysis_output_complete_cc_pair_workup"
+WORKUP_COUNT_COLUMNS = ["n_labevents_rows", "n_microbiologyevents_rows", "n_poe_rows", "n_poe_detail_rows"]
+WORKUP_MEASURES = ["hospital_los_days", "ed_los_hours", *WORKUP_COUNT_COLUMNS]
+
+def main():
+    selected = pd.read_csv(PAIRED_INPUT_DIR / "complete_cc_pair_admissions.csv")
     descriptors = load_descriptors()
-    utilization_counts = load_or_build_utilization_counts()
-    analysis = build_analysis_dataset(assignments, descriptors, utilization_counts)
+    counts = load_or_build_utilization_counts()
+    if descriptors.duplicated(ID_COLUMNS).any() or counts.duplicated(ID_COLUMNS).any():
+        raise ValueError("Duplicate descriptor/utilization admission keys")
+    for label, table in [("descriptors", descriptors), ("counts", counts)]:
+        check = selected[ID_COLUMNS].merge(table[ID_COLUMNS], on=ID_COLUMNS, how="left", indicator=True, validate="one_to_one")
+        if not check._merge.eq("both").all():
+            raise ValueError(f"Missing retained admission rows in {label}")
+    data = selected.merge(descriptors[ID_COLUMNS + ["hospital_los_days", "ed_los_hours"]],
+                          on=ID_COLUMNS, how="left", validate="one_to_one")
+    data = data.merge(counts[ID_COLUMNS + WORKUP_COUNT_COLUMNS], on=ID_COLUMNS, how="left", validate="one_to_one")
+    if not data.groupby("pair_id").size().eq(2).all():
+        raise ValueError("Incomplete pair after joins")
+    qc = []
+    for measure in WORKUP_MEASURES:
+        values = pd.to_numeric(data[measure], errors="raise")
+        negative = values.lt(0)
+        qc.append({"measure": measure, "n_missing_input": int(values.isna().sum()),
+                   "n_negative_input": int(negative.sum())})
+        if measure in WORKUP_COUNT_COLUMNS and (negative.any() or values.isna().any()):
+            raise ValueError(f"Missing/negative recorded counts: {measure}")
+        data[measure] = values.mask(negative)
+    for count in WORKUP_COUNT_COLUMNS:
+        data[count + "_per_hospital_day"] = data[count] / data.hospital_los_days.where(data.hospital_los_days.gt(0))
+    measures = [*WORKUP_MEASURES, *(c + "_per_hospital_day" for c in WORKUP_COUNT_COLUMNS)]
+    rows = []
+    pair_rows = []
+    for (group, cohort), frame in data.groupby(["pure_cc_group", "cohort"]):
+        for measure in measures:
+            group_data = data[data.pure_cc_group.eq(group)]
+            valid_counts = group_data[group_data[measure].notna()].groupby("pair_id").size()
+            complete_ids = valid_counts[valid_counts.eq(2)].index
+            for sample in ["available_admissions", "complete_outcome_pairs"]:
+                selected_frame = frame if sample == "available_admissions" else frame[frame.pair_id.isin(complete_ids)]
+                values = selected_frame[measure].dropna()
+                rows.append({"cc_group": group, "cohort": cohort, "measure": measure, "analysis_sample": sample,
+                             "n_admissions": len(selected_frame), "n_nonmissing": len(values), "n_missing": selected_frame[measure].isna().sum(),
+                             "mean": values.mean(), "sd": values.std(), "median": values.median(),
+                             "q1": values.quantile(.25), "q3": values.quantile(.75),
+                             "min": values.min(), "max": values.max(),
+                             "n_zero": int(values.eq(0).sum()), "pct_zero": 100*values.eq(0).mean()})
+    for group, frame in data.groupby("pure_cc_group"):
+        for measure in measures:
+            paired = frame.pivot(index="pair_id", columns="cohort", values=measure).dropna()
+            difference = paired.MHC1_psychotic - paired.MHC0
+            pair_rows.append({"cc_group": group, "measure": measure, "n_complete_outcome_pairs": len(paired),
+                              "mean_paired_difference": difference.mean(), "median_paired_difference": difference.median(),
+                              "q1_paired_difference": difference.quantile(.25), "q3_paired_difference": difference.quantile(.75)})
+    PAIRED_WORKUP_OUTPUT_DIR.mkdir(exist_ok=True)
+    data.to_csv(PAIRED_WORKUP_OUTPUT_DIR / "complete_cc_pair_workup_dataset.csv", index=False)
+    summary = pd.DataFrame(rows)
+    summary.to_csv(PAIRED_WORKUP_OUTPUT_DIR / "complete_cc_pair_workup_summary.csv", index=False)
+    pd.DataFrame(pair_rows).to_csv(PAIRED_WORKUP_OUTPUT_DIR / "complete_cc_pair_workup_paired_differences.csv", index=False)
+    pd.DataFrame(qc).to_csv(PAIRED_WORKUP_OUTPUT_DIR / "complete_cc_pair_workup_qc.csv", index=False)
+    print(summary[summary.measure.isin(WORKUP_MEASURES) & summary.analysis_sample.eq("complete_outcome_pairs")][["cc_group", "cohort", "measure", "n_nonmissing", "n_missing", "mean", "median", "q1", "q3", "pct_zero"]].to_string(index=False))
+    print("\nInput quality checks:")
+    print(pd.DataFrame(qc).to_string(index=False))
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    analysis.to_csv(
-        OUTPUT_DIR / "chief_complaint_subgroup_outcome_analysis_dataset.csv",
-        index=False,
-    )
-    summarize_counts(analysis).to_csv(
-        OUTPUT_DIR / "chief_complaint_subgroup_outcome_counts.csv",
-        index=False,
-    )
-    summarize_numeric(analysis).to_csv(
-        OUTPUT_DIR / "chief_complaint_subgroup_numeric_outcome_summary.csv",
-        index=False,
-    )
-    summarize_binary(analysis).to_csv(
-        OUTPUT_DIR / "chief_complaint_subgroup_binary_outcome_summary.csv",
-        index=False,
-    )
-    summarize_categorical(analysis).to_csv(
-        OUTPUT_DIR / "chief_complaint_subgroup_categorical_summary.csv",
-        index=False,
-    )
-    build_pair_membership_summary(analysis).to_csv(
-        OUTPUT_DIR / "chief_complaint_subgroup_pair_membership_summary.csv",
-        index=False,
-    )
-
-    print(f"Saved chief-complaint subgroup outcome analysis to: {OUTPUT_DIR}")
-    print("\n=== 2x2 subgroup counts ===")
-    print(summarize_counts(analysis).to_string(index=False))
-    print("\n=== Mortality/death summary ===")
-    binary_summary = summarize_binary(analysis)
-    if binary_summary.empty:
-        print("No binary death indicators were available.")
-    else:
-        print(binary_summary.to_string(index=False))
 
 
 if __name__ == "__main__":

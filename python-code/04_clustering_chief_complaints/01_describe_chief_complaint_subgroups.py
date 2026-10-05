@@ -1,4 +1,4 @@
-"""Describe hard-coded chief-complaint subgroups in the matched cohort.
+"""Describe CC subgroups and select complete same-complaint matched pairs.
 
 This script is separate from clustering. It defines a small set of manually
 selected chief-complaint symptom groups and counts how many matched admissions
@@ -702,25 +702,172 @@ def write_outputs(
     )
 
 
+
+# Current pipeline: explore seven symptom groups, then retain original pairs
+# within the five selected pure groups. Older combined outputs above remain
+# available for existing archival consumers.
+EXPLORATION_OUTPUT_DIR = SCRIPT_DIR / "analysis_output_top_pure_chief_complaints"
+PAIR_OUTPUT_DIR = SCRIPT_DIR / "analysis_output_complete_top_five_cc_pairs"
+TOP_ASSIGNMENT_PATH = EXPLORATION_OUTPUT_DIR / "top_seven_cc_admission_assignments.csv"
+CURRENT_PAIRS_CSV_PATH = PROJECT_DIR / "02_cohort_matching" / "matched_cohort_output" / "matched_pairs.csv"
+PAIRED_GROUPS = ["shortness of breath", "altered mental status", "abdominal pain", "chest pain", "fall"]
+PAIR_ADMISSION_KEYS = ["pair_id", "cohort", "subject_id", "hadm_id"]
+
+def candidate_groups():
+    groups = {name: {key: list(values) for key, values in config.items()}
+              for name, config in CHIEF_COMPLAINT_SUBGROUPS.items()}
+    # Broaden ranking beyond the five older, predefined groups. These are
+    # common concepts observed in aggregate QuickUMLS frequency summaries.
+    aliases = {
+        "fall": ["fall", "falls", "falling", "mechanical fall"],
+        "fever": ["fever", "fevers", "febrile"],
+        "weakness": ["weakness", "generalized weakness"],
+        "cough": ["cough", "coughing"],
+        "hypotension": ["hypotension", "low blood pressure"],
+        "diarrhea": ["diarrhea", "diarrhoea"],
+        "syncope": ["syncope", "syncopal", "fainting"],
+        "seizure": ["seizure", "seizures"],
+        "headache": ["headache", "headaches"],
+        "hypoxia": ["hypoxia", "hypoxemia"],
+        "dizziness": ["dizziness", "dizzy", "lightheadedness"],
+        "back pain": ["back pain", "low back pain"],
+        "fatigue": ["fatigue", "tiredness"],
+        "hyperglycemia": ["hyperglycemia", "high blood sugar"],
+        "anemia": ["anemia", "anaemia"],
+        "rectal bleeding": ["bright red blood per rectum", "brbpr", "rectal bleeding", "hematochezia"],
+        "failure to thrive": ["failure to thrive", "ftt"],
+        "leg swelling": ["leg swelling", "lower extremity swelling"],
+    }
+    for name, terms in aliases.items():
+        groups[name] = {"text_phrases": terms, "quickumls_terms": terms}
+    return groups
+
+
+def explore_top_pure_groups():
+    data = build_admission_level_complaints(load_matched_pairs())
+    if data.duplicated(["cohort", "subject_id", "hadm_id"]).any():
+        raise ValueError("Duplicate matched admission keys")
+    groups = candidate_groups()
+    flags = pd.DataFrame({name: data.apply(lambda row: subgroup_hit(row, config), axis=1)
+                          for name, config in groups.items()}, index=data.index)
+    rankings = []
+    for cohort in ["MHC0", "MHC1_psychotic", "overall"]:
+        mask = pd.Series(True, index=data.index) if cohort == "overall" else data.cohort.eq(cohort)
+        table = flags.loc[mask].sum().rename_axis("complaint_group").reset_index(name="n_admissions")
+        table = table.sort_values(["n_admissions", "complaint_group"], ascending=[False, True])
+        table["rank"] = range(1, len(table) + 1)
+        table["cohort"] = cohort
+        table["pct_cohort_admissions"] = 100 * table.n_admissions / mask.sum()
+        rankings.append(table)
+    ranking = pd.concat(rankings, ignore_index=True)
+    selected = ranking.loc[ranking.cohort.eq("overall") & ranking["rank"].le(7), "complaint_group"].tolist()
+    n_matches = flags[selected].sum(axis=1)
+    assignments = data.drop(columns=["chief_complaint_normalized", "quickumls_terms", "derived_quickumls_overlap_terms"]).copy()
+    assignments["n_selected_groups_matched"] = n_matches
+    assignments["selection_status"] = n_matches.map(lambda n: "outside_selected_groups" if n == 0 else "pure" if n == 1 else "multiple_selected_groups")
+    assignments["pure_cc_group"] = flags[selected].idxmax(axis=1).where(n_matches.eq(1))
+    for name in selected:
+        assignments["has_" + name.replace(" ", "_")] = flags[name]
+    pure = assignments[assignments.selection_status.eq("pure")]
+    counts = []
+    pairs = []
+    demographics = []
+    for name in selected:
+        selected_data = pure[pure.pure_cc_group.eq(name)]
+        pair_sizes = selected_data.groupby("pair_id").cohort.nunique()
+        pairs.append({"complaint_group": name, "n_complete_same_group_pairs": int(pair_sizes.eq(2).sum()),
+                      "n_one_sided_pairs": int(pair_sizes.eq(1).sum())})
+        for cohort in ["MHC0", "MHC1_psychotic"]:
+            group = selected_data[selected_data.cohort.eq(cohort)]
+            before = int(flags.loc[data.cohort.eq(cohort), name].sum())
+            counts.append({"complaint_group": name, "cohort": cohort, "n_before_purity_filter": before,
+                           "n_pure_admissions": len(group), "n_subjects": group.subject_id.nunique(),
+                           "n_removed_for_overlap": before-len(group),
+                           "pct_cohort_admissions": 100*len(group)/int(data.cohort.eq(cohort).sum())})
+            for variable in ["age_at_admission", "elixhauser_score"]:
+                demographics.append({"complaint_group": name, "cohort": cohort, "variable": variable,
+                                     **summarize_numeric(group[variable])})
+    EXPLORATION_OUTPUT_DIR.mkdir(exist_ok=True)
+    ranking.to_csv(EXPLORATION_OUTPUT_DIR / "candidate_group_ranking.csv", index=False)
+    assignments.to_csv(EXPLORATION_OUTPUT_DIR / "top_seven_cc_admission_assignments.csv", index=False)
+    pd.DataFrame(counts).to_csv(EXPLORATION_OUTPUT_DIR / "pure_cc_counts.csv", index=False)
+    pd.DataFrame(pairs).to_csv(EXPLORATION_OUTPUT_DIR / "pure_cc_pair_coverage.csv", index=False)
+    pd.DataFrame(demographics).to_csv(EXPLORATION_OUTPUT_DIR / "pure_cc_numeric_demographics.csv", index=False)
+    selection = assignments.groupby(["cohort", "selection_status"]).size().reset_index(name="n_admissions")
+    selection.to_csv(EXPLORATION_OUTPUT_DIR / "pure_cc_selection_summary.csv", index=False)
+    definitions = [{"complaint_group": name, "text_phrases": " | ".join(config["text_phrases"]),
+                    "quickumls_terms": " | ".join(config["quickumls_terms"]), "selected": name in selected}
+                   for name, config in groups.items()]
+    pd.DataFrame(definitions).to_csv(EXPLORATION_OUTPUT_DIR / "candidate_group_definitions.csv", index=False)
+    print("Top seven grouped complaints before purity filtering:")
+    print(ranking[ranking["rank"].le(7)].to_string(index=False))
+    print("\nPure subgroup counts:")
+    print(pd.DataFrame(counts).to_string(index=False))
+    print("\nSelection:")
+    print(selection.to_string(index=False))
+    print("\nPair coverage:")
+    print(pd.DataFrame(pairs).to_string(index=False))
+
+
+def select_complete_top_five_pairs():
+    assignments = pd.read_csv(TOP_ASSIGNMENT_PATH)
+    original = pd.read_csv(CURRENT_PAIRS_CSV_PATH)
+    expected = pd.concat([
+        original[["pair_id", f"{prefix}_subject_id", f"{prefix}_hadm_id"]].rename(
+            columns={f"{prefix}_subject_id": "subject_id", f"{prefix}_hadm_id": "hadm_id"}
+        ).assign(cohort=cohort)
+        for prefix, cohort in [("mhc0", "MHC0"), ("mhc1", "MHC1_psychotic")]
+    ], ignore_index=True)
+    if assignments.duplicated(PAIR_ADMISSION_KEYS).any() or len(assignments) != len(expected):
+        raise ValueError("Assignments do not have one row per current matched admission")
+    if set(map(tuple, assignments[PAIR_ADMISSION_KEYS].to_numpy())) != set(map(tuple, expected[PAIR_ADMISSION_KEYS].to_numpy())):
+        raise ValueError("Assignment IDs or pair memberships differ from current matching")
+    candidates = assignments.loc[
+        assignments.selection_status.eq("pure") & assignments.pure_cc_group.isin(PAIRED_GROUPS)
+    ].copy()
+    if not candidates.n_selected_groups_matched.eq(1).all():
+        raise ValueError("Non-pure admissions in candidate selection")
+    pair_counts = candidates.groupby(["pure_cc_group", "pair_id"]).cohort.nunique()
+    complete = pair_counts[pair_counts.eq(2)].reset_index()[["pure_cc_group", "pair_id"]]
+    kept = candidates.merge(complete, on=["pure_cc_group", "pair_id"], how="inner", validate="many_to_one")
+    if not kept.groupby("pair_id").size().eq(2).all():
+        raise ValueError("Retained pairs do not each have exactly two admissions")
+    if not kept.groupby("pair_id").pure_cc_group.nunique().eq(1).all():
+        raise ValueError("Retained pair members differ in complaint group")
+    rows = []
+    for group in PAIRED_GROUPS:
+        before = candidates[candidates.pure_cc_group.eq(group)]
+        after = kept[kept.pure_cc_group.eq(group)]
+        row = {"cc_group": group, "n_complete_pairs": after.pair_id.nunique()}
+        for cohort, prefix in [("MHC0", "mhc0"), ("MHC1_psychotic", "mhc1")]:
+            b = before[before.cohort.eq(cohort)]
+            a = after[after.cohort.eq(cohort)]
+            row.update({f"{prefix}_n_pure_before": len(b), f"{prefix}_n_retained": len(a),
+                        f"{prefix}_n_removed": len(b)-len(a), f"{prefix}_n_subjects": a.subject_id.nunique(),
+                        f"{prefix}_pct_retained": 100*len(a)/len(b) if len(b) else float("nan")})
+        rows.append(row)
+    pair_groups = kept[["pair_id", "pure_cc_group"]].drop_duplicates()
+    pair_export = original.merge(pair_groups, on="pair_id", how="inner", validate="one_to_one")
+    PAIR_OUTPUT_DIR.mkdir(exist_ok=True)
+    pd.DataFrame(rows).to_csv(PAIR_OUTPUT_DIR / "complete_cc_pair_selection_summary.csv", index=False)
+    kept.sort_values(["pure_cc_group", "pair_id", "cohort"]).to_csv(PAIR_OUTPUT_DIR / "complete_cc_pair_admissions.csv", index=False)
+    # Export only identifiers and subgroup labels, not the original CC text.
+    pair_export[["pair_id", "pure_cc_group", "mhc0_subject_id", "mhc0_hadm_id", "mhc1_subject_id", "mhc1_hadm_id"]].to_csv(
+        PAIR_OUTPUT_DIR / "complete_cc_pairs.csv", index=False)
+    print(pd.DataFrame(rows).to_string(index=False))
+    print(f"\nRetained {len(pair_export):,} original matched pairs ({len(kept):,} admissions).")
+    print("Purity remains defined relative to all seven selected complaint groups.")
+
+
+
 def main() -> None:
-    """Run hard-coded chief-complaint subgroup counts."""
+    """Describe current CC groups and select the five complete paired subgroups."""
     matched_pairs = load_matched_pairs()
     admissions = build_admission_level_complaints(matched_pairs)
-    flagged = add_subgroup_flags(admissions)
-    flagged = add_exclusive_combined_group(flagged)
-    subgroup_counts = build_subgroup_counts(flagged)
-    combined_group_counts = build_combined_group_counts(flagged)
-    write_outputs(flagged, subgroup_counts, combined_group_counts)
-
-    print(f"Saved chief-complaint subgroup outputs to: {OUTPUT_DIR}")
-    print("\n=== Chief-Complaint Subgroup Counts ===")
-    print(subgroup_counts.to_string(index=False))
-    print("\n=== Combined Chief-Complaint Group Counts ===")
-    print(combined_group_counts.to_string(index=False))
-    print("\n=== Combined Group Pair Overlap ===")
-    print(build_combined_group_pair_overlap(flagged).to_string(index=False))
-    print("\n=== Exclusive Combined Group Counts ===")
-    print(build_exclusive_group_counts(flagged).to_string(index=False))
+    flagged = add_exclusive_combined_group(add_subgroup_flags(admissions))
+    write_outputs(flagged, build_subgroup_counts(flagged), build_combined_group_counts(flagged))
+    explore_top_pure_groups()
+    select_complete_top_five_pairs()
 
 
 if __name__ == "__main__":
