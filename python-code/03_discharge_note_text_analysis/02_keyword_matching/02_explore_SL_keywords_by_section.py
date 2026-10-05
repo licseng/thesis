@@ -40,7 +40,7 @@ import pandas as pd
 
 # Paths
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_PYTHON_DIR = SCRIPT_DIR.parent
+REPO_PYTHON_DIR = SCRIPT_DIR.parent.parent
 PARSER_DIR = REPO_PYTHON_DIR / "01_discharge_note_preprocessing" / "01_discharge_note_parsing"
 PARSER_PATH = PARSER_DIR / "02_parse_full_discharge_notes.py"
 FULL_NOTE_DIR = PARSER_DIR / "full_discharge_note_sections"
@@ -288,12 +288,14 @@ def build_section_presence(df: pd.DataFrame, section_columns: list[str]) -> pd.D
     rows = []
     for cohort, cohort_df in df.groupby("cohort"):
         for section in section_columns:
-            has_section = cohort_df[section].fillna("").astype(str).str.strip().ne("")
+            section_text = cohort_df[section].fillna("").astype(str).str.strip()
+            has_section = section_text.ne("")
             rows.append(
                 {
                     "cohort": cohort,
                     "section_name": section,
                     "n_admissions_with_section": int(has_section.sum()),
+                    "total_section_words_all_admissions": int(section_text.str.split().str.len().sum()),
                 }
             )
     return pd.DataFrame(rows)
@@ -432,7 +434,7 @@ def build_section_summary(
         / summary["n_admissions_in_cohort"]
     )
     summary["aggregate_keyword_hits_per_1000_words"] = (
-        1000.0 * summary["total_keyword_hits"] / summary["total_section_words"]
+        1000.0 * summary["total_keyword_hits"] / summary["total_section_words_all_admissions"]
     )
     return summary
 
@@ -538,7 +540,7 @@ def build_section_keyword_match_summary(
     summary["aggregate_selected_SL_keyword_hits_per_1000_words"] = (
         1000.0
         * summary["total_selected_SL_keyword_hits"]
-        / summary["total_section_words"]
+        / summary["total_section_words_all_admissions"]
     )
     return (
         summary

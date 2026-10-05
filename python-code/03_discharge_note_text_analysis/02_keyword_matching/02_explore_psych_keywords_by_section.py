@@ -24,7 +24,7 @@ import pandas as pd
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_PYTHON_DIR = SCRIPT_DIR.parent
+REPO_PYTHON_DIR = SCRIPT_DIR.parent.parent
 PARSER_DIR = REPO_PYTHON_DIR / "01_discharge_note_preprocessing" / "01_discharge_note_parsing"
 PARSER_PATH = PARSER_DIR / "02_parse_full_discharge_notes.py"
 FULL_NOTE_DIR = PARSER_DIR / "full_discharge_note_sections"

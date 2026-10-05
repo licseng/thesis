@@ -34,7 +34,7 @@ import statsmodels.api as sm
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = SCRIPT_DIR.parent
+PROJECT_DIR = SCRIPT_DIR.parent.parent
 COHORT_DIR = PROJECT_DIR / "02_cohort_matching"
 sys.path.insert(0, str(COHORT_DIR))
 

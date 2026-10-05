@@ -12,7 +12,7 @@ configurable with PSYCH_HISTORY_SECTION_SCOPE:
     - all_parsed_sections: all parser sections except chief complaint
 
 The keyword vocabulary is imported from
-`03_discharge_note_text_analysis/02_explore_psych_keywords_by_section.py`, so it
+`03_discharge_note_text_analysis/02_keyword_matching/02_explore_psych_keywords_by_section.py`, so it
 uses all current psych-related keyword groups, including psychiatric
 medications.
 
@@ -40,12 +40,13 @@ import pandas as pd
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_PYTHON_DIR = SCRIPT_DIR.parent
+REPO_PYTHON_DIR = SCRIPT_DIR.parent.parent
 PARSER_DIR = REPO_PYTHON_DIR / "01_discharge_note_preprocessing" / "01_discharge_note_parsing"
 FULL_NOTE_DIR = PARSER_DIR / "full_discharge_note_sections"
 PSYCH_KEYWORD_SCRIPT = (
     REPO_PYTHON_DIR
     / "03_discharge_note_text_analysis"
+    / "02_keyword_matching"
     / "02_explore_psych_keywords_by_section.py"
 )
 OUTPUT_DIR = SCRIPT_DIR / "psych_history_llm_input"

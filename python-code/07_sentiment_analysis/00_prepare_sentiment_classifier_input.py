@@ -21,7 +21,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_PYTHON_DIR = SCRIPT_DIR.parent
 PARSER_DIR = REPO_PYTHON_DIR / "01_discharge_note_preprocessing" / "01_discharge_note_parsing"
 FULL_NOTE_DIR = PARSER_DIR / "full_discharge_note_sections"
-SL_OUTPUT_DIR = REPO_PYTHON_DIR / "03_discharge_note_text_analysis" / "analysis_output_SL_keyword_exploration"
+SL_OUTPUT_DIR = REPO_PYTHON_DIR / "03_discharge_note_text_analysis" / "02_keyword_matching" / "analysis_output_SL_keyword_exploration"
 SL_SECTION_HITS_PATH = SL_OUTPUT_DIR / "SL_keyword_section_hits.csv"
 OUTPUT_DIR = SCRIPT_DIR / "sentiment_llm_input"
 

@@ -5,7 +5,7 @@ same section-level positives already found by the psychiatry keyword screen.
 
 Inputs:
     psych_history_classifier_output/psych_history_section_classifier_results.csv
-    ../03_discharge_note_text_analysis/analysis_output_psych_keyword_exploration/
+    ../03_discharge_note_text_analysis/02_keyword_matching/analysis_output_psych_keyword_exploration/
         psych_keyword_section_hits.csv
 
 Outputs:
@@ -34,8 +34,9 @@ LLM_RESULTS_PATH = (
     / "psych_history_section_classifier_results.csv"
 )
 KEYWORD_SECTION_HITS_PATH = (
-    SCRIPT_DIR.parent
+    SCRIPT_DIR.parent.parent
     / "03_discharge_note_text_analysis"
+    / "02_keyword_matching"
     / "analysis_output_psych_keyword_exploration"
     / "psych_keyword_section_hits.csv"
 )
