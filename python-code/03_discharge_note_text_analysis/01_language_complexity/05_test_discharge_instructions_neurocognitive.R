@@ -5,7 +5,7 @@
 args <- commandArgs(FALSE)
 script_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", args, value=TRUE))))
 Sys.setenv(LANGUAGE_COMPLEXITY_FUNCTIONS_ONLY="1")
-source(file.path(script_dir, "05_test_language_complexity.R"))
+source(file.path(script_dir, "03_test_language_complexity.R"))
 Sys.unsetenv("LANGUAGE_COMPLEXITY_FUNCTIONS_ONLY")
 output_dir <- file.path(script_dir, "analysis_output_neurocognitive_sensitivity")
 flags <- read.csv(file.path(output_dir, "neurocognitive_model_covariates.csv"))
