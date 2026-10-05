@@ -19,6 +19,7 @@ Outputs:
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import math
 import re
@@ -410,7 +411,7 @@ def write_outputs(
     top_terms: pd.DataFrame,
     group_summary: pd.DataFrame,
     note_hits: pd.DataFrame,
-    length_adjusted_models: pd.DataFrame,
+    length_adjusted_models: pd.DataFrame | None,
 ) -> None:
     """Write aggregate outputs."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -430,15 +431,22 @@ def write_outputs(
         OUTPUT_DIR / "keyword_family_note_level_hits_excluding_chief_complaint.csv",
         index=False,
     )
-    length_adjusted_models.to_csv(
-        OUTPUT_DIR / "keyword_family_length_adjusted_models_excluding_chief_complaint.csv",
-        index=False,
-    )
+    if length_adjusted_models is not None:
+        length_adjusted_models.to_csv(
+            OUTPUT_DIR / "keyword_family_length_adjusted_models_excluding_chief_complaint.csv",
+            index=False,
+        )
 
 
 # Orchestrate parser/keyword imports, scanning, aggregation, and console summaries.
 def main() -> None:
     """Run aggregate psych and SL keyword summaries outside chief complaint."""
+    arguments = argparse.ArgumentParser(description=__doc__)
+    arguments.add_argument(
+        "--descriptive-only", action="store_true",
+        help="Export keyword counts and coverage without fitting legacy models that omit matched-pair effects.",
+    )
+    options = arguments.parse_args()
     parser = load_module(PARSER_PATH, "full_note_parser")
     psych_keywords = load_module(PSYCH_KEYWORD_SCRIPT, "psych_keyword_script")
     sl_keywords = load_module(SL_KEYWORD_SCRIPT, "sl_keyword_script")
@@ -473,7 +481,9 @@ def main() -> None:
     top_terms = pd.concat(all_top_terms, ignore_index=True)
     group_summary = pd.concat(all_group_summaries, ignore_index=True)
     note_summary = build_note_summary(note_hits)
-    length_adjusted_models = fit_length_adjusted_keyword_models(note_hits)
+    length_adjusted_models = (
+        None if options.descriptive_only else fit_length_adjusted_keyword_models(note_hits)
+    )
 
     write_outputs(
         note_summary,
@@ -488,8 +498,8 @@ def main() -> None:
     print(f"Saved aggregate keyword summaries to: {OUTPUT_DIR}")
     print("\n=== Keyword Family Note Summary ===")
     print(note_summary.to_string(index=False))
-    print("\n=== Length-adjusted cohort model terms ===")
-    if not length_adjusted_models.empty:
+    if length_adjusted_models is not None and not length_adjusted_models.empty:
+        print("\n=== Length-adjusted cohort model terms ===")
         print(
             length_adjusted_models.loc[
                 length_adjusted_models["term"].eq("mhc1_psychotic")
