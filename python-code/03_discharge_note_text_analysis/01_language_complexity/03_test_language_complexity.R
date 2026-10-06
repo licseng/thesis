@@ -37,6 +37,11 @@ pairs_path <- file.path(
 )
 output_dir <- file.path(script_dir, "analysis_output_language_complexity_inference")
 covariates_path <- file.path(output_dir, "language_complexity_model_covariates.csv")
+race_sensitivity_only <- "--race-sensitivity" %in% commandArgs(trailingOnly=TRUE)
+if (race_sensitivity_only) {
+  output_dir <- file.path(output_dir, "race_ethnicity_sensitivity")
+  covariates_path <- file.path(output_dir, "model_covariates.csv")
+}
 
 required_paths <- c(full_note_path, section_path, pairs_path, covariates_path)
 missing_paths <- required_paths[!file.exists(required_paths)]
@@ -104,6 +109,11 @@ model_covariates$language_group <- factor(
   model_covariates$language_group,
   levels = c("English", "Non-English", "Missing")
 )
+if (race_sensitivity_only) {
+  model_covariates$race_ethnicity_group <- factor(model_covariates$race_ethnicity_group,
+    levels=c("White", "Black", "Asian", "Hispanic/Latino", "Other recorded categories", "Unknown/declined/missing"))
+  if (anyNA(model_covariates$race_ethnicity_group)) stop("Invalid race/ethnicity group")
+}
 
 attach_model_covariates <- function(metrics) {
   join_columns <- c("pair_id", "cohort", "subject_id", "hadm_id")
@@ -121,6 +131,7 @@ attach_model_covariates <- function(metrics) {
     "log1p_prior_all_admissions",
     "language_group"
   )
+  if (race_sensitivity_only) required_covariates <- c(required_covariates, "race_ethnicity_group")
   if (any(!complete.cases(merged[, required_covariates, drop = FALSE]))) {
     stop("Some metric rows could not be linked to complete model covariates.")
   }
@@ -461,7 +472,50 @@ analyze_level <- function(data, outcomes, analysis_level, section_name = NA_char
   )
 }
 
-if (Sys.getenv("LANGUAGE_COMPLEXITY_FUNCTIONS_ONLY") != "1") {
+if (race_sensitivity_only && Sys.getenv("LANGUAGE_COMPLEXITY_FUNCTIONS_ONLY") != "1") {
+  m3 <- adjusted_model_definitions$M3_age_elixhauser_prior_utilization_language
+  adjusted_model_definitions <- list(
+    M3_age_elixhauser_prior_utilization_language=m3,
+    M4_M3_plus_race_ethnicity=c(m3, "race_ethnicity_group"))
+  full <- attach_model_covariates(attach_pair_ids(read.csv(full_note_path,check.names=FALSE)))
+  sections <- attach_model_covariates(attach_pair_ids(read.csv(section_path,check.names=FALSE)))
+  stopifnot(nrow(full) == 2*nrow(pairs))
+  results <- list(analyze_adjusted_models(full, full_note_outcomes, "full_note"))
+  for (section in sort(unique(sections$section_name))) {
+    results[[length(results)+1]] <- analyze_adjusted_models(
+      sections[sections$section_name == section,], section_outcomes, "prose_section", section)
+  }
+  summaries <- do.call(rbind,lapply(results, `[[`, "summary"))
+  coefficients <- do.call(rbind,lapply(results, `[[`, "coefficients"))
+  family <- interaction(summaries$analysis_level, ifelse(is.na(summaries$section_name),"full_note",summaries$section_name), summaries$model, drop=TRUE)
+  summaries$FDR <- ave(summaries$p_value,family,FUN=function(x) p.adjust(x,"BH"))
+  m3rows <- summaries[summaries$model == names(adjusted_model_definitions)[1],]
+  m4rows <- summaries[summaries$model == names(adjusted_model_definitions)[2],]
+  # NA section keys become an explicit label for an exact one-to-one comparison.
+  m3rows$section_name[is.na(m3rows$section_name)] <- "full_note"
+  m4rows$section_name[is.na(m4rows$section_name)] <- "full_note"
+  keys <- c("analysis_level", "section_name", "outcome")
+  keep <- c(keys,"n_admissions","mhc1_coefficient","ci_low","ci_high","FDR","singular_fit","optimizer_message","warnings")
+  comparison <- merge(m3rows[,keep],m4rows[,keep],by=keys,suffixes=c("_M3","_M4"))
+  stopifnot(nrow(comparison) == nrow(m3rows), all(comparison$n_admissions_M3 == comparison$n_admissions_M4))
+  comparison$coefficient_change <- comparison$mhc1_coefficient_M4 - comparison$mhc1_coefficient_M3
+  write.csv(summaries,file.path(output_dir,"race_sensitivity_cohort_effects.csv"),row.names=FALSE)
+  write.csv(coefficients,file.path(output_dir,"race_sensitivity_coefficients.csv"),row.names=FALSE)
+  write.csv(comparison,file.path(output_dir,"M3_M4_cohort_effect_comparison.csv"),row.names=FALSE)
+  writeLines(c(
+    "Exploratory race/ethnicity sensitivity: M4 = M3 + six-category recorded race/ethnicity.",
+    "M3: cohort + age (per 10y) + Elixhauser (per 5pt) + log1p(prior admissions) + language.",
+    "Both models retain patient and matched-pair random intercepts; REML, Satterthwaite df, t-based 95% intervals.",
+    "M3 rerun on identical admissions to M4. Existing M0-M3 outputs remain unchanged.",
+    "White is race reference; Black, Asian, Hispanic/Latino, other recorded categories, unknown/declined/missing.",
+    "Other combines less common recorded categories; unknown is retained as a category, not imputed identity.",
+    "Mapping reuses cohort-characterization rules; raw MIMIC race field combines racial/ethnic designations.",
+    "BH FDR across all original outcomes within each model and section (11 full-note, 9 per prose section).",
+    "This is covariate adjustment, not a test of racial discrimination, effect modification, or a causal psychosis effect."
+  ),file.path(output_dir,"race_sensitivity_methods.txt"))
+  capture.output(sessionInfo(),file=file.path(output_dir,"R_session_info.txt"))
+  cat("Saved race sensitivity results to",output_dir,"\n")
+} else if (Sys.getenv("LANGUAGE_COMPLEXITY_FUNCTIONS_ONLY") != "1") {
 full_note_metrics <- attach_model_covariates(
   attach_pair_ids(read.csv(full_note_path, check.names = FALSE))
 )

@@ -10,6 +10,8 @@ database. Only the variables required for modelling are exported.
 from __future__ import annotations
 
 from pathlib import Path
+import argparse
+import sys
 
 import duckdb
 import numpy as np
@@ -77,6 +79,40 @@ def load_descriptor_covariates() -> pd.DataFrame:
     finally:
         connection.close()
     return descriptors
+
+
+def prepare_race_sensitivity() -> None:
+    """Add recorded race to a separate copy; preserve existing model inputs."""
+    sys.path.insert(0, str(PYTHON_DIR / "02_cohort_matching"))
+    from _matched_cohort_characterization_common import derive_race_group
+
+    original = pd.read_csv(OUTPUT_PATH)
+    keys = ["cohort", "subject_id", "hadm_id"]
+    with duckdb.connect(str(DATABASE_PATH), read_only=True) as connection:
+        race = connection.execute(
+            "SELECT cohort, subject_id, hadm_id, race FROM export_matched_cohort_descriptors"
+        ).fetchdf()
+    if original.duplicated(keys).any() or race.duplicated(keys).any():
+        raise ValueError("Duplicate admission keys in race sensitivity inputs")
+    data = original.merge(race, on=keys, how="left", validate="one_to_one", indicator=True)
+    if not data._merge.eq("both").all():
+        raise ValueError("Some model admissions have no descriptor row")
+    broad = data.race.map(derive_race_group).where(data.race.notna(), "missing")
+    data["race_ethnicity_group"] = broad.map({
+        "white": "White", "black": "Black", "asian": "Asian",
+        "hispanic_or_latino": "Hispanic/Latino",
+        "missing": "Unknown/declined/missing", "unknown_or_declined": "Unknown/declined/missing",
+    }).fillna("Other recorded categories")
+    out = OUTPUT_DIR / "race_ethnicity_sensitivity"
+    out.mkdir(parents=True, exist_ok=True)
+    data.drop(columns=["race", "_merge"]).to_csv(out / "model_covariates.csv", index=False)
+    counts = data.groupby(["cohort", "race_ethnicity_group"]).agg(
+        n_admissions=("hadm_id", "size"), n_patients=("subject_id", "nunique")
+    ).reset_index()
+    counts.to_csv(out / "race_ethnicity_category_counts.csv", index=False)
+    data[["race", "race_ethnicity_group"]].drop_duplicates().to_csv(out / "race_ethnicity_mapping.csv", index=False)
+    print(counts.to_string(index=False))
+    print(f"Preserved all {len(data):,} admission covariate rows; saved sensitivity inputs to {out}")
 
 
 def main() -> None:
@@ -162,4 +198,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--race-sensitivity", action="store_true", help="Add race to a separate copy of existing covariates only")
+    options = parser.parse_args()
+    if options.race_sensitivity:
+        prepare_race_sensitivity()
+    else:
+        main()
