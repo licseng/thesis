@@ -37,7 +37,7 @@ SENTIMENT_OUTPUT_DIR = (
 )
 CHIEF_COMPLAINT_SUBGROUP_PATH = (
     PROJECT_DIR
-    / "04_clustering_chief_complaints"
+    / "04_clinical_activtiy_analysis"
     / "analysis_output_chief_complaint_subgroup_balance_check"
     / "chief_complaint_subgroup_admission_assignments.csv"
 )
@@ -215,7 +215,7 @@ def load_chief_complaint_subgroups() -> pd.DataFrame:
     if not CHIEF_COMPLAINT_SUBGROUP_PATH.exists():
         raise FileNotFoundError(
             "Missing chief-complaint subgroup assignments. Run "
-            "04_clustering_chief_complaints/01_describe_chief_complaint_subgroups.py first: "
+            "04_clinical_activtiy_analysis/01_describe_chief_complaint_subgroups.py first: "
             f"{CHIEF_COMPLAINT_SUBGROUP_PATH}"
         )
 

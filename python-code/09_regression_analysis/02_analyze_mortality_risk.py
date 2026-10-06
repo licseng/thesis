@@ -40,7 +40,7 @@ import statsmodels.api as sm
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 COHORT_MATCHING_DIR = PROJECT_DIR / "02_cohort_matching"
-CLUSTERING_DIR = PROJECT_DIR / "04_clustering_chief_complaints"
+CLUSTERING_DIR = PROJECT_DIR / "04_clinical_activtiy_analysis"
 sys.path.insert(0, str(COHORT_MATCHING_DIR))
 
 import _matched_cohort_characterization_common as common  # noqa: E402
@@ -277,7 +277,7 @@ def load_pure_subgroup_assignments() -> pd.DataFrame:
     if not ASSIGNMENT_PATH.exists():
         raise FileNotFoundError(
             "Missing subgroup assignments. Run "
-            "04_clustering_chief_complaints/01_describe_chief_complaint_subgroups.py first: "
+            "04_clinical_activtiy_analysis/01_describe_chief_complaint_subgroups.py first: "
             f"{ASSIGNMENT_PATH}"
         )
 
@@ -330,7 +330,7 @@ def load_combined_subgroup_assignments() -> pd.DataFrame:
     if not ASSIGNMENT_PATH.exists():
         raise FileNotFoundError(
             "Missing subgroup assignments. Run "
-            "04_clustering_chief_complaints/01_describe_chief_complaint_subgroups.py first: "
+            "04_clinical_activtiy_analysis/01_describe_chief_complaint_subgroups.py first: "
             f"{ASSIGNMENT_PATH}"
         )
 

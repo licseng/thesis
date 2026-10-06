@@ -48,7 +48,7 @@ import _matched_cohort_characterization_common as common  # noqa: E402
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 COHORT_DIR = PROJECT_DIR / "02_cohort_matching"
-CLUSTERING_DIR = PROJECT_DIR / "04_clustering_chief_complaints"
+CLUSTERING_DIR = PROJECT_DIR / "04_clinical_activtiy_analysis"
 MATCHED_PAIRS_PATH = COHORT_DIR / "matched_cohort_output" / "matched_pairs.csv"
 SUBGROUP_ASSIGNMENT_PATH = (
     CLUSTERING_DIR
@@ -164,7 +164,7 @@ def load_pure_subgroup_assignments() -> pd.DataFrame:
     if not SUBGROUP_ASSIGNMENT_PATH.exists():
         raise FileNotFoundError(
             "Missing chief complaint subgroup assignments. Run "
-            "04_clustering_chief_complaints/01_describe_chief_complaint_subgroups.py first: "
+            "04_clinical_activtiy_analysis/01_describe_chief_complaint_subgroups.py first: "
             f"{SUBGROUP_ASSIGNMENT_PATH}"
         )
 
@@ -210,7 +210,7 @@ def load_combined_subgroup_assignments() -> pd.DataFrame:
     if not SUBGROUP_ASSIGNMENT_PATH.exists():
         raise FileNotFoundError(
             "Missing chief complaint subgroup assignments. Run "
-            "04_clustering_chief_complaints/01_describe_chief_complaint_subgroups.py first: "
+            "04_clinical_activtiy_analysis/01_describe_chief_complaint_subgroups.py first: "
             f"{SUBGROUP_ASSIGNMENT_PATH}"
         )
 
