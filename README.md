@@ -193,6 +193,18 @@ This saves M0/M2 results and diagnostics to
 and a separate four-endpoint BH FDR family within each model stage. It does not
 fit whole-cohort clinical-event/work-up models.
 
+For sensitivity adjustments on the identical saved endpoint-specific samples:
+
+```bash
+python python-code/04_clinical_route_analyses/03_analyze_chief_complaint_subgroup_outcomes.py --fit-whole-cohort-stay-mortality-sensitivity
+```
+
+M3 adds recorded language group to M2; M4 adds the recorded race/ethnicity group
+to M3, using the existing language-complexity covariate groupings. Outputs are
+saved under `analysis_output_whole_matched_stay_mortality/language_race_sensitivity/`;
+primary M0/M2 and CC-specific outputs are preserved. The current per-stage FDR
+convention is retained for comparison, not claimed as thesis-wide correction.
+
 ### Next: Annotation and LLM Classification
 
 Folders 05–07 contain annotation preparation, psychiatric-context/diagnostic-
