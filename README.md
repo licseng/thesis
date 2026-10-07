@@ -173,8 +173,8 @@ selection, laboratory-linkage/timing checks, clinical-event analyses and
 hospital/ED stay and mortality analyses. The current five-group complete-pair
 workflow is implemented in scripts 01, 06 and the command-line modes of 03.
 Do not run every numbered file indiscriminately: script 04 is an earlier
-nausea-including subgroup exploration, and script 07 still uses the legacy
-folder-09 mortality dataset.
+nausea-including subgroup exploration, and script 07 still targets the removed
+legacy folder-09 mortality dataset; it is not a current pipeline step.
 
 Current clinical-event inference uses log-link PPML with patient/pair clustered
 standard errors. Current hospital outcomes use PPML for duration and logistic
@@ -199,8 +199,10 @@ Folders 05–07 contain annotation preparation, psychiatric-context/diagnostic-
 overshadowing classifiers and sentiment classification. These are existing
 implementations, not yet a finalized one-stage classification workflow. See
 [PIPELINE_AUDIT.md](PIPELINE_AUDIT.md) for the checks and remaining decisions
-before a full new-cohort LLM run. Folder 09 is not the authoritative source for
-the local language-complexity and clinical-route analyses.
+before a full new-cohort LLM run. The active folder 09 was removed; its legacy
+regression scripts remain under
+`analysis-archive/MHH1_original_2026-09-25/python-code/09_regression_analysis/`.
+Current modelling belongs in the respective analysis folders.
 
 ## Generated Outputs
 
