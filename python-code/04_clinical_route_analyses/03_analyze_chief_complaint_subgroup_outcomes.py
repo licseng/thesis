@@ -2024,6 +2024,15 @@ data$mhc1 <- as.integer(data$cohort=="MHC1_psychotic")
 effects <- list(); coefficients <- list(); diagnostics <- list(); calibration <- list(); influence <- list()
 models <- list(M0=character(),M2=c("age_at_admission_per_10y",
  "elixhauser_score_per_5pt","log1p_prior_all_admissions"))
+if(length(args)>=4 && args[4]=="language_race_sensitivity") {
+ data$language_group <- factor(data$language_group,
+  levels=c("English","Non-English","Missing"))
+ data$race_ethnicity_group <- factor(data$race_ethnicity_group,
+  levels=c("White","Black","Asian","Hispanic/Latino",
+           "Other recorded categories","Unknown/declined/missing"))
+ models <- list(M3=c(models$M2,"language_group"),
+                M4=c(models$M2,"language_group","race_ethnicity_group"))
+}
 for(stage in names(models)) for(group in sort(unique(data$pure_cc_group)))
  for(outcome in sort(unique(data$outcome))) {
  key <- paste(stage,group,outcome,sep="__")
@@ -2051,8 +2060,11 @@ for(stage in names(models)) for(group in sort(unique(data$pure_cc_group)))
   scores <- x*as.numeric(fit$residuals*fit$weights)
   component <- function(g){s<-rowsum(scores,g,reorder=FALSE);G<-nrow(s)
    crossprod(s)*G/(G-1)*(nrow(x)-1)/(nrow(x)-ncol(x))}
+  # Only observed intersections are needed; factor interaction can construct
+  # millions of unused Cartesian-product levels in a whole-cohort run.
+  intersection <- paste(as.character(d$patient),as.character(d$matched_pair),sep=":")
   manual <- bread %*% (component(d$patient)+component(d$matched_pair)-
-   component(interaction(d$patient,d$matched_pair,drop=TRUE))) %*% bread
+   component(intersection)) %*% bread
   verification <- max(abs(v-manual))
   stopifnot(isTRUE(all.equal(unname(v),unname(manual),tolerance=1e-7)))
  }
@@ -2115,6 +2127,117 @@ for(item in c("effects","coefficients","diagnostics","calibration","influence"))
  write.csv(do.call(rbind,get(item)),file.path(out,paste0(item,".csv")),row.names=FALSE)
 writeLines(capture.output(sessionInfo()),file.path(out,"R_session_info.txt"))
 '''
+
+
+def fit_whole_cohort_stay_mortality_sensitivity():
+    """Add language/race to saved whole-cohort inputs without changing M0/M2."""
+    import numpy as np
+    from statsmodels.stats.multitest import multipletests
+
+    baseline = SCRIPT_DIR / "analysis_output_whole_matched_stay_mortality"
+    source = baseline / "model_inputs.csv"
+    source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    if source_hash != (baseline / "model_input_sha256.txt").read_text().strip():
+        raise ValueError("Whole-cohort M0/M2 input fingerprint mismatch")
+    output = baseline / "language_race_sensitivity"
+    cov_path = (PROJECT_DIR / "03_discharge_note_text_analysis" / "01_language_complexity"
+                / "analysis_output_language_complexity_inference" / "race_ethnicity_sensitivity"
+                / "model_covariates.csv")
+    numeric = ["age_at_admission_per_10y", "elixhauser_score_per_5pt", "log1p_prior_all_admissions"]
+    categories = ["language_group", "race_ethnicity_group"]
+    cov = pd.read_csv(cov_path, usecols=ID_COLUMNS + ["pair_id"] + numeric + categories)
+    if cov.duplicated(ID_COLUMNS).any():
+        raise ValueError("Duplicate admission keys in sensitivity covariates")
+    data = pd.read_csv(source).merge(cov, on=ID_COLUMNS, how="left", validate="many_to_one",
+                                   suffixes=("", "_source"), indicator=True)
+    if not data._merge.eq("both").all() or not data.pair_id.eq(data.pair_id_source).all():
+        raise ValueError("Missing/mismatched sensitivity admission or pair metadata")
+    for column in numeric:
+        np.testing.assert_allclose(data[column], data[column + "_source"], rtol=0, atol=1e-12)
+    levels = {"language_group": ["English", "Non-English", "Missing"],
+              "race_ethnicity_group": ["White", "Black", "Asian", "Hispanic/Latino",
+                                       "Other recorded categories", "Unknown/declined/missing"]}
+    for column, allowed in levels.items():
+        if not data[column].isin(allowed).all():
+            raise ValueError(f"Missing/unexpected categories in {column}")
+    data = data.drop(columns=["_merge", "pair_id_source"] + [c + "_source" for c in numeric])
+    if data.isna().any().any() or data.duplicated(["outcome", "hadm_id"]).any():
+        raise ValueError("Incomplete or duplicate sensitivity input")
+    if not data.groupby(["outcome", "pair_id"]).size().eq(2).all():
+        raise ValueError("Sensitivity inputs do not preserve complete pairs")
+    baseline_diagnostics = pd.read_csv(baseline / "diagnostics.csv")
+    for outcome, frame in data.groupby("outcome"):
+        original = baseline_diagnostics.loc[
+            baseline_diagnostics.stage.eq("M2") & baseline_diagnostics.outcome.eq(outcome)]
+        if len(original) != 1 or frame.pair_id.nunique() != int(original.n_pairs.iloc[0]):
+            raise ValueError("Sensitivity sample differs from the M2 sample")
+    output.mkdir(parents=True, exist_ok=True)
+    data.to_csv(output / "model_inputs.csv", index=False)
+    # Aggregate support/missingness audits, overall and for each endpoint.
+    summaries = []
+    for column in categories:
+        counts = data.groupby(["outcome", "cohort", column]).agg(
+            n_admissions=("hadm_id", "size"), n_patients=("subject_id", "nunique")
+        ).reset_index().rename(columns={column: "category"})
+        counts["variable"] = column
+        summaries.append(counts)
+    pd.concat(summaries, ignore_index=True).to_csv(output / "category_support.csv", index=False)
+    r_library = PROJECT_DIR / "03_discharge_note_text_analysis" / "01_language_complexity" / ".r-library"
+    subprocess.run(["Rscript", "-", str(output / "model_inputs.csv"), str(output), str(r_library),
+                    "language_race_sensitivity"], input=STAY_MORTALITY_R, text=True, check=True)
+    effects = pd.read_csv(output / "effects.csv")
+    if len(effects) != 8 or effects.duplicated(["stage", "outcome"]).any():
+        raise ValueError("Expected four endpoints in each of M3 and M4")
+    for _, family in effects.groupby("stage"):
+        adjusted = multipletests(family.p.fillna(1), method="fdr_bh")[1]
+        effects.loc[family.index, "FDR"] = np.where(family.p.notna(), adjusted, np.nan)
+    effects["analysis_family"] = "whole_matched_4_tests_per_sensitivity_stage"
+    effects.to_csv(output / "effects.csv", index=False)
+    keys = ["stage", "pure_cc_group", "outcome"]
+    diagnostics = pd.read_csv(output / "diagnostics.csv")
+    reporting = effects.merge(diagnostics[keys + ["n_pairs", "n_admissions", "n_patients"]],
+                              on=keys, validate="one_to_one")
+    reporting.to_csv(output / "M3_M4_reporting.csv", index=False)
+    base_effects = pd.read_csv(baseline / "M0_M2_reporting.csv")
+    comparison = pd.concat([base_effects.loc[base_effects.stage.eq("M2")], reporting], ignore_index=True)
+    comparison.to_csv(output / "M2_M3_M4_comparison.csv", index=False)
+    labels = {"hospital_los_days": "Hospital LOS", "ed_los_hours": "ED stay",
+              "in_hospital_mortality": "In-hospital mortality",
+              "post_discharge_death_within_1y": "365-day post-discharge mortality"}
+    lines = ["# Whole matched cohort: language and race sensitivity", "",
+             "M2: age, Elixhauser, log(1+prior hospital admissions).",
+             "M3: M2 + recorded language group. M4: M3 + recorded race/ethnicity group.",
+             "Same endpoint-specific admissions as M0/M2; PPML durations and logistic mortality,",
+             "with patient/pair two-way HC1 clustered standard errors.", "",
+             "| Outcome | Pairs | M2 ratio [95% CI]; FDR | M3 ratio [95% CI]; FDR | M4 ratio [95% CI]; FDR |",
+             "|---|---:|---|---|---|"]
+    for outcome, label in labels.items():
+        rows = comparison.loc[comparison.outcome.eq(outcome)].set_index("stage")
+        cells = []
+        for stage in ["M2", "M3", "M4"]:
+            r = rows.loc[stage]
+            p_text = "<0.001" if r.FDR < .001 else f"{r.FDR:.3f}"
+            cells.append(f"{r.ratio:.2f} [{r.ci_low:.2f}, {r.ci_high:.2f}]; {p_text}"
+                         if r.numeric_valid else "Unavailable: numerical diagnostic")
+        lines.append(f"| {label} | {int(rows.loc['M2', 'n_pairs'])} | " + " | ".join(cells) + " |")
+    lines.extend(["", "Duration ratios are arithmetic mean-duration ratios; mortality ratios are odds ratios.",
+                  "BH FDR uses four endpoints within each stage, retained for comparison with M0/M2.",
+                  "This is not thesis-wide multiplicity control; final family policy remains to be settled.",
+                  "Raw p-values are retained in effects.csv and the comparison CSV.",
+                  "English and White are reference categories. Missing language and unknown/declined/missing race",
+                  "are explicit categories, not imputed known values; these are recorded administrative fields.",
+                  "Numerical acceptance and targeted influence checks do not establish all modelling assumptions."])
+    (output / "results_summary.md").write_text("\n".join(lines) + "\n")
+    (output / "methods.txt").write_text("\n".join(lines[2:6] + lines[-8:]) + "\n")
+    (output / "source_baseline_input_sha256.txt").write_text(source_hash + "\n")
+    for name, path in [("model_input_sha256.txt", output / "model_inputs.csv"),
+                       ("covariate_source_sha256.txt", cov_path),
+                       ("python_source_sha256.txt", Path(__file__))]:
+        (output / name).write_text(hashlib.sha256(path.read_bytes()).hexdigest() + "\n")
+    (output / "analysis_source_sha256.txt").write_text(hashlib.sha256(STAY_MORTALITY_R.encode()).hexdigest() + "\n")
+    if hashlib.sha256(source.read_bytes()).hexdigest() != source_hash:
+        raise ValueError("Baseline input changed during sensitivity analysis")
+    print(reporting[["stage", "outcome", "n_pairs", "ratio", "ci_low", "ci_high", "FDR", "numeric_valid"]].to_string(index=False))
 
 
 def fit_stay_mortality_models(post_discharge_only: bool = False, whole_matched: bool = False):
@@ -2651,8 +2774,9 @@ if __name__ == "__main__":
     parser.add_argument("--fit-post-discharge-mortality", action="store_true", help="Fit primary M0/M2 post-discharge logistic models with patient/pair clustered inference")
     parser.add_argument("--fit-primary-stay-mortality", action="store_true", help="Fit and report all four primary clinical endpoints using patient/pair clustered inference")
     parser.add_argument("--fit-whole-cohort-stay-mortality", action="store_true", help="Fit M0/M2 for all four endpoints across the full matched cohort; save separate outputs")
+    parser.add_argument("--fit-whole-cohort-stay-mortality-sensitivity", action="store_true", help="Fit M3 language and M4 language/race adjustments on the saved whole-cohort M0/M2 sample")
     options = parser.parse_args()
-    if not options.model_only and not options.diagnose_negative_binomial and not options.fit_longitudinal and not options.review_longitudinal and not options.fit_longitudinal_zi and not options.fit_longitudinal_adjusted and not options.compare_m2_distributions and not options.without_admission_intercept and not options.fit_marginal and not options.fit_first24_marginal and not options.fit_first12_marginal and not options.fit_stay_mortality and not options.fit_stay_mortality_mixed and not options.fit_post_discharge_mortality and not options.fit_primary_stay_mortality and not options.fit_whole_cohort_stay_mortality:
+    if not options.model_only and not options.diagnose_negative_binomial and not options.fit_longitudinal and not options.review_longitudinal and not options.fit_longitudinal_zi and not options.fit_longitudinal_adjusted and not options.compare_m2_distributions and not options.without_admission_intercept and not options.fit_marginal and not options.fit_first24_marginal and not options.fit_first12_marginal and not options.fit_stay_mortality and not options.fit_stay_mortality_mixed and not options.fit_post_discharge_mortality and not options.fit_primary_stay_mortality and not options.fit_whole_cohort_stay_mortality and not options.fit_whole_cohort_stay_mortality_sensitivity:
         main()
     if options.fit_negative_binomial or options.model_only:
         fit_negative_binomial_models()
@@ -2686,3 +2810,5 @@ if __name__ == "__main__":
         fit_primary_stay_mortality_models()
     if options.fit_whole_cohort_stay_mortality:
         fit_primary_stay_mortality_models(whole_matched=True)
+    if options.fit_whole_cohort_stay_mortality_sensitivity:
+        fit_whole_cohort_stay_mortality_sensitivity()
