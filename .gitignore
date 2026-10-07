@@ -130,6 +130,9 @@ python-code/08_model_training/bioclinicalbert_readmission_classifier_output*/
 python-code/08_model_training/bioclinicalbert_readmission_classifier_inference_output*/
 
 # Generated HTML visualization output
+# Keep the root README local for now.
+/README.md
+
 html-visualization/
 python-code/html-visualization/
 **/html-visualization/
