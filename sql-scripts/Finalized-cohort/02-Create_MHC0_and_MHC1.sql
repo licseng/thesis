@@ -1,7 +1,7 @@
 -- Finalized cohort construction: stage 2
 --
 -- Prerequisite:
---   Run 01-Load_and_create_base_cohort.sql first.
+--   Run 01-Load_and_create_base_tables.sql first.
 --
 -- Definitions used here:
 --   MHC0 is a patient-level "psychiatric-code negative" cohort. A patient is
