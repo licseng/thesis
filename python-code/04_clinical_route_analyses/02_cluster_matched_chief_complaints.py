@@ -29,7 +29,7 @@ for clinically interpretable candidate grouping; final complaint groups will
 likely need manual review and possibly manual merging.
 
 Outputs are local QC artifacts under:
-    04_clinical_activtiy_analysis/chief_complaint_cluster_qc_output/
+    04_clinical_route_analyses/chief_complaint_cluster_qc_output/
 """
 
 from __future__ import annotations

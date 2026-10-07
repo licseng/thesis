@@ -5,6 +5,8 @@ both members of an original matched pair with valid values for each outcome.
 Missing/negative stay durations are excluded per outcome, without converting
 missing event counts to zero. Event counts represent recorded database rows.
 Optional negative-binomial inference uses crossed patient/pair random intercepts.
+The --fit-whole-cohort-stay-mortality mode uses all matched admissions for
+LOS/ED stay and both mortality endpoints, without pooling clinical work-up counts.
 No clinical free-text export is performed.
 """
 
@@ -72,7 +74,7 @@ def load_subgroup_assignments() -> pd.DataFrame:
     if not ASSIGNMENT_PATH.exists():
         raise FileNotFoundError(
             "Missing subgroup assignments. Run "
-            "04_clinical_activtiy_analysis/01_describe_chief_complaint_subgroups.py first: "
+            "04_clinical_route_analyses/01_describe_chief_complaint_subgroups.py first: "
             f"{ASSIGNMENT_PATH}"
         )
 
@@ -2115,16 +2117,41 @@ writeLines(capture.output(sessionInfo()),file.path(out,"R_session_info.txt"))
 '''
 
 
-def fit_stay_mortality_models(post_discharge_only: bool = False):
+def fit_stay_mortality_models(post_discharge_only: bool = False, whole_matched: bool = False):
     """Outcome-specific complete pairs; M0/M2, no trimming or raw text access."""
     import numpy as np
     from statsmodels.stats.multitest import multipletests
 
-    output = PAIRED_WORKUP_OUTPUT_DIR / ("post_discharge_1y_mortality_models" if post_discharge_only else "stay_and_mortality_models")
+    if whole_matched and post_discharge_only:
+        raise ValueError("Whole-cohort mode fits all four endpoints together")
+    output = (SCRIPT_DIR / "analysis_output_whole_matched_stay_mortality" if whole_matched
+              else PAIRED_WORKUP_OUTPUT_DIR / ("post_discharge_1y_mortality_models" if post_discharge_only else "stay_and_mortality_models"))
     output.mkdir(parents=True, exist_ok=True)
-    selected = pd.read_csv(PAIRED_INPUT_DIR / "complete_cc_pair_admissions.csv")
+    if whole_matched:
+        pairs = pd.read_csv(common.MATCHED_PAIRS_PATH, usecols=[
+            "pair_id", "mhc0_subject_id", "mhc0_hadm_id", "mhc1_subject_id", "mhc1_hadm_id"])
+        if pairs.pair_id.duplicated().any():
+            raise ValueError("Duplicate source matched-pair IDs")
+        selected = pd.concat([
+            pd.DataFrame({"pair_id": pairs.pair_id, "cohort": cohort,
+                          "subject_id": pairs[f"{prefix}_subject_id"],
+                          "hadm_id": pairs[f"{prefix}_hadm_id"]})
+            for cohort, prefix in [("MHC0", "mhc0"), ("MHC1_psychotic", "mhc1")]
+        ], ignore_index=True)
+        # Retain the existing engine's group column, but do not apply a CC filter.
+        selected["pure_cc_group"] = "whole_matched_cohort"
+        if selected.hadm_id.duplicated().any() or selected[ID_COLUMNS].isna().any().any():
+            raise ValueError("Missing or reused admission IDs in whole matched cohort")
+        if set(selected.loc[selected.cohort.eq("MHC0"), "subject_id"]) & set(
+                selected.loc[selected.cohort.eq("MHC1_psychotic"), "subject_id"]):
+            raise ValueError("Patients overlap between whole matched cohorts")
+    else:
+        selected = pd.read_csv(PAIRED_INPUT_DIR / "complete_cc_pair_admissions.csv")
     descriptors = load_descriptors()
-    if post_discharge_only:
+    include_post_discharge = post_discharge_only or whole_matched
+    if whole_matched and set(descriptors.hadm_id) != set(selected.hadm_id):
+        raise ValueError("Descriptor admission IDs differ from current whole matching")
+    if include_post_discharge:
         # DOD contains dates, not trustworthy times of day. Discharge-alive
         # records may have a recorded post-discharge death on that same date.
         dod = pd.to_datetime(descriptors["dod"], errors="raise").dt.normalize()
@@ -2144,9 +2171,9 @@ def fit_stay_mortality_models(post_discharge_only: bool = False):
                 / "analysis_output_language_complexity_inference" / "race_ethnicity_sensitivity"
                 / "model_covariates.csv")
     covariates = ["age_at_admission_per_10y", "elixhauser_score_per_5pt", "log1p_prior_all_admissions"]
-    cov = pd.read_csv(cov_path)
+    cov = pd.read_csv(cov_path, usecols=ID_COLUMNS + covariates)
     extra_columns = (["post_discharge_death_within_1y","post_discharge_inhospital_death",
-                      "post_discharge_inconsistent_dates","post_discharge_same_day_death"] if post_discharge_only else [])
+                      "post_discharge_inconsistent_dates","post_discharge_same_day_death"] if include_post_discharge else [])
     data = selected[ID_COLUMNS + ["pair_id", "pure_cc_group"]].merge(
         descriptors[ID_COLUMNS + ["hospital_los_days", "ed_los_hours", "hospital_expire_flag"] + extra_columns],
         on=ID_COLUMNS, how="left", validate="one_to_one").merge(
@@ -2157,7 +2184,9 @@ def fit_stay_mortality_models(post_discharge_only: bool = False):
     outcomes = ([("post_discharge_death_within_1y","post_discharge_death_within_1y")] if post_discharge_only else [("hospital_los_days", "hospital_los_days"),
                             ("ed_los_hours", "ed_los_hours"),
                             ("in_hospital_mortality", "hospital_expire_flag")])
-    if post_discharge_only:
+    if whole_matched:
+        outcomes.append(("post_discharge_death_within_1y", "post_discharge_death_within_1y"))
+    if include_post_discharge:
         data.groupby(["pure_cc_group","cohort"]).agg(
             initial_admissions=("hadm_id","size"),hospital_deaths=("post_discharge_inhospital_death","sum"),
             inconsistent_dates=("post_discharge_inconsistent_dates","sum"),
@@ -2193,16 +2222,18 @@ def fit_stay_mortality_models(post_discharge_only: bool = False):
     subprocess.run(["Rscript", "-", str(input_path), str(output), str(r_library)],
                    input=STAY_MORTALITY_R, text=True, check=True)
     effects = pd.read_csv(output / "effects.csv")
-    if len(effects) != (10 if post_discharge_only else 30):
+    if len(effects) != (8 if whole_matched else 10 if post_discharge_only else 30):
         raise ValueError("Unexpected number of cohort comparisons")
     effects["FDR"] = np.nan
     for stage, group in effects.groupby("stage"):
-        # All 15 planned cohort comparisons; unavailable tests count as p=1.
+        # Whole cohort: all four endpoints per stage. Existing CC families unchanged.
+        # Unavailable tests remain in their family as p=1.
         adjusted = multipletests(group.p.fillna(1), method="fdr_bh")[1]
         effects.loc[group.index,"FDR"] = np.where(group.p.notna(),adjusted,np.nan)
     effects.to_csv(output / "effects.csv",index=False)
     (output / "methods.txt").write_text(
-        "Five retained pure-CC matched subgroups; outcome-specific complete pairs.\n"
+        ("Entire matched cohort, without CC restrictions; outcome-specific complete pairs.\n"
+         if whole_matched else "Five retained pure-CC matched subgroups; outcome-specific complete pairs.\n") +
         "M0: cohort. M2: cohort + age/10 years + Elixhauser/5 points + log(1+prior admissions).\n"
         "Identical admissions across M0/M2 for each outcome. No extreme-case trimming.\n"
         "Hospital LOS days and ED LOS hours: log-link PPML estimating arithmetic mean-duration ratios,\n"
@@ -2211,7 +2242,7 @@ def fit_stay_mortality_models(post_discharge_only: bool = False):
         "Uncertainty: patient and matched-pair two-way HC1 cluster covariance, intersection subtraction,\n"
         "cluster-number corrections; no eigenvalue repair. Covariance independently verified.\n"
         "Nonpositive/missing durations excluded with their paired partner; missing ED time is not zero.\n"
-        f"BH FDR across {5 if post_discharge_only else 15} planned cohort-effect tests separately for M0 and M2.\n"
+        f"BH FDR across {4 if whole_matched else 5 if post_discharge_only else 15} planned cohort-effect tests separately for M0 and M2.\n"
         "Fewer than 20 total deaths is a descriptive sparse-data caution, not a validated adequacy cutoff.\n"
         "Invalid/unstable fits have no inferential p-values. Calibration quintiles are descriptive.\n"
         "LOS includes in-hospital deaths; it is not time-to-discharge among survivors.\n")
@@ -2228,6 +2259,16 @@ def fit_stay_mortality_models(post_discharge_only: bool = False):
                     "Keep complete survivor pairs only; one death may label multiple overlapping discharge windows.\n"
                     "MIMIC DOD censoring: one year after last hospital discharge; registry ascertainment limitations remain.\n"
                     "Separate 5-test family per stage for this newly added endpoint; prior 15-test results unchanged.\n")
+    if whole_matched:
+        with (output / "methods.txt").open("a") as f:
+            f.write("Post-discharge endpoint: recorded DOD on discharge date through +365 days inclusive,\n"
+                    "among admissions documented discharged alive, with valid positive chronology;\n"
+                    "exclude survivor records with pre-discharge DOD; missing DOD means no recorded death in window.\n"
+                    "Keep complete survivor pairs; one death can label multiple overlapping windows.\n"
+                    "DOD censoring/registry ascertainment limitations remain.\n"
+                    "Whole-cohort four-endpoint FDR families are separate from existing CC-specific analyses.\n")
+        (output / "python_source_sha256.txt").write_text(hashlib.sha256(Path(__file__).read_bytes()).hexdigest()+"\n")
+        (output / "covariate_source_sha256.txt").write_text(hashlib.sha256(cov_path.read_bytes()).hexdigest()+"\n")
     (output / "model_input_sha256.txt").write_text(hashlib.sha256(input_path.read_bytes()).hexdigest()+"\n")
     print(effects[["stage","pure_cc_group","outcome","ratio","ci_low","ci_high","FDR","sparse_mortality","numeric_valid"]].to_string(index=False))
 
@@ -2428,27 +2469,35 @@ def fit_stay_mortality_mixed_models(post_discharge_only: bool = False):
                    "numeric_valid","boundary_fit","sparse_mortality","predictive_check_flag"]].to_string(index=False))
 
 
-def fit_primary_stay_mortality_models():
+def fit_primary_stay_mortality_models(whole_matched: bool = False):
     """Primary clinical outcome inference: PPML/logistic with two-way clustering."""
-    fit_stay_mortality_models()
-    fit_stay_mortality_models(post_discharge_only=True)
-    output = PAIRED_WORKUP_OUTPUT_DIR / "primary_stay_mortality_results"
+    if whole_matched:
+        fit_stay_mortality_models(whole_matched=True)
+        output = SCRIPT_DIR / "analysis_output_whole_matched_stay_mortality"
+        source_base = SCRIPT_DIR
+        families = [(output.name, "whole_matched_4_tests")]
+    else:
+        fit_stay_mortality_models()
+        fit_stay_mortality_models(post_discharge_only=True)
+        output = PAIRED_WORKUP_OUTPUT_DIR / "primary_stay_mortality_results"
+        source_base = PAIRED_WORKUP_OUTPUT_DIR
+        families = [("stay_and_mortality_models", "LOS_ED_inhospital_15_tests"),
+                    ("post_discharge_1y_mortality_models", "post_discharge_5_tests")]
     output.mkdir(parents=True, exist_ok=True)
-    families = [("stay_and_mortality_models", "LOS_ED_inhospital_15_tests"),
-                ("post_discharge_1y_mortality_models", "post_discharge_5_tests")]
     for name in ["effects.csv","coefficients.csv","diagnostics.csv","descriptives.csv",
                  "sample_selection.csv","calibration.csv","influence.csv"]:
         frames = []
         for folder, family in families:
-            frame = pd.read_csv(PAIRED_WORKUP_OUTPUT_DIR / folder / name)
+            frame = pd.read_csv(source_base / folder / name)
             frame["analysis_family"] = family
             frames.append(frame)
         pd.concat(frames, ignore_index=True).to_csv(output / name,index=False)
     effects = pd.read_csv(output / "effects.csv")
     diagnostics = pd.read_csv(output / "diagnostics.csv")
     keys = ["stage","pure_cc_group","outcome"]
-    if len(effects)!=40 or effects.duplicated(keys).any():
-        raise ValueError("Expected 5 CCs x 4 endpoints x 2 stages")
+    expected = 8 if whole_matched else 40
+    if len(effects)!=expected or effects.duplicated(keys).any():
+        raise ValueError(f"Expected {expected} distinct cohort comparisons")
     report = effects.merge(diagnostics[keys+["n_pairs","n_admissions","n_patients"]],
                            on=keys,validate="one_to_one")
     report.to_csv(output / "M0_M2_reporting.csv",index=False)
@@ -2457,11 +2506,11 @@ def fit_primary_stay_mortality_models():
               "post_discharge_death_within_1y":"365-day post-discharge mortality"}
     def number(value):
         return "<0.001" if value<.001 else f"{value:.3f}"
-    lines = ["# Primary hospital outcomes: cohort comparisons", "",
+    lines = ["# Primary hospital outcomes: " + ("whole matched cohort" if whole_matched else "CC-specific cohort comparisons"), "",
              "PPML with a log link for durations; logistic regression for both mortality endpoints.",
              "Patient and matched-pair two-way clustered HC1 standard errors for every model.",
              "M0: cohort. M2: additionally age, Elixhauser score, and log(1+prior hospital admissions).", "",
-             "| Chief complaint | Outcome | Pairs | M0 ratio [95% CI]; FDR | M2 ratio [95% CI]; FDR |",
+             "| Analysis population | Outcome | Pairs | M0 ratio [95% CI]; FDR | M2 ratio [95% CI]; FDR |",
              "|---|---|---:|---|---|"]
     for cc in sorted(report.pure_cc_group.unique()):
         for outcome, label in labels.items():
@@ -2474,8 +2523,9 @@ def fit_primary_stay_mortality_models():
             caution=" (sparse deaths)" if rows.sparse_mortality.any() else ""
             lines.append(f"| {cc} | {label}{caution} | {int(rows.loc['M0','n_pairs'])} | {cells[0]} | {cells[1]} |")
     lines.extend(["", "Duration ratios concern arithmetic means; mortality ratios are odds ratios.",
-        "BH FDR: 15 LOS/ED/in-hospital comparisons per stage; five post-discharge comparisons separately.",
-        "These families retain the earlier definition; they were not chosen from the new p-values.",
+        ("BH FDR: four whole-cohort endpoints per stage, separate from all CC-specific tests."
+         if whole_matched else "BH FDR: 15 LOS/ED/in-hospital comparisons per stage; five post-discharge comparisons separately."),
+        "Families were specified before inspecting the new p-values.",
         "Fewer than 20 deaths is a descriptive caution, not a validated adequacy threshold.",
         "Convergence does not certify adequate inference when deaths are sparse or influential patients dominate.",
         "influence.csv checks three score-ranked patients and three pairs per fit; it is not exhaustive.",
@@ -2485,7 +2535,7 @@ def fit_primary_stay_mortality_models():
         "The raw in-hospital endpoint is admission-based; clustering does not convert its denominator to unique patients.",
         "Mixed models are retained as exploratory alternatives; language-complexity models are a separate analysis."])
     (output / "results_summary.md").write_text("\n".join(lines)+"\n")
-    fingerprints = {folder: (PAIRED_WORKUP_OUTPUT_DIR/folder/"model_input_sha256.txt").read_text().strip()
+    fingerprints = {folder: (source_base/folder/"model_input_sha256.txt").read_text().strip()
                     for folder,_ in families}
     (output / "source_input_fingerprints.txt").write_text(
         "\n".join(f"{folder}: {fingerprint}" for folder,fingerprint in fingerprints.items())+"\n")
@@ -2600,8 +2650,9 @@ if __name__ == "__main__":
     parser.add_argument("--fit-stay-mortality-mixed", action="store_true", help="Fit Gamma/log and logistic patient/pair mixed models using identical saved inputs")
     parser.add_argument("--fit-post-discharge-mortality", action="store_true", help="Fit primary M0/M2 post-discharge logistic models with patient/pair clustered inference")
     parser.add_argument("--fit-primary-stay-mortality", action="store_true", help="Fit and report all four primary clinical endpoints using patient/pair clustered inference")
+    parser.add_argument("--fit-whole-cohort-stay-mortality", action="store_true", help="Fit M0/M2 for all four endpoints across the full matched cohort; save separate outputs")
     options = parser.parse_args()
-    if not options.model_only and not options.diagnose_negative_binomial and not options.fit_longitudinal and not options.review_longitudinal and not options.fit_longitudinal_zi and not options.fit_longitudinal_adjusted and not options.compare_m2_distributions and not options.without_admission_intercept and not options.fit_marginal and not options.fit_first24_marginal and not options.fit_first12_marginal and not options.fit_stay_mortality and not options.fit_stay_mortality_mixed and not options.fit_post_discharge_mortality and not options.fit_primary_stay_mortality:
+    if not options.model_only and not options.diagnose_negative_binomial and not options.fit_longitudinal and not options.review_longitudinal and not options.fit_longitudinal_zi and not options.fit_longitudinal_adjusted and not options.compare_m2_distributions and not options.without_admission_intercept and not options.fit_marginal and not options.fit_first24_marginal and not options.fit_first12_marginal and not options.fit_stay_mortality and not options.fit_stay_mortality_mixed and not options.fit_post_discharge_mortality and not options.fit_primary_stay_mortality and not options.fit_whole_cohort_stay_mortality:
         main()
     if options.fit_negative_binomial or options.model_only:
         fit_negative_binomial_models()
@@ -2633,3 +2684,5 @@ if __name__ == "__main__":
         fit_stay_mortality_models(post_discharge_only=True)
     if options.fit_primary_stay_mortality:
         fit_primary_stay_mortality_models()
+    if options.fit_whole_cohort_stay_mortality:
+        fit_primary_stay_mortality_models(whole_matched=True)
