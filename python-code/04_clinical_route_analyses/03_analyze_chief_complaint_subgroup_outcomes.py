@@ -2665,6 +2665,66 @@ def fit_primary_stay_mortality_models(whole_matched: bool = False):
     print(f"Primary reporting saved: {len(effects)} comparisons; {int(effects.numeric_valid.sum())} numerically accepted.")
 
 
+def fit_whole_cohort_clinical_activity():
+    """Reuse validated whole-cohort intervals, adding existing sensitivity covariates."""
+    import json
+    import numpy as np
+
+    PYTHON = PROJECT_DIR
+    KEY = ["pair_id", "cohort", "subject_id", "hadm_id"]
+    COV = ["age_at_admission_per_10y", "elixhauser_score_per_5pt",
+           "log1p_prior_all_admissions"]
+    LANG = PYTHON / "03_discharge_note_text_analysis/01_language_complexity"
+    source = SCRIPT_DIR / "analysis_output_whole_matched_clinical_activity/source_inpatient_intervals.csv"
+    fingerprint = hashlib.sha256(source.read_bytes()).hexdigest()
+    assert fingerprint == (source.parent / "source_inpatient_intervals_sha256.txt").read_text().strip()
+    inputs = pd.read_csv(source)
+    cov_path = LANG / "analysis_output_language_complexity_inference/race_ethnicity_sensitivity/model_covariates.csv"
+    columns = ["language_group", "race_ethnicity_group"]
+    cov = pd.read_csv(cov_path, usecols=KEY + COV + columns)
+    merged = inputs.merge(cov, on=KEY, how="left", validate="many_to_one",
+                          suffixes=("", "_sensitivity"), indicator=True)
+    assert merged._merge.eq("both").all()
+    for col in COV:
+        assert np.allclose(merged[col], merged[col + "_sensitivity"])
+    levels = {"language_group": ["English", "Non-English", "Missing"],
+              "race_ethnicity_group": ["White", "Black", "Asian", "Hispanic/Latino",
+                                      "Other recorded categories", "Unknown/declined/missing"]}
+    for col, allowed in levels.items():
+        assert merged[col].isin(allowed).all(), f"Invalid sensitivity categories: {col}"
+    pairs_path = PYTHON / "02_cohort_matching/matched_cohort_output/matched_pairs.csv"
+    pairs = pd.read_csv(pairs_path)
+    mapping = pd.concat([pd.DataFrame({"pair_id": pairs.pair_id,
+        "cohort": cohort, "subject_id": pairs[f"{prefix}_subject_id"],
+        "hadm_id": pairs[f"{prefix}_hadm_id"]}) for cohort, prefix in
+        [("MHC0","mhc0"),("MHC1_psychotic","mhc1")]],ignore_index=True)
+    admissions = merged[KEY].drop_duplicates()
+    assert len(admissions.merge(mapping,on=KEY,validate="one_to_one")) == len(admissions)
+    assert admissions.groupby("pair_id").size().eq(2).all()
+    out = PYTHON / "04_clinical_route_analyses/analysis_output_whole_matched_clinical_activity"
+    out.mkdir(exist_ok=True)
+    merged = merged.drop(columns=["_merge"] + [col + "_sensitivity" for col in COV])
+    merged.to_csv(out / "model_inputs.csv",index=False)
+    merged.drop_duplicates("hadm_id").groupby(["cohort"] + columns).size().rename(
+        "n_admissions").to_csv(out / "covariate_category_counts.csv")
+    whole = merged.groupby(KEY + ["measure"],as_index=False).agg(
+        n_events=("n_events","sum"),exposure_days=("exposure_days","sum"))
+    summary = whole.groupby(["cohort","measure"]).agg(n_admissions=("hadm_id","size"),
+        n_patients=("subject_id","nunique"),total_events=("n_events","sum"),
+        mean_count=("n_events","mean"),median_count=("n_events","median"),
+        observed_days=("exposure_days","sum"))
+    summary["pooled_events_per_day"] = summary.total_events/summary.observed_days
+    summary.to_csv(out / "descriptives.csv")
+    manifest = {"source_interval_sha256": fingerprint,
+        "covariate_sha256": hashlib.sha256(cov_path.read_bytes()).hexdigest(),
+        "matched_pairs_sha256": hashlib.sha256(pairs_path.read_bytes()).hexdigest(),
+        "model_input_sha256": hashlib.sha256((out / "model_inputs.csv").read_bytes()).hexdigest()}
+    (out / "input_manifest.json").write_text(json.dumps(manifest,indent=2))
+    print(f"Aggregate clinical activity: {len(admissions)} admissions; "
+          f"{admissions.pair_id.nunique()} pairs; no sensitivity-covariate exclusions.")
+
+    subprocess.run(["Rscript", str(SCRIPT_DIR / "08_fit_whole_matched_clinical_activity.R")], check=True)
+
 def main():
     selected = pd.read_csv(PAIRED_INPUT_DIR / "complete_cc_pair_admissions.csv")
     descriptors = load_descriptors()
@@ -2775,7 +2835,11 @@ if __name__ == "__main__":
     parser.add_argument("--fit-primary-stay-mortality", action="store_true", help="Fit and report all four primary clinical endpoints using patient/pair clustered inference")
     parser.add_argument("--fit-whole-cohort-stay-mortality", action="store_true", help="Fit M0/M2 for all four endpoints across the full matched cohort; save separate outputs")
     parser.add_argument("--fit-whole-cohort-stay-mortality-sensitivity", action="store_true", help="Fit M3 language and M4 language/race adjustments on the saved whole-cohort M0/M2 sample")
+    parser.add_argument("--fit-whole-cohort-clinical-activity", action="store_true", help="Fit aggregate M0/M2/M3/M4 PPML workup models across all matched complaints")
     options = parser.parse_args()
+    if options.fit_whole_cohort_clinical_activity:
+        fit_whole_cohort_clinical_activity()
+        sys.exit(0)
     if not options.model_only and not options.diagnose_negative_binomial and not options.fit_longitudinal and not options.review_longitudinal and not options.fit_longitudinal_zi and not options.fit_longitudinal_adjusted and not options.compare_m2_distributions and not options.without_admission_intercept and not options.fit_marginal and not options.fit_first24_marginal and not options.fit_first12_marginal and not options.fit_stay_mortality and not options.fit_stay_mortality_mixed and not options.fit_post_discharge_mortality and not options.fit_primary_stay_mortality and not options.fit_whole_cohort_stay_mortality and not options.fit_whole_cohort_stay_mortality_sensitivity:
         main()
     if options.fit_negative_binomial or options.model_only:
