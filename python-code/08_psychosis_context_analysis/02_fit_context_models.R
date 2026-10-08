@@ -8,14 +8,8 @@ python <- dirname(here)
  "03_discharge_note_text_analysis/01_language_complexity/.r-library"), .libPaths()))
 suppressPackageStartupMessages({library(lmerTest); library(sandwich)})
 output <- file.path(here, "analysis_output")
-aggregate_clinical <- "--aggregate-clinical" %in% commandArgs(TRUE)
-clinical <- "--clinical-events" %in% commandArgs(TRUE) || aggregate_clinical
-if(aggregate_clinical) {
- output <- file.path(python,
-  "04_clinical_route_analyses/analysis_output_whole_matched_clinical_activity")
-} else if(clinical) {
- output <- file.path(output,"clinical_activity")
-}
+clinical <- "--clinical-events" %in% commandArgs(TRUE)
+if(clinical) output <- file.path(output,"clinical_activity")
 d_all <- read.csv(file.path(output, "model_inputs.csv"))
 if(clinical) {
  d_all$outcome <- d_all$measure
@@ -28,23 +22,12 @@ if(clinical) {
 }
 d_all$context_group <- factor(d_all$context_group,
  levels=c("MHC0","history_only","current_with_or_without_history"))
-if(aggregate_clinical) {
- d_all$context_group <- factor(d_all$cohort,levels=c("MHC0","MHC1_psychotic"))
- d_all$language_group <- factor(d_all$language_group,
-  levels=c("English","Non-English","Missing"))
- d_all$race_ethnicity_group <- factor(d_all$race_ethnicity_group,
-  levels=c("White","Black","Asian","Hispanic/Latino","Other recorded categories",
-   "Unknown/declined/missing"))
-}
 # Patient IDs, not subgroup labels, identify the same person across subgroups.
 d_all$patient <- factor(d_all$subject_id)
 d_all$matched_pair <- factor(d_all$pair_id)
 adjustments <- c("age_at_admission_per_10y", "elixhauser_score_per_5pt",
  "log1p_prior_all_admissions")
 model_adjustments <- list(M0=character(), M1=adjustments[1:2], M2=adjustments)
-if(aggregate_clinical) model_adjustments <- list(M0=character(),M2=adjustments,
- M3=c(adjustments,"language_group"),
- M4=c(adjustments,"language_group","race_ethnicity_group"))
 results <- list(); diagnostics <- list(); coefficients <- list(); calibration <- list()
 for (outcome in unique(d_all$outcome)) for (stage in names(model_adjustments)) {
  d <- droplevels(d_all[d_all$outcome==outcome,])
@@ -111,13 +94,9 @@ for (outcome in unique(d_all$outcome)) for (stage in names(model_adjustments)) {
   framework=if(mixed)"REML linear mixed model" else "PPML; two-way patient/pair HC1 SE")
  terms <- c("context_grouphistory_only",
   "context_groupcurrent_with_or_without_history")
- if(aggregate_clinical) terms <- "context_groupMHC1_psychotic"
  stopifnot(all(terms %in% names(b)))
  contrasts <- list(history_only_vs_MHC0=c(1,0),
   current_vs_MHC0=c(0,1),current_vs_history_only=c(-1,1))
- if(aggregate_clinical) {
-  contrasts <- list(MHC1_psychosis_vs_MHC0=1)
- }
  for (label in names(contrasts)) {
   L <- setNames(rep(0,length(b)),names(b))
   L[terms] <- contrasts[[label]]
