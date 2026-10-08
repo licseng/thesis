@@ -11,6 +11,7 @@ workup/outcome analyses. It does not write raw chief-complaint text.
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import pandas as pd
@@ -704,8 +705,10 @@ def write_outputs(
 
 
 # Current pipeline: explore seven symptom groups, then retain original pairs
-# within the five selected pure groups. Older combined outputs above remain
+# within the five selected non-overlapping groups. Older combined outputs above remain
 # available for existing archival consumers.
+# Legacy filenames/columns retain "pure" for compatibility; these categories
+# exclude overlap among the selected seven, not all additional complaints.
 EXPLORATION_OUTPUT_DIR = SCRIPT_DIR / "analysis_output_top_pure_chief_complaints"
 PAIR_OUTPUT_DIR = SCRIPT_DIR / "analysis_output_complete_top_five_cc_pairs"
 TOP_ASSIGNMENT_PATH = EXPLORATION_OUTPUT_DIR / "top_seven_cc_admission_assignments.csv"
@@ -799,7 +802,7 @@ def explore_top_pure_groups():
                     "quickumls_terms": " | ".join(config["quickumls_terms"]), "selected": name in selected}
                    for name, config in groups.items()]
     pd.DataFrame(definitions).to_csv(EXPLORATION_OUTPUT_DIR / "candidate_group_definitions.csv", index=False)
-    print("Top seven grouped complaints before purity filtering:")
+    print("Top seven grouped complaints before the selected-category overlap exclusion:")
     print(ranking[ranking["rank"].le(7)].to_string(index=False))
     print("\nPure subgroup counts:")
     print(pd.DataFrame(counts).to_string(index=False))
@@ -826,7 +829,7 @@ def select_complete_top_five_pairs():
         assignments.selection_status.eq("pure") & assignments.pure_cc_group.isin(PAIRED_GROUPS)
     ].copy()
     if not candidates.n_selected_groups_matched.eq(1).all():
-        raise ValueError("Non-pure admissions in candidate selection")
+        raise ValueError("Admissions overlapping selected CC categories in candidate selection")
     pair_counts = candidates.groupby(["pure_cc_group", "pair_id"]).cohort.nunique()
     complete = pair_counts[pair_counts.eq(2)].reset_index()[["pure_cc_group", "pair_id"]]
     kept = candidates.merge(complete, on=["pure_cc_group", "pair_id"], how="inner", validate="many_to_one")
@@ -856,12 +859,75 @@ def select_complete_top_five_pairs():
         PAIR_OUTPUT_DIR / "complete_cc_pairs.csv", index=False)
     print(pd.DataFrame(rows).to_string(index=False))
     print(f"\nRetained {len(pair_export):,} original matched pairs ({len(kept):,} admissions).")
-    print("Purity remains defined relative to all seven selected complaint groups.")
+    print("Non-overlap is defined only relative to the seven selected CC categories; other complaints may remain.")
 
+
+
+def describe_exact_single_complaints() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Count literal whole-entry matches; never print individual CC text.
+
+    This is a predefined list of single-complaint expressions relevant to the
+    current analyses, not a claim to identify all single complaints in MIMIC.
+    Case and whitespace only are normalized. No phrase/QuickUMLS inclusion,
+    punctuation stripping, or existing CC normalization is used here.
+    """
+    expressions = {
+        "shortness of breath": ["shortness of breath", "dyspnea", "sob"],
+        "altered mental status": ["altered mental status", "confusion", "ams"],
+        "abdominal pain": ["abdominal pain"],
+        "chest pain": ["chest pain"],
+        "fall": ["fall", "falls", "mechanical fall"],
+        "fever": ["fever"], "nausea": ["nausea"], "vomiting": ["vomiting"],
+    }
+    columns = ["pair_id", "mhc0_chief_complaint_raw", "mhc1_chief_complaint_raw"]
+    pairs = pd.read_parquet(MATCHED_PAIRS_PATH, columns=columns)
+    if pairs.empty or pairs.pair_id.isna().any() or pairs.pair_id.duplicated().any():
+        raise ValueError("Expected non-empty current matching with unique pair IDs.")
+    cc = {
+        prefix: pairs[f"{prefix}_chief_complaint_raw"].fillna("").astype(str)
+        .str.lower().str.replace(r"\s+", " ", regex=True).str.strip()
+        for prefix in ["mhc0", "mhc1"]
+    }
+    literal_rows, category_rows = [], []
+    for category, variants in expressions.items():
+        for expression in variants:
+            control, case = cc["mhc0"].eq(expression), cc["mhc1"].eq(expression)
+            literal_rows.append({
+                "exact_cc_expression": expression, "complaint_category": category,
+                "n_mhc0_admissions": int(control.sum()), "n_mhc1_psychosis_admissions": int(case.sum()),
+                "n_original_pairs_with_identical_expression": int((control & case).sum()),
+            })
+        control, case = cc["mhc0"].isin(variants), cc["mhc1"].isin(variants)
+        complete = int((control & case).sum())
+        category_rows.append({
+            "complaint_category": category, "allowed_exact_expressions": " | ".join(variants),
+            "n_mhc0_admissions": int(control.sum()), "n_mhc1_psychosis_admissions": int(case.sum()),
+            "n_complete_original_same_category_pairs": complete,
+            "n_retained_admissions_per_cohort": complete,
+            "n_mhc0_without_same_category_partner": int(control.sum()) - complete,
+            "n_mhc1_without_same_category_partner": int(case.sum()) - complete,
+        })
+    literal, categories = pd.DataFrame(literal_rows), pd.DataFrame(category_rows)
+    output_dir = SCRIPT_DIR / "analysis_output_exact_single_complaints"
+    output_dir.mkdir(exist_ok=True)
+    literal.to_csv(output_dir / "exact_single_complaint_expression_counts.csv", index=False)
+    categories.to_csv(output_dir / "exact_single_complaint_category_pair_counts.csv", index=False)
+    print("Exact whole-entry matches in the full matched cohort (case/whitespace ignored):")
+    print(literal.to_string(index=False))
+    print("\nSeparate synonym-category summary; original matching is not changed:")
+    print(categories.to_string(index=False))
+    return literal, categories
 
 
 def main() -> None:
     """Describe current CC groups and select the five complete paired subgroups."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--exact-single-complaints", action="store_true",
+                        help="Only summarize predefined exact single-complaint entries; do not regenerate broader groups.")
+    args = parser.parse_args()
+    if args.exact_single_complaints:
+        describe_exact_single_complaints()
+        return
     matched_pairs = load_matched_pairs()
     admissions = build_admission_level_complaints(matched_pairs)
     flagged = add_exclusive_combined_group(add_subgroup_flags(admissions))

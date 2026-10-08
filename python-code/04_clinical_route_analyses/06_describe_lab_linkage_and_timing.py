@@ -32,9 +32,9 @@ def describe_variation(data):
         has_cc = assignments[flag].astype(str).str.lower().isin(["true", "1"])
         subsets = {
             "all_matched_admissions_with_this_CC": assignments[has_cc],
-            "pure_CC_before_pair_restriction": assignments[has_cc & assignments.selection_status.eq("pure")],
+            "non_overlapping_CC_before_pair_restriction": assignments[has_cc & assignments.selection_status.eq("pure")],
             "overlapping_selected_CCs": assignments[has_cc & assignments.selection_status.eq("multiple_selected_groups")],
-            "retained_pure_complete_pairs": data[data.pure_cc_group.eq(group)],
+            "retained_non_overlapping_complete_pairs": data[data.pure_cc_group.eq(group)],
         }
         for population, frame in subsets.items():
             for cohort, f in frame.groupby("cohort"):

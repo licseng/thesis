@@ -1,4 +1,4 @@
-"""Describe work-up and stay duration within five complete pure-CC pairs.
+"""Describe work-up and stay duration within five complete non-overlapping CC pairs.
 
 Run 01_describe_chief_complaint_subgroups.py first. The primary summaries retain
 both members of an original matched pair with valid values for each outcome.
@@ -427,7 +427,7 @@ def build_pair_membership_summary(analysis: pd.DataFrame) -> pd.DataFrame:
 
 
 
-# Current paired pure-subgroup analysis. Existing helper functions remain
+# Current paired non-overlapping subgroup analysis. Existing helper functions remain
 # available to the optional all-pure-admission exploration script.
 PAIRED_INPUT_DIR = SCRIPT_DIR / "analysis_output_complete_top_five_cc_pairs"
 PAIRED_WORKUP_OUTPUT_DIR = SCRIPT_DIR / "analysis_output_complete_cc_pair_workup"
@@ -531,7 +531,7 @@ diag$variance_screen_flag <- with(diag, observed_count_variance < simulated_coun
 write.csv(diag, file.path(out, "negative_binomial_diagnostics.csv"), row.names=FALSE)
 writeLines(c(
   "M0: count ~ MHC1 + (1|patient) + (1|matched_pair). NB2 log link, ML with Laplace approximation.",
-  "Complete original pairs within each pure CC group. MHC0 reference. No adjustment covariates or LOS offset.",
+  "Complete original pairs within each non-overlapping CC group. MHC0 reference. No adjustment covariates or LOS offset.",
   "Ratios compare conditional expected recorded counts per admission, NOT rates per day or distinct tests.",
   "95% intervals and p values use asymptotic Wald inference; singular/convergence results must be reviewed.",
   "BH across 15 main comparisons (three outcomes x five CC groups); five metadata comparisons corrected separately.",
@@ -2356,7 +2356,7 @@ def fit_stay_mortality_models(post_discharge_only: bool = False, whole_matched: 
     effects.to_csv(output / "effects.csv",index=False)
     (output / "methods.txt").write_text(
         ("Entire matched cohort, without CC restrictions; outcome-specific complete pairs.\n"
-         if whole_matched else "Five retained pure-CC matched subgroups; outcome-specific complete pairs.\n") +
+         if whole_matched else "Five retained non-overlapping CC matched subgroups; outcome-specific complete pairs.\n") +
         "M0: cohort. M2: cohort + age/10 years + Elixhauser/5 points + log(1+prior admissions).\n"
         "Identical admissions across M0/M2 for each outcome. No extreme-case trimming.\n"
         "Hospital LOS days and ED LOS hours: log-link PPML estimating arithmetic mean-duration ratios,\n"
