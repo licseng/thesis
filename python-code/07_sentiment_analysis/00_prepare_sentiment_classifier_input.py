@@ -1,17 +1,13 @@
-"""Prepare selected section input for the sentiment classifier.
+"""Prepare all non-empty selected sections from BOTH full matched cohorts.
 
-This script builds the uploadable sentiment-analysis input table from:
-    - the parsed full discharge-note section parquet files, and
-    - optional all-section SL keyword exploration metadata.
-
-It keeps every non-empty note-section row from the sections selected for
-sentiment analysis. The saved parquet contains the full section text, plus
-SL-keyword-hit metadata where available, so
-`01_run_sentiment_section_classifier.py` can run directly on it.
+Sentiment eligibility does not depend on psychiatric or SL keyword hits.
+Clinical text is written locally to the ignored input parquet, never printed.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -19,203 +15,151 @@ import pandas as pd
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_PYTHON_DIR = SCRIPT_DIR.parent
-PARSER_DIR = REPO_PYTHON_DIR / "01_discharge_note_preprocessing" / "01_discharge_note_parsing"
-FULL_NOTE_DIR = PARSER_DIR / "full_discharge_note_sections"
-SL_OUTPUT_DIR = REPO_PYTHON_DIR / "03_discharge_note_text_analysis" / "02_keyword_matching" / "analysis_output_SL_keyword_exploration"
-SL_SECTION_HITS_PATH = SL_OUTPUT_DIR / "SL_keyword_section_hits.csv"
+FULL_NOTE_DIR = (REPO_PYTHON_DIR / "01_discharge_note_preprocessing"
+                 / "01_discharge_note_parsing" / "full_discharge_note_sections")
+MATCHED_PAIRS_PATH = (REPO_PYTHON_DIR / "02_cohort_matching"
+                      / "matched_cohort_output" / "matched_pairs.parquet")
 OUTPUT_DIR = SCRIPT_DIR / "sentiment_llm_input"
 
+# Retained from the earlier sentiment workflow; review before final inference.
 SELECTED_SECTION_NAMES = [
-    "brief_hospital_course",
-    "present_illness",
-    "problems",
-    "medical_history",
-    "pertinent_results",
-    "physical_exam",
-    "discharge_instructions",
-    "medication_admission",
-    "discharge_medications",
+    "brief_hospital_course", "present_illness", "problems", "medical_history",
+    "pertinent_results", "physical_exam", "discharge_instructions",
+    "medication_admission", "discharge_medications",
 ]
-
 FULL_NOTE_FILES = [
-    {
-        "cohort": "MHC1_psychotic",
-        "path": FULL_NOTE_DIR / "MHC1_psychotic_matched_full_discharge_note_sections.parquet",
-    },
-    {
-        "cohort": "MHC0",
-        "path": FULL_NOTE_DIR / "MHC0_matched_full_discharge_note_sections.parquet",
-    },
+    {"cohort": cohort, "path": FULL_NOTE_DIR / f"{cohort}_matched_full_discharge_note_sections.parquet"}
+    for cohort in ["MHC1_psychotic", "MHC0"]
 ]
-
 ID_COLUMNS = ["cohort", "subject_id", "hadm_id", "note_id"]
 NOTE_METADATA_COLUMNS = [
-    "cohort",
-    "subject_id",
-    "hadm_id",
-    "note_id",
-    "charttime",
-    "admittime",
-    "sex",
-    "age_at_admission",
+    *ID_COLUMNS, "charttime", "admittime", "sex", "age_at_admission",
 ]
-SL_METADATA_COLUMNS = [
-    "n_keyword_hits",
-    "n_keyword_groups",
-    "keyword_groups",
-    "matched_terms",
-    "keyword_hits_per_1000_words",
-]
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def validate_inputs() -> None:
-    """Fail clearly if required upstream files have not been generated."""
-    missing = []
-    for file_config in FULL_NOTE_FILES:
-        if not file_config["path"].exists():
-            missing.append(file_config["path"])
+    required_paths = [MATCHED_PAIRS_PATH, *(item["path"] for item in FULL_NOTE_FILES)]
+    missing = [str(path) for path in required_paths if not path.exists()]
     if missing:
-        raise FileNotFoundError(
-            "Missing required input file(s):\n" + "\n".join(str(path) for path in missing)
-        )
+        raise FileNotFoundError("Missing required input file(s):\n" + "\n".join(missing))
 
 
-def load_sl_section_hits() -> pd.DataFrame:
-    """Load optional SL-hit metadata for the selected sentiment sections."""
-    if not SL_SECTION_HITS_PATH.exists():
-        columns = ID_COLUMNS + ["section_name"] + SL_METADATA_COLUMNS
-        return pd.DataFrame(columns=columns)
-
-    hits = pd.read_csv(SL_SECTION_HITS_PATH)
-    required = set(ID_COLUMNS + ["section_name"] + SL_METADATA_COLUMNS)
-    missing = sorted(required - set(hits.columns))
-    if missing:
-        raise ValueError(f"SL section hits file is missing columns: {', '.join(missing)}")
-
-    hits = hits.loc[hits["section_name"].isin(SELECTED_SECTION_NAMES)].copy()
-    hits = hits.drop_duplicates(subset=ID_COLUMNS + ["section_name"])
-    return hits
-
-
-def load_section_text_long() -> pd.DataFrame:
-    """Load parsed discharge-note sections and reshape selected sections to long form."""
+def load_matched_admissions() -> pd.DataFrame:
+    columns = ["pair_id", "mhc1_subject_id", "mhc1_hadm_id", "mhc0_subject_id", "mhc0_hadm_id"]
+    pairs = pd.read_parquet(MATCHED_PAIRS_PATH, columns=columns)
+    if pairs.empty or pairs.isna().any().any() or pairs["pair_id"].duplicated().any():
+        raise ValueError("Matched pairs must have non-null IDs and unique pair IDs.")
     frames = []
-    columns = NOTE_METADATA_COLUMNS + SELECTED_SECTION_NAMES
-    for file_config in FULL_NOTE_FILES:
-        df = pd.read_parquet(file_config["path"], columns=columns)
-        df["cohort"] = file_config["cohort"]
-        frames.append(df)
+    for prefix, cohort in [("mhc1", "MHC1_psychotic"), ("mhc0", "MHC0")]:
+        frame = pairs[["pair_id", f"{prefix}_subject_id", f"{prefix}_hadm_id"]].rename(
+            columns={f"{prefix}_subject_id": "subject_id", f"{prefix}_hadm_id": "hadm_id"}
+        )
+        frames.append(frame.assign(cohort=cohort))
+    admissions = pd.concat(frames, ignore_index=True)
+    if admissions["hadm_id"].duplicated().any():
+        raise ValueError("An admission appears in more than one matched position.")
+    if admissions.groupby("subject_id")["cohort"].nunique().gt(1).any():
+        raise ValueError("A patient appears in both cohorts.")
+    return admissions
+
+
+def build_sentiment_input() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return non-empty section rows and coverage of every matched admission."""
+    matched = load_matched_admissions()
+    frames = []
+    for config in FULL_NOTE_FILES:
+        notes = pd.read_parquet(config["path"], columns=NOTE_METADATA_COLUMNS + SELECTED_SECTION_NAMES)
+        if notes[ID_COLUMNS].isna().any().any():
+            raise ValueError(f"Null note identity in parsed {config['cohort']} input.")
+        if not notes["cohort"].eq(config["cohort"]).all():
+            raise ValueError("Parsed note cohort labels do not agree with their input file.")
+        if notes["hadm_id"].duplicated().any():
+            raise ValueError("Expected one parsed discharge note per matched admission.")
+        expected = matched.loc[matched["cohort"].eq(config["cohort"])]
+        identity = notes[["cohort", "subject_id", "hadm_id"]].merge(
+            expected, on=["cohort", "subject_id", "hadm_id"], how="outer",
+            validate="one_to_one", indicator=True,
+        )
+        if not identity["_merge"].eq("both").all():
+            raise ValueError("Parsed note admissions differ from the current matched cohort; rerun parsing.")
+        frames.append(notes.merge(expected, on=["cohort", "subject_id", "hadm_id"], validate="one_to_one"))
 
     notes = pd.concat(frames, ignore_index=True)
-    long_df = notes.melt(
-        id_vars=NOTE_METADATA_COLUMNS,
-        value_vars=SELECTED_SECTION_NAMES,
-        var_name="section_name",
-        value_name="section_text",
+    sections = notes.melt(
+        id_vars=["pair_id", *NOTE_METADATA_COLUMNS], value_vars=SELECTED_SECTION_NAMES,
+        var_name="section_name", value_name="section_text",
     )
-    long_df["section_text"] = long_df["section_text"].fillna("").astype(str).str.strip()
-    long_df = long_df.loc[long_df["section_text"].ne("")].copy()
-    return long_df
+    sections["section_text"] = sections["section_text"].fillna("").astype(str).str.strip()
+    sections = sections.loc[sections["section_text"].ne("")].copy()
+    # Computed from the actual input, not from a keyword-hit table.
+    sections["section_word_count"] = sections["section_text"].str.count(r"\S+")
+    sections["section_char_length"] = sections["section_text"].str.len()
+    sections = sections.sort_values(["cohort", "subject_id", "hadm_id", "note_id", "section_name"]).reset_index(drop=True)
+    if sections.duplicated(ID_COLUMNS + ["section_name"]).any():
+        raise ValueError("Duplicate sentiment section identities.")
+    sections.insert(0, "sentiment_input_row_id", range(len(sections)))
+
+    counts = sections.groupby(["cohort", "subject_id", "hadm_id"]).size().rename("n_nonempty_selected_sections").reset_index()
+    coverage = matched.merge(counts, on=["cohort", "subject_id", "hadm_id"], how="left", validate="one_to_one")
+    coverage["n_nonempty_selected_sections"] = coverage["n_nonempty_selected_sections"].fillna(0).astype(int)
+    coverage["has_eligible_section"] = coverage["n_nonempty_selected_sections"].gt(0)
+    return sections, coverage
 
 
-def build_sentiment_input() -> pd.DataFrame:
-    """Join optional SL-hit metadata to all selected section text."""
-    sl_hits = load_sl_section_hits()
-    section_text = load_section_text_long()
-
-    merged = section_text.merge(
-        sl_hits,
-        on=ID_COLUMNS + ["section_name"],
-        how="left",
-        validate="one_to_one",
-    )
-    merged["has_sl_keyword_hit"] = merged["n_keyword_hits"].notna()
-    merged["n_keyword_hits"] = merged["n_keyword_hits"].fillna(0).astype(int)
-    merged["n_keyword_groups"] = merged["n_keyword_groups"].fillna(0).astype(int)
-    merged["keyword_hits_per_1000_words"] = (
-        merged["keyword_hits_per_1000_words"].fillna(0).astype(float)
-    )
-    merged["keyword_groups"] = merged["keyword_groups"].fillna("")
-    merged["matched_terms"] = merged["matched_terms"].fillna("")
-
-    merged = merged.sort_values(["cohort", "subject_id", "hadm_id", "section_name"]).reset_index(drop=True)
-    merged.insert(0, "sentiment_input_row_id", range(len(merged)))
-
-    output_columns = [
-        "sentiment_input_row_id",
-        "cohort",
-        "subject_id",
-        "hadm_id",
-        "note_id",
-        "charttime",
-        "admittime",
-        "sex",
-        "age_at_admission",
-        "section_name",
-        "section_text",
-        "section_word_count",
-        "section_char_length",
-        "has_sl_keyword_hit",
-        *SL_METADATA_COLUMNS,
-    ]
-    return merged.loc[:, output_columns]
-
-
-def write_outputs(sentiment_input: pd.DataFrame) -> None:
-    """Save classifier input and compact review summaries."""
+def write_outputs(sections: pd.DataFrame, coverage: pd.DataFrame) -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    input_path = OUTPUT_DIR / "sentiment_selected_section_input.parquet"
+    sections.to_parquet(input_path, index=False)
+    sections.drop(columns="section_text").to_csv(OUTPUT_DIR / "sentiment_selected_section_input_metadata.csv", index=False)
+    coverage.to_csv(OUTPUT_DIR / "sentiment_admission_input_coverage.csv", index=False)
 
-    parquet_path = OUTPUT_DIR / "sentiment_selected_section_input.parquet"
-    metadata_path = OUTPUT_DIR / "sentiment_selected_section_input_metadata.csv"
-    section_summary_path = OUTPUT_DIR / "sentiment_selected_section_input_section_summary.csv"
-    cohort_summary_path = OUTPUT_DIR / "sentiment_selected_section_input_cohort_summary.csv"
-
-    sentiment_input.to_parquet(parquet_path, index=False)
-    sentiment_input.drop(columns=["section_text"]).to_csv(metadata_path, index=False)
-
-    section_summary = (
-        sentiment_input.groupby(["cohort", "section_name"], as_index=False)
-        .agg(
-            n_admissions=("hadm_id", "nunique"),
-            n_section_rows=("section_name", "size"),
-            n_section_rows_with_sl_keyword=("has_sl_keyword_hit", "sum"),
-            total_sl_keyword_hits=("n_keyword_hits", "sum"),
-            median_section_words=("section_word_count", "median"),
-            mean_section_words=("section_word_count", "mean"),
-        )
-        .sort_values(["cohort", "n_section_rows"], ascending=[True, False])
+    section_summary = sections.groupby(["cohort", "section_name"], as_index=False).agg(
+        n_admissions=("hadm_id", "nunique"), n_section_rows=("section_name", "size"),
+        median_section_words=("section_word_count", "median"), mean_section_words=("section_word_count", "mean"),
     )
-    section_summary.to_csv(section_summary_path, index=False)
-
-    cohort_summary = (
-        sentiment_input.groupby("cohort", as_index=False)
-        .agg(
-            n_admissions=("hadm_id", "nunique"),
-            n_section_rows=("section_name", "size"),
-            n_section_rows_with_sl_keyword=("has_sl_keyword_hit", "sum"),
-            total_sl_keyword_hits=("n_keyword_hits", "sum"),
-            median_sections_per_admission=("hadm_id", lambda x: x.value_counts().median()),
-            max_sections_per_admission=("hadm_id", lambda x: x.value_counts().max()),
-        )
-        .sort_values("cohort")
+    grid = pd.MultiIndex.from_product(
+        [["MHC0", "MHC1_psychotic"], SELECTED_SECTION_NAMES], names=["cohort", "section_name"]
+    ).to_frame(index=False)
+    section_summary = grid.merge(section_summary, how="left", on=["cohort", "section_name"], validate="one_to_one")
+    for column in ["n_admissions", "n_section_rows"]:
+        section_summary[column] = section_summary[column].fillna(0).astype(int)
+    section_summary.to_csv(OUTPUT_DIR / "sentiment_selected_section_input_section_summary.csv", index=False)
+    cohort_summary = coverage.groupby("cohort", as_index=False).agg(
+        n_matched_subjects=("subject_id", "nunique"), n_matched_admissions=("hadm_id", "size"),
+        n_admissions_with_eligible_sections=("has_eligible_section", "sum"),
+        n_section_rows=("n_nonempty_selected_sections", "sum"),
+        median_sections_per_admission=("n_nonempty_selected_sections", "median"),
+        max_sections_per_admission=("n_nonempty_selected_sections", "max"),
     )
-    cohort_summary.to_csv(cohort_summary_path, index=False)
-
-    print(f"Saved sentiment input parquet: {parquet_path}")
-    print(f"Saved metadata CSV: {metadata_path}")
-    print(f"Saved section summary: {section_summary_path}")
-    print(f"Saved cohort summary: {cohort_summary_path}")
-    print("\n=== Cohort Summary ===")
+    cohort_summary["n_admissions_without_eligible_sections"] = (
+        cohort_summary["n_matched_admissions"] - cohort_summary["n_admissions_with_eligible_sections"]
+    )
+    cohort_summary.to_csv(OUTPUT_DIR / "sentiment_selected_section_input_cohort_summary.csv", index=False)
+    manifest = {
+        "selection": "all non-empty selected sections of both full matched cohorts; no keyword gate",
+        "sections": SELECTED_SECTION_NAMES,
+        "sources": [{"path": str(path), "sha256": sha256_file(path)} for path in
+                    [MATCHED_PAIRS_PATH, *(config["path"] for config in FULL_NOTE_FILES)]],
+        "input_sha256": sha256_file(input_path),
+        "n_section_rows": len(sections), "n_matched_admissions": len(coverage),
+    }
+    (OUTPUT_DIR / "sentiment_input_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    print("Sentiment input saved locally; no API request was made.")
     print(cohort_summary.to_string(index=False))
-    print("\n=== Section Summary ===")
     print(section_summary.to_string(index=False))
 
 
 def main() -> None:
-    """Build and save the sentiment classifier input dataset."""
     validate_inputs()
-    sentiment_input = build_sentiment_input()
-    write_outputs(sentiment_input)
+    write_outputs(*build_sentiment_input())
 
 
 if __name__ == "__main__":
