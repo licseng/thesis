@@ -17,10 +17,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 OUTPUT_DIR = SCRIPT_DIR / "annotation_input"
 
-PSYCH_DIR = PROJECT_DIR / "06_classification" / "01_classification_psych_integrated"
-DIAGNOSTIC_DIR = (
-    PROJECT_DIR / "06_classification" / "02_classification_diag_overshadowing"
-)
+# Legacy two-stage annotation preparation; retained for reference.
+LEGACY_CLASSIFICATION_DIR = PROJECT_DIR.parent / "analysis-archive/retired_two_stage_classification_2026-10-22"
+PSYCH_DIR = LEGACY_CLASSIFICATION_DIR / "01_classification_psych_integrated"
+DIAGNOSTIC_DIR = LEGACY_CLASSIFICATION_DIR / "02_classification_diag_overshadowing"
 FULL_NOTE_DIR = (
     PROJECT_DIR
     / "01_discharge_note_preprocessing"

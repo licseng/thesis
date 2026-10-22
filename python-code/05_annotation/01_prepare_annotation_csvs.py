@@ -27,7 +27,8 @@ import pandas as pd
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
-CLASSIFICATION_DIR = PROJECT_DIR / "06_classification"
+# Legacy two-stage annotation preparation; retained for reference.
+CLASSIFICATION_DIR = PROJECT_DIR.parent / "analysis-archive/retired_two_stage_classification_2026-10-22"
 PSYCH_DIR = CLASSIFICATION_DIR / "01_classification_psych_integrated"
 SENTIMENT_DIR = PROJECT_DIR / "07_sentiment_analysis"
 CHIEF_COMPLAINT_DIR = (
