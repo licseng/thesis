@@ -13,15 +13,19 @@ Prompt wording must be reviewed before a --run invocation.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
 import shlex
 import socket
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -252,13 +256,69 @@ def call_api(payload, url, key, timeout, output, admission_number):
             detail = exc.read().decode(errors="replace")
             (output / f"api_error_admission_{admission_number}_attempt_{attempt+1}.txt").write_text(detail)
             if exc.code in {429, 500, 502, 503, 504} and attempt < 2:
-                time.sleep(2 ** (attempt + 1))
+                delay = 10 * (2 ** attempt)
+                retry_after = exc.headers.get("Retry-After")
+                if retry_after:
+                    try:
+                        server_delay = float(retry_after)
+                    except ValueError:
+                        server_delay = (parsedate_to_datetime(retry_after) - datetime.now(timezone.utc)).total_seconds()
+                    delay = max(delay, server_delay)
+                if not math.isfinite(delay) or delay > 60:
+                    raise RuntimeError("Server requested a longer cooldown; stopped without retrying. Resume later.") from None
+                print(f"API HTTP {exc.code}; waiting {delay:.0f}s before retry.", flush=True)
+                time.sleep(delay)
                 continue
             raise RuntimeError(f"Institute API returned HTTP {exc.code}; see local error file") from None
         except (urllib.error.URLError, socket.timeout, TimeoutError):
             # A timeout may have been processed/billed; do not silently duplicate it.
             raise RuntimeError("Institute API connection failed or timed out; completed admissions are checkpointed") from None
     raise RuntimeError("API retries exhausted")
+
+
+@contextmanager
+def api_run_lock(enabled):
+    """Prevent concurrent runs of this classifier, including A/B processes."""
+    if not enabled:
+        yield
+        return
+    path = HERE / ".api_run.lock"
+    try:
+        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        raise RuntimeError("Another classifier run holds .api_run.lock. If interrupted, verify it has stopped before removing the stale lock.") from None
+    try:
+        with os.fdopen(descriptor, "w") as stream:
+            stream.write(str(os.getpid()))
+        yield
+    finally:
+        path.unlink()
+
+
+def reuse_response_paths(folder, settings, requests):
+    """Map saved responses by stable admission ID, not the new row number."""
+    if folder is None:
+        return {}
+    previous = json.loads((folder / "run_manifest.json").read_text())
+    for field in ["input_sha256", "model", "api_url", "prompt_version", "prompt_sha256",
+                  "max_output_tokens", "response_format", "temperature", "thinking_enabled",
+                  "chunking", "classification_unit"]:
+        if settings[field] != previous[field]:
+            raise ValueError(f"Cannot reuse responses with a different setting: {field}")
+    ids = previous["selected_input_ids"]
+    if len(ids) != len(set(ids)) or not set(ids).issubset(set(requests.classification_input_id)):
+        raise ValueError("Reuse admissions must be a unique subset of the requested admissions")
+    paths = {}
+    for number, input_id in enumerate(ids, 1):
+        name = f"api_response_{previous['classification_unit']}_{number}.json"
+        path = folder / "raw_output" / name
+        if not path.exists():
+            path = folder / name
+        if not path.is_file():
+            raise ValueError("A saved response is missing; refusing to silently reclassify that admission")
+        paths[input_id] = path
+    return paths
+
 
 def comparison_paths(seed):
     stem = HERE / "prefilter_output" / f"prompt_comparison_sample_{COMPARISON_N}_seed_{seed}"
@@ -320,6 +380,9 @@ def main():
     parser.add_argument("--run", action="store_true", help="Send selected inputs to the institute API")
     parser.add_argument("--env-file", type=Path, help="Local institute dotenv file; never copied to outputs")
     parser.add_argument("--max-admissions", type=int, default=10)
+    parser.add_argument("--all-admissions", action="store_true", help="Use every prefilter-eligible admission")
+    parser.add_argument("--pause-seconds", type=float, default=1.0,
+        help="Pause before each new API call; at least one second, default one")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--prompt-version", choices=["A", "B"], default="B")
@@ -328,10 +391,14 @@ def main():
     parser.add_argument("--review-invalid-responses", action="store_true",
         help="Retain failed responses for review with no accepted classification label")
     parser.add_argument("--reuse-response-dir", type=Path,
-        help="Reuse raw responses from a matching pilot; verify manifests before any reuse")
+        help="Reuse matching saved responses by admission ID, including a subset such as the completed 100")
     args = parser.parse_args()
     if args.prepare_comparison and args.run:
         raise ValueError("Comparison sample preparation is an offline operation")
+    if not math.isfinite(args.pause_seconds) or args.pause_seconds < 1:
+        raise ValueError("Pause must be at least one second")
+    if args.all_admissions and (args.comparison_sample or args.prepare_comparison):
+        raise ValueError("Choose either all admissions or the comparison sample")
     # Offline modes do not open credential files or read the API-key variable.
     config = load_config(args.env_file) if args.run else {
         key: os.environ[key] for key in ["DIAGNOSTIC_OVERSHADOWING_MODEL_NAME",
@@ -362,8 +429,16 @@ def main():
     if not data.classification_text.equals(data.apply(prefilter.assemble_context, axis=1)):
         raise ValueError("Combined input text does not match its source sections")
     shared = args.comparison_sample or args.prepare_comparison
-    n = COMPARISON_N if shared else args.max_admissions
+    n = len(data) if args.all_admissions else (COMPARISON_N if shared else args.max_admissions)
     selected = select_sample(data, n, args.seed, shared=shared)
+    if args.all_admissions and args.reuse_response_dir:
+        # Keep the completed comparison sample first, then the remaining admissions.
+        prior_ids = json.loads((args.reuse_response_dir / "run_manifest.json").read_text())["selected_input_ids"]
+        by_id = selected.set_index("classification_input_id", drop=False)
+        if len(prior_ids) != len(set(prior_ids)) or not set(prior_ids).issubset(by_id.index):
+            raise ValueError("Reuse IDs do not match this cohort")
+        order = prior_ids + [i for i in selected.classification_input_id if i not in set(prior_ids)]
+        selected = by_id.loc[order].reset_index(drop=True)
     requests = build_requests(selected, args.prompt_version)
     unit = "admission"
     if args.prepare_comparison:
@@ -375,6 +450,10 @@ def main():
     if not prompt.strip():
         raise ValueError("Selected prompt is empty")
     output = args.output_dir or prompt_output(args.prompt_version, n, args.seed, shared)
+    if args.all_admissions and args.output_dir is None:
+        output = HERE / f"output_prompt_{args.prompt_version}_full_cohort"
+    if args.reuse_response_dir and output.resolve() == args.reuse_response_dir.resolve():
+        raise ValueError("Full output must not overwrite the reused source run")
     output.mkdir(parents=True, exist_ok=True)
     raw_output = output / "raw_output"
     raw_output.mkdir(exist_ok=True)
@@ -391,13 +470,10 @@ def main():
         "selected_input_ids": requests.classification_input_id.tolist()}
     settings["review_invalid_responses"] = args.review_invalid_responses
     settings["reuse_response_dir"] = str(args.reuse_response_dir) if args.reuse_response_dir else None
-    if args.reuse_response_dir:
-        previous = json.loads((args.reuse_response_dir / "run_manifest.json").read_text())
-        for field in ["input_sha256", "model", "api_url", "prompt_version", "prompt_sha256",
-                      "selected_input_ids", "max_output_tokens", "response_format",
-                      "temperature", "thinking_enabled", "chunking", "classification_unit"]:
-            if settings[field] != previous[field]:
-                raise ValueError(f"Cannot reuse responses with a different setting: {field}")
+    settings.update({"all_admissions": args.all_admissions, "pause_seconds": args.pause_seconds,
+                     "max_concurrent_requests": 1, "retry_base_seconds": 10})
+    reuse_paths = reuse_response_paths(args.reuse_response_dir, settings, requests)
+    settings["reused_response_sha256"] = {key: sha256(path) for key, path in reuse_paths.items()}
     run_manifest = output / "run_manifest.json"
     if run_manifest.exists() and json.loads(run_manifest.read_text()) != settings:
         raise ValueError("Output directory belongs to a different input, prompt, script, or model; use a new directory")
@@ -408,6 +484,8 @@ def main():
     print(f"Pilot: {len(selected)} admissions; {len(requests)} independent {unit} requests.", flush=True)
     print(f"Input words per request: median {requests.n_input_words.median():.0f}; maximum {requests.n_input_words.max()}.", flush=True)
     print(f"Prompt {args.prompt_version}; model: {model}; thinking disabled; no chunking or truncation.", flush=True)
+    print(f"Saved responses available: {len(reuse_paths)}; new calls planned: {len(requests)-len(reuse_paths)}. "
+          f"One call at a time; pause {args.pause_seconds:g}s before each new call.", flush=True)
     if not args.run:
         print("Offline preparation complete. --run is required for API requests.", flush=True)
         return
@@ -443,13 +521,16 @@ def main():
             "messages": build_messages(row, prompt)}
         start = time.monotonic()
         response_filename = f"api_response_{unit}_{number+1}.json"
-        reuse = args.reuse_response_dir / "raw_output" / response_filename if args.reuse_response_dir else None
-        if reuse is not None and not reuse.exists():
-            reuse = args.reuse_response_dir / response_filename  # Older output layout.
-        reused = bool(reuse and reuse.exists())
+        reuse = reuse_paths.get(row.classification_input_id)
+        reused = reuse is not None
         if reused:
             response, attempts = json.loads(reuse.read_text()), 0
+        elif (raw_output / response_filename).exists():
+            # Recover an already-saved response if interrupted before checkpointing.
+            response, attempts = json.loads((raw_output / response_filename).read_text()), 0
+            reused = True
         else:
+            time.sleep(args.pause_seconds)
             response, attempts = call_api(payload, url, key, 240, raw_output, number + 1)
         (raw_output / response_filename).write_text(json.dumps(response, ensure_ascii=False))
         decoded = {}
@@ -505,9 +586,12 @@ def main():
         "total_elapsed_seconds": float(table.elapsed_seconds.sum()),
         "total_prompt_tokens": sum(r["usage"].get("prompt_tokens", 0) for r in results),
         "total_completion_tokens": sum(r["usage"].get("completion_tokens", 0) for r in results)}
+    summary["new_prompt_tokens"] = sum(r["usage"].get("prompt_tokens", 0) for r in results if not r["response_reused"])
+    summary["new_completion_tokens"] = sum(r["usage"].get("completion_tokens", 0) for r in results if not r["response_reused"])
     (output / "pilot_summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2), flush=True)
 
 
 if __name__ == "__main__":
-    main()
+    with api_run_lock("--run" in sys.argv):
+        main()
