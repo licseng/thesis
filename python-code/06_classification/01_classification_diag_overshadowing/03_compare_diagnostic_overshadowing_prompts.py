@@ -27,7 +27,7 @@ def comparison_paths(seed):
 
 def prompt_output(version, n, seed, shared):
     scope = "comparison" if shared else "pilot"
-    return HERE / f"diagnostic_overshadowing_classifier_output_prompt_{version}_{scope}_{n}_seed_{seed}"
+    return HERE / f"output_prompt_{version}_{scope}_{n}_seed_{seed}"
 
 
 def compare_saved_prompts(seed):
@@ -50,11 +50,18 @@ def compare_saved_prompts(seed):
             raise ValueError("Prompt outputs were not generated on the same frozen sample")
         tables[version] = pd.read_csv(path)
         table = tables[version]
+        label_column = "diagnostic_overshadowing_label" if version == "A" else "psychiatric_overshadowing_label"
+        # Preserve rejected labels separately; agreement is not evidence validation.
+        table["accepted_label"] = table[label_column]
+        table["comparison_label"] = table["model_reported_label"]
         if (table.classification_input_id.duplicated().any()
                 or not set(table.classification_input_id).issubset(expected)
-                or not table.diagnostic_overshadowing_label.isin(LABELS).all()):
+                or not table.comparison_label.isin(LABELS).all()
+                or not table.validation_status.isin(["valid", "invalid"]).all()
+                or not table.loc[table.validation_status.eq("valid"), "accepted_label"].isin(LABELS).all()
+                or table.loc[table.validation_status.eq("invalid"), "accepted_label"].notna().any()):
             raise ValueError("Invalid or mismatched saved classification results")
-    for field in ["model", "api_url", "max_output_tokens", "temperature", "thinking_enabled", "chunking"]:
+    for field in ["model", "api_url", "max_output_tokens", "temperature", "thinking_enabled", "chunking", "classification_unit"]:
         if manifests["A"][field] != manifests["B"][field]:
             raise ValueError(f"Prompt runs differ on non-prompt setting: {field}")
     combined = tables["A"].merge(tables["B"], on="classification_input_id",
@@ -63,7 +70,8 @@ def compare_saved_prompts(seed):
     for key in ["cohort", "subject_id", "hadm_id", "note_id", "pair_id"]:
         if not both[f"{key}_A"].eq(both[f"{key}_B"]).all():
             raise ValueError("Admission metadata differ across prompt outputs")
-    left, right = both.diagnostic_overshadowing_label_A, both.diagnostic_overshadowing_label_B
+    left, right = both.comparison_label_A, both.comparison_label_B
+    valid_both = both.validation_status_A.eq("valid") & both.validation_status_B.eq("valid")
     matrix = pd.crosstab(left, right).reindex(index=LABELS, columns=LABELS, fill_value=0)
     matrix.index.name = "prompt_A_label"; matrix.columns.name = "prompt_B_label"
     n = len(both)
@@ -86,9 +94,13 @@ def compare_saved_prompts(seed):
         "complete_100_admission_comparison": n == COMPARISON_N,
         "n_agree": int((left == right).sum()), "n_disagree": int((left != right).sum()),
         "agreement_percent": 100*agreement if n else None, "cohens_kappa": kappa,
-        "interpretation": "Prompt consistency, not accuracy or human validation",
+        "n_invalid_A": int(tables["A"].validation_status.eq("invalid").sum()),
+        "n_invalid_B": int(tables["B"].validation_status.eq("invalid").sum()),
+        "n_both_validation_passed": int(valid_both.sum()),
+        "agreement_percent_both_validation_passed": float((left[valid_both] == right[valid_both]).mean()*100) if valid_both.any() else None,
+        "interpretation": "Agreement of model-reported labels, including unvalidated responses; not accuracy or human validation. Accepted labels and validation status are preserved separately.",
     }
-    out = HERE / f"diagnostic_overshadowing_classifier_output_prompt_comparison_{COMPARISON_N}_seed_{seed}"
+    out = HERE / f"output_prompt_comparison_{COMPARISON_N}_seed_{seed}"
     out.mkdir(exist_ok=True)
     both.drop(columns="_merge").to_csv(out / "admission_prompt_comparison.csv", index=False)
     both.loc[left != right].drop(columns="_merge").to_csv(out / "disagreement_review.csv", index=False)

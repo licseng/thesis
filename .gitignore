@@ -94,6 +94,7 @@ outputs/language_complexity_results_20261002/
 
 python-code/06_classification/01_classification_diag_overshadowing/prefilter_output/
 python-code/06_classification/01_classification_diag_overshadowing/diagnostic_overshadowing_classifier_output*/
+python-code/06_classification/01_classification_diag_overshadowing/output*/
 python-code/06_classification/01_classification_diag_overshadowing/diagnostic_overshadowing_api.env
 
 python-code/07_sentiment_analysis/sentiment_classifier_output*/
