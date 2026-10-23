@@ -1,16 +1,15 @@
 """Plot patient-level prediction partitions created in DuckDB.
 
-This script reads the partition summary tables created by:
-
-    sql-scripts/06_save_tables/03_create_patient_level_prediction_partitions.sql
-
-It does not create or alter the train/validation/test split. It only exports
-the SQL summary tables to CSV and makes annotated count plots.
+This script joins current full/matched cohort IDs to the original patient
+assignments in DuckDB, verifies those assignments against archived datasets,
+and rebuilds cohort summaries. It never resamples patients or alters DuckDB.
 """
 
 from __future__ import annotations
 
 import os
+import hashlib
+import json
 from pathlib import Path
 
 import duckdb
@@ -33,6 +32,11 @@ DB_PATH = Path(
 OUTPUT_DIR = SCRIPT_DIR / "analysis_output_patient_level_prediction_partitions"
 
 PARTITION_ORDER = ["train", "validation", "test_pool"]
+MATCHED_PAIRS_PATH = THESIS_CODE_DIR / "python-code/02_cohort_matching/matched_cohort_output/matched_pairs.csv"
+ARCHIVED_DATA_DIR = (
+    THESIS_CODE_DIR / "analysis-archive/MHH1_original_2026-09-25/python-code/08_model_training"
+    / "01_training_data_creation/prediction_model_dataset"
+)
 
 
 def quote_identifier(identifier: str) -> str:
@@ -56,25 +60,134 @@ def load_duckdb_table(table_name: str) -> pd.DataFrame:
 
 
 def write_summary_tables() -> dict[str, pd.DataFrame]:
-    """Load and save the SQL summary tables used for plotting."""
+    """Recalculate current group summaries using unchanged original assignments."""
+    if not DB_PATH.exists():
+        raise FileNotFoundError(f"Missing DuckDB database: {DB_PATH}")
+    with duckdb.connect(str(DB_PATH), read_only=True) as con:
+        partitions = con.execute(
+            'SELECT subject_id, partition, selected_for_general_test FROM patient_partition_with_test_flags'
+        ).fetchdf()
+        eligible = con.execute(
+            'SELECT DISTINCT subject_id, hadm_id, partition FROM eligible_prediction_admissions_with_partition'
+        ).fetchdf()
+        full_case = con.execute('SELECT DISTINCT subject_id, hadm_id FROM export_MHC1_psychotic').fetchdf()
+        full_control = con.execute('SELECT DISTINCT subject_id, hadm_id FROM export_only_MHC0').fetchdf()
+    if partitions.subject_id.duplicated().any() or eligible.duplicated(["subject_id", "hadm_id"]).any():
+        raise ValueError("Duplicate original partition identifiers")
+    if not partitions.partition.isin(PARTITION_ORDER).all():
+        raise ValueError("Unknown original partition")
+    if not partitions.selected_for_general_test.isin([0, 1]).all():
+        raise ValueError("Invalid original general-test flag")
+    if partitions.loc[partitions.partition.ne("test_pool"), "selected_for_general_test"].ne(0).any():
+        raise ValueError("General-test flag outside the original test pool")
+    original = eligible.merge(partitions, on="subject_id", suffixes=("_admission", ""),
+                              how="left", validate="many_to_one")
+    if not original.partition_admission.eq(original.partition).all():
+        raise ValueError("Patient and admission partition assignments disagree")
+    original = original.drop(columns="partition_admission")
+    qc = []
+    for split, partition in [("train", "train"), ("validation", "validation"),
+                             ("test_general", "test_pool"), ("test_fairness_mhh1_mhc0", "test_pool")]:
+        archived = pd.read_parquet(ARCHIVED_DATA_DIR / f"{split}.parquet", columns=["subject_id", "hadm_id"]).drop_duplicates()
+        checked = archived.merge(original, on=["subject_id", "hadm_id"], how="left", validate="one_to_one")
+        if not checked.partition.eq(partition).all():
+            raise ValueError(f"Stored partitions no longer match archived {split}")
+        if split in {"train", "validation"}:
+            if set(archived.subject_id) != set(partitions.loc[partitions.partition.eq(partition), "subject_id"]):
+                raise ValueError(f"Original {partition} patient membership has changed")
+        if split == "test_general" and not checked.selected_for_general_test.eq(1).all():
+            raise ValueError("Original general-test membership has changed")
+        qc.append({"check": f"archived_{split}_partition_mismatches", "value": 0})
+    pairs = pd.read_csv(MATCHED_PAIRS_PATH, usecols=["pair_id", "mhc1_subject_id", "mhc1_hadm_id", "mhc0_subject_id", "mhc0_hadm_id"])
+    matched = {}
+    for cohort, prefix in [("MHC1_psychotic", "mhc1"), ("MHC0", "mhc0")]:
+        rows = pairs[["pair_id", f"{prefix}_subject_id", f"{prefix}_hadm_id"]].rename(
+            columns={f"{prefix}_subject_id": "subject_id", f"{prefix}_hadm_id": "hadm_id"})
+        rows["cohort"] = cohort
+        matched[cohort] = rows
+    if set(full_case.subject_id) & set(full_control.subject_id):
+        raise ValueError("Current full case/control patients overlap")
+    group_inputs = {
+        "MHC1_psychotic_full_cohort": full_case,
+        "MHC0_full_cohort": full_control,
+        "MHC1_psychotic_matched_cohort": matched["MHC1_psychotic"],
+        "MHC0_matched_cohort": matched["MHC0"],
+    }
+    for cohort, full in [("MHC1_psychotic", full_case), ("MHC0", full_control)]:
+        check = matched[cohort].merge(full, on=["subject_id", "hadm_id"], how="left", indicator=True)
+        if not check._merge.eq("both").all():
+            raise ValueError(f"Current matched {cohort} is not a subset of its full export")
+    group_summaries, unseen_summaries, overlap_summaries, annotated_matched = [], [], [], []
+    for name, rows in group_inputs.items():
+        if rows.duplicated(["subject_id", "hadm_id"]).any():
+            raise ValueError(f"Duplicate current admissions: {name}")
+        joined = rows.merge(original, on=["subject_id", "hadm_id"], how="left", validate="one_to_one")
+        if joined.partition.isna().any():
+            raise ValueError(f"Current admissions missing an original partition: {name}")
+        summary = joined.groupby("partition").agg(n_subjects=("subject_id", "nunique"), n_admissions=("hadm_id", "nunique"))
+        summary = summary.reindex(PARTITION_ORDER, fill_value=0).reset_index()
+        summary["group_name"] = name
+        summary["pct_subjects_within_group"] = 100 * summary.n_subjects / joined.subject_id.nunique()
+        summary["pct_admissions_within_group"] = 100 * summary.n_admissions / len(joined)
+        group_summaries.append(summary)
+        unseen = joined.loc[joined.partition.eq("test_pool")]
+        unseen_summaries.append({"group_name": name, "n_unseen_subjects_in_test_pool": unseen.subject_id.nunique(),
+                                 "n_unseen_admissions_in_test_pool": len(unseen)})
+        general = unseen.loc[unseen.selected_for_general_test.eq(1)]
+        overlap_summaries.append({"group_name": name, "n_subjects_in_general_test": general.subject_id.nunique(),
+                                  "n_admissions_in_general_test": len(general)})
+        if name.endswith("matched_cohort"):
+            annotated_matched.append(joined)
+        qc.append({"check": f"{name}_unassigned_admissions", "value": 0})
+    summary = original.groupby("partition", as_index=False).agg(
+        n_subjects=("subject_id", "nunique"), n_admissions=("hadm_id", "nunique"))
+    general_summary = original.loc[original.partition.eq("test_pool")].groupby(
+        "selected_for_general_test", as_index=False).agg(n_subjects=("subject_id", "nunique"), n_admissions=("hadm_id", "nunique"))
     tables = {
-        "patient_partition_summary": load_duckdb_table("patient_partition_summary"),
-        "patient_partition_group_summary": load_duckdb_table(
-            "patient_partition_group_summary"
-        ),
-        "patient_partition_unseen_fairness_pool_summary": load_duckdb_table(
-            "patient_partition_unseen_fairness_pool_summary"
-        ),
-        "patient_partition_general_test_summary": load_duckdb_table(
-            "patient_partition_general_test_summary"
-        ),
-        "patient_partition_general_test_group_overlap": load_duckdb_table(
-            "patient_partition_general_test_group_overlap"
-        ),
+        "patient_partition_summary": summary,
+        "patient_partition_group_summary": pd.concat(group_summaries, ignore_index=True),
+        "patient_partition_unseen_fairness_pool_summary": pd.DataFrame(unseen_summaries),
+        "patient_partition_general_test_summary": general_summary,
+        "patient_partition_general_test_group_overlap": pd.DataFrame(overlap_summaries),
+        "current_matched_admission_partitions": pd.concat(annotated_matched, ignore_index=True),
+        "patient_partition_qc": pd.DataFrame(qc),
     }
     for name, table in tables.items():
         table.to_csv(OUTPUT_DIR / f"{name}.csv", index=False)
+    fingerprint = hashlib.sha256(partitions.sort_values("subject_id").to_csv(index=False).encode()).hexdigest()
+    (OUTPUT_DIR / "partition_summary_manifest.json").write_text(json.dumps({
+        "assignment_source": str(DB_PATH), "original_assignments_sha256": fingerprint,
+        "matched_pairs_sha256": hashlib.sha256(MATCHED_PAIRS_PATH.read_bytes()).hexdigest(),
+        "cohort_source": "current export_MHC1_psychotic / export_only_MHC0 and matched_pairs.csv",
+        "archived_splits_verified": True, "repartitioned": False,
+    }, indent=2))
     return tables
+
+
+def plot_group_partition_percentages(group_summary: pd.DataFrame) -> None:
+    """Show patient/admission percentages without treating counts as quotas."""
+    colors = ["#4477AA", "#EEAA33", "#228833"]
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5), constrained_layout=True)
+    for ax, column, title in zip(axes, ["pct_subjects_within_group", "pct_admissions_within_group"],
+                                 ["Patients", "Admissions"]):
+        pivot = group_summary.pivot(index="group_name", columns="partition", values=column).reindex(columns=PARTITION_ORDER)
+        labels = [name.replace("MHC1_psychotic", "MHC1-psychosis").replace("_full_cohort", " (full)")
+                  .replace("_matched_cohort", " (matched)") for name in pivot.index]
+        left = pd.Series(0.0, index=pivot.index)
+        for partition, color in zip(PARTITION_ORDER, colors):
+            values = pivot[partition]
+            ax.barh(labels, values, left=left, color=color, label=partition.replace("_", " "))
+            for y, (start, value) in enumerate(zip(left, values)):
+                if value >= 1:
+                    ax.text(start + value / 2, y, f"{value:.1f}%", ha="center", va="center", fontsize=9)
+            left = left + values
+        ax.set_xlim(0, 100)
+        ax.set_xlabel("Percentage within cohort")
+        ax.set_title(title)
+        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), ncol=3)
+    fig.suptitle("Current cohorts in original prediction partitions (unchanged assignments)")
+    fig.savefig(OUTPUT_DIR / "patient_partition_group_percentages.png", dpi=200)
+    plt.close(fig)
 
 
 def add_partition_order(table: pd.DataFrame) -> pd.DataFrame:
@@ -217,6 +330,7 @@ def main() -> None:
     tables = write_summary_tables()
     plot_partition_totals(tables["patient_partition_summary"])
     plot_group_partition_counts(tables["patient_partition_group_summary"])
+    plot_group_partition_percentages(tables["patient_partition_group_summary"])
     plot_unseen_fairness_pool(
         tables["patient_partition_unseen_fairness_pool_summary"]
     )
