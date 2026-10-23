@@ -21,6 +21,9 @@ readmission label is also saved for planning.
 from __future__ import annotations
 
 import importlib.util
+import argparse
+import hashlib
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -506,6 +509,13 @@ def write_summary_outputs(all_rows: list[pd.DataFrame]) -> None:
 
 def main() -> None:
     """Build partitioned model datasets from raw discharge-note text."""
+    cli = argparse.ArgumentParser(description=__doc__)
+    cli.add_argument("--current-cohort-test-only", action="store_true",
+                     help="Export current matched held-out admissions only; do not rebuild train/validation")
+    args = cli.parse_args()
+    if args.current_cohort_test_only:
+        build_current_cohort_test()
+        return
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     SUMMARY_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     for path in OUTPUT_DIR.glob("*.parquet"):
@@ -552,6 +562,90 @@ def main() -> None:
     write_summary_outputs(summary_chunks)
     print(f"\nWrote parquet datasets to: {OUTPUT_DIR}")
     print(f"Wrote summaries to: {SUMMARY_OUTPUT_DIR}")
+
+
+def build_current_cohort_test() -> None:
+    """Build a separate evaluation dataset using verified original assignments."""
+    assignment_path = SCRIPT_DIR / "analysis_output_patient_level_prediction_partitions/current_matched_admission_partitions.csv"
+    target_dir = SCRIPT_DIR / "prediction_model_dataset_current_cohort_test"
+    target = target_dir / "test_fairness_mhc1_mhc0.parquet"
+    if target.exists():
+        raise FileExistsError(f"Test dataset already exists; preserve or move it before rebuilding: {target}")
+    ids = pd.read_csv(assignment_path)
+    if ids.duplicated(["subject_id", "hadm_id"]).any() or not ids.partition.isin(["train", "validation", "test_pool"]).all():
+        raise ValueError("Invalid verified admission assignments")
+    pairs_path = THESIS_CODE_DIR / "python-code/02_cohort_matching/matched_cohort_output/matched_pairs.csv"
+    manifest = json.loads((assignment_path.parent / "partition_summary_manifest.json").read_text())
+    if hashlib.sha256(pairs_path.read_bytes()).hexdigest() != manifest["matched_pairs_sha256"]:
+        raise ValueError("Matched cohort changed; rerun the partition-summary script first")
+    heldout = ids.loc[ids.partition.eq("test_pool"), ["subject_id", "hadm_id", "cohort", "pair_id"]].copy()
+    parser_module = load_parser_module()
+    with duckdb.connect(str(DB_PATH), read_only=True) as con:
+        ensure_required_tables(con)
+        partitions = con.execute('SELECT subject_id, partition, selected_for_general_test FROM patient_partition_with_test_flags').fetchdf()
+        fingerprint = hashlib.sha256(partitions.sort_values("subject_id").to_csv(index=False).encode()).hexdigest()
+        if fingerprint != manifest["original_assignments_sha256"]:
+            raise ValueError("Original patient assignments changed")
+        con.register("current_heldout_ids", heldout)
+        selected = con.execute('''
+            SELECT e.*, dis.text AS full_note_text
+            FROM eligible_prediction_admissions_with_partition e
+            JOIN current_heldout_ids c USING (subject_id, hadm_id)
+            JOIN discharge dis ON e.subject_id = dis.subject_id AND e.hadm_id = dis.hadm_id AND e.note_id = dis.note_id
+            WHERE e.partition = 'test_pool'
+            ORDER BY e.subject_id, e.hadm_id, e.note_id
+        ''').fetchdf()
+        if len(selected) != len(heldout) or selected.duplicated(["subject_id", "hadm_id"]).any():
+            raise ValueError("Expected exactly one source note for every held-out admission")
+        selected = selected.merge(heldout, on=["subject_id", "hadm_id"], validate="one_to_one")
+        for group, prefix in [("MHC1_psychotic", "mhc1_psychotic"), ("MHC0", "mhc0")]:
+            # Ignore obsolete group flags on the original partition export.
+            for flag in [f"is_{prefix}_admission", f"is_{prefix}_subject",
+                         f"is_matched_{prefix}_admission", f"is_matched_{prefix}_subject"]:
+                selected[flag] = selected.cohort.eq(group).astype(int)
+        chunks = []
+        for start in range(0, len(selected), CHUNK_SIZE):
+            source = selected.iloc[start:start+CHUNK_SIZE].copy()
+            parsed = parse_and_label_chunk(source, parser_module, con)
+            parsed = parsed.merge(source[["subject_id", "hadm_id", "pair_id", "cohort"]],
+                                  on=["subject_id", "hadm_id"], validate="one_to_one")
+            parsed["dataset_split"] = "test_fairness_mhc1_mhc0"
+            # Missing/invalid LOS must not become a negative prediction target.
+            parsed["prolonged_los_gt_7d"] = parsed.hospital_los_days.gt(7).astype("boolean")
+            parsed.loc[parsed.hospital_los_days.isna(), "prolonged_los_gt_7d"] = pd.NA
+            chunks.append(parsed)
+            print(f"Prepared {min(start+CHUNK_SIZE, len(selected)):,}/{len(selected):,} held-out admissions", flush=True)
+    output = pd.concat(chunks, ignore_index=True)
+    if not output.partition.eq("test_pool").all():
+        raise ValueError("Non-test admission in evaluation output")
+    # Check input-text compatibility on overlapping archived evaluation notes.
+    archived_dir = THESIS_CODE_DIR / "analysis-archive/MHH1_original_2026-09-25/python-code/08_model_training/01_training_data_creation/prediction_model_dataset"
+    archived = pd.concat([pd.read_parquet(archived_dir / name, columns=["subject_id", "hadm_id", "note_id", "model_text"])
+                          for name in ["test_general.parquet", "test_fairness_mhh1_mhc0.parquet"]]).drop_duplicates(["subject_id", "hadm_id", "note_id"])
+    overlap = output.merge(archived, on=["subject_id", "hadm_id", "note_id"], suffixes=("", "_archived"), validate="one_to_one")
+    mismatches = int(overlap.model_text.ne(overlap.model_text_archived).sum())
+    if mismatches:
+        raise ValueError(f"Model input differs from archived preprocessing for {mismatches} overlapping notes")
+    summary = []
+    for cohort, rows in output.groupby("cohort"):
+        nonempty = rows.model_text.fillna("").str.strip().ne("")
+        summary.append({"cohort": cohort, "n_subjects": rows.subject_id.nunique(), "n_admissions": len(rows),
+                        "n_empty_model_text": int((~nonempty).sum()),
+                        "n_los_evaluable": int((nonempty & rows.prolonged_los_gt_7d.notna()).sum()),
+                        "n_readmission_evaluable": int((nonempty & rows.eligible_for_30d_readmission & rows.readmission_within_30d.notna()).sum())})
+    target_dir.mkdir(parents=True, exist_ok=True)
+    output.to_parquet(target, index=False)
+    pd.DataFrame(summary).to_csv(target_dir / "test_dataset_summary.csv", index=False)
+    (target_dir / "test_dataset_manifest.json").write_text(json.dumps({
+        "matched_pairs_sha256": manifest["matched_pairs_sha256"],
+        "original_assignments_sha256": fingerprint, "n_admissions": len(output),
+        "parser_sha256": hashlib.sha256(PARSER_PATH.read_bytes()).hexdigest(),
+        "n_archived_input_texts_checked": len(overlap), "n_input_text_mismatches": mismatches,
+        "training_and_validation_rebuilt": False, "paper_sections": PAPER_SECTIONS,
+        "test_parquet_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+    }, indent=2))
+    print(pd.DataFrame(summary).to_string(index=False))
+    print(f"Saved held-out test dataset: {target}")
 
 
 if __name__ == "__main__":

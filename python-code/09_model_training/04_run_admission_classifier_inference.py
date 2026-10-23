@@ -115,6 +115,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fp16", action="store_true", default=env_bool("LOS_INFERENCE_FP16", False))
     parser.add_argument("--bf16", action="store_true", default=env_bool("LOS_INFERENCE_BF16", False))
     parser.add_argument("--threshold", type=float, default=float(os.environ.get("LOS_INFERENCE_THRESHOLD", "0.5")))
+    parser.add_argument("--skip-general-test", action="store_true",
+                        help="Evaluate only the current cohort test dataset, not the original general test sample")
     return parser.parse_args()
 
 
@@ -170,6 +172,10 @@ def load_eval_split(
     missing = sorted(set(required_columns) - set(table.columns))
     if missing:
         raise ValueError(f"{path} is missing required columns: {missing}")
+    if "partition" not in table or not table.partition.eq("test_pool").all():
+        raise ValueError("Inference requires verified original test-pool admissions")
+    if table.duplicated(["subject_id", "hadm_id"]).any():
+        raise ValueError("Duplicate evaluation admissions")
     if filter_column:
         original_n = len(table)
         table = table.loc[coerce_bool_series(table[filter_column])].copy()
@@ -186,6 +192,8 @@ def load_eval_split(
     ].copy()
     table[text_column] = table[text_column].fillna("").astype(str)
     table["labels"] = table[label_column].astype(bool).astype(int)
+    if table.empty:
+        raise ValueError(f"No evaluable admissions remain in {path}")
     return table
 
 
@@ -261,10 +269,8 @@ def build_model_and_tokenizer(
     )
     state_dict = strip_known_prefixes(load_state_dict(model_dir))
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
-    if missing:
-        print(f"Warning: missing model keys: {missing}")
-    if unexpected:
-        print(f"Warning: unexpected model keys: {unexpected}")
+    if missing or unexpected:
+        raise ValueError(f"Trained checkpoint does not match the architecture: {len(missing)} missing, {len(unexpected)} unexpected keys")
     model.to(device)
     model.eval()
     torch.set_grad_enabled(False)
@@ -376,6 +382,8 @@ def run_inference_for_split(
             "partition",
             "selected_for_general_test",
             "subject_id",
+            "pair_id",
+            "cohort",
             "hadm_id",
             "note_id",
             "admittime",
@@ -413,6 +421,10 @@ def run_inference_for_split(
 def main() -> None:
     """Run LOS model inference on held-out test splits."""
     args = parse_args()
+    if not 0 < args.threshold < 1:
+        raise ValueError("Decision threshold must lie between 0 and 1")
+    if (args.output_dir / "inference_config.json").exists() or list(args.output_dir.glob("*_predictions.csv")):
+        raise FileExistsError("Inference output already exists; choose a new output directory to preserve previous results")
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     run_config = load_run_config(args.training_output_dir)
@@ -428,6 +440,8 @@ def main() -> None:
     max_length = int(resolve_setting(args, run_config, "max_length", 512))
     max_chunks = int(resolve_setting(args, run_config, "max_chunks", 4))
     pooling_strategy = resolve_setting(args, run_config, "pooling_strategy", "mean_max")
+    if run_config.get("label_column") and label_column != run_config["label_column"]:
+        raise ValueError("Requested prediction target differs from the trained model configuration")
 
     import torch
 
@@ -460,6 +474,8 @@ def main() -> None:
         "test_general": args.test_general_path,
         "test_fairness_mhc1_mhc0": args.test_fairness_path,
     }
+    if args.skip_general_test:
+        split_paths.pop("test_general")
     metrics_rows = []
     for split_name, path in split_paths.items():
         table = load_eval_split(path, text_column, label_column, filter_column, args.max_rows)
@@ -504,6 +520,7 @@ def main() -> None:
                 "threshold": args.threshold,
                 "fp16": args.fp16,
                 "bf16": args.bf16,
+                "skip_general_test": args.skip_general_test,
             },
             handle,
             indent=2,
