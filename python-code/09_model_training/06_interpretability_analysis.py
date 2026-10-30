@@ -48,7 +48,6 @@ DIAGNOSTIC_LABEL_PATTERNS = {
         r"\b(?:(?:paranoid|disorgani[sz]ed|catatonic|undifferentiated|residual)\s+)?schizophren(?:ia|ic|ics)\b",
         r"\bschizoaffective(?:\s+disorder)?\b",
         r"\bschizophreniform(?:\s+(?:disorder|psychosis))?\b",
-        r"\bschizotypal(?:\s+(?:personality\s+)?disorder)?\b",
     ],
     "bipolar_disorder_labels": [
         r"\bbipolar(?:\s+(?:type\s+)?(?:ii|i|2|1))?(?:\s+(?:affective\s+)?disorder)?\b",
