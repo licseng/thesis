@@ -123,6 +123,7 @@ python-code/09_model_training/bioclinicalbert_admission_classifier_output*/
 python-code/09_model_training/bioclinicalbert_admission_classifier_inference_output*/
 python-code/09_model_training/analysis_output_admission_classifier_threshold_tuning/
 python-code/09_model_training/analysis_output_readmission_threshold_tuning/
+python-code/09_model_training/analysis_output_interpretability*/
 python-code/09_model_training/bioclinicalbert_readmission_classifier_output*/
 python-code/09_model_training/bioclinicalbert_readmission_classifier_inference_output*/
 
