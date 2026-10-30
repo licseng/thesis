@@ -28,9 +28,9 @@ from sklearn.metrics import (
 SCRIPT_DIR = Path(__file__).resolve().parent
 INFERENCE_OUTPUT_DIRS = {
     "los": SCRIPT_DIR
-    / "bioclinicalbert_los_classifier_inference_output_3epoch_NOclassweights",
+    / "bioclinicalbert_los_classifier_inference_output_current_cohort",
     "readmission": SCRIPT_DIR
-    / "bioclinicalbert_readmission_classifier_inference_output_2epoch_NOclassweights",
+    / "bioclinicalbert_readmission_classifier_inference_output_current_cohort",
 }
 
 PREDICTIONS_FILENAME = "test_fairness_mhc1_mhc0_predictions.csv"
@@ -39,7 +39,7 @@ SUMMARY_FILENAME = "mhc1_mhc0_inference_metrics.csv"
 DIFFERENCE_FILENAME = "mhc1_minus_mhc0_inference_metric_differences.csv"
 
 COHORTS = {
-    "MHC1": "is_mhc1_psychotic_admission",
+    "MHC1-psychosis": "is_mhc1_psychotic_admission",
     "MHC0": "is_mhc0_admission",
 }
 
@@ -102,6 +102,8 @@ def summarize_inference(task: str, output_dir: Path) -> None:
 
     table = pd.read_csv(predictions_path)
     required = {
+        "hadm_id",
+        "partition",
         "subject_id",
         "true_label",
         "predicted_probability",
@@ -112,6 +114,14 @@ def summarize_inference(task: str, output_dir: Path) -> None:
     if missing:
         raise ValueError(f"{predictions_path} is missing columns: {missing}")
 
+    if table.empty or table.hadm_id.duplicated().any() or table.subject_id.isna().any():
+        raise ValueError("Prediction admissions must be nonempty, unique, and have subject IDs")
+    if table.partition.ne("test_pool").any():
+        raise ValueError("Fairness analysis requires held-out test-pool admissions")
+    if not table[["true_label", "predicted_label", *COHORTS.values()]].isin([0, 1]).all().all():
+        raise ValueError("Labels and cohort indicators must be binary and nonmissing")
+    if not table.predicted_probability.between(0, 1).all():
+        raise ValueError("Prediction probabilities must be finite and between zero and one")
     overlap = table[list(COHORTS.values())].astype(bool).sum(axis=1)
     if overlap.ne(1).any():
         raise ValueError(
@@ -119,6 +129,10 @@ def summarize_inference(task: str, output_dir: Path) -> None:
         )
 
     threshold = load_threshold(output_dir)
+    if not table.predicted_label.eq(table.predicted_probability.ge(threshold).astype(int)).all():
+        raise ValueError("Saved decisions do not match the configured threshold")
+    if table.groupby("subject_id")[list(COHORTS.values())].nunique().gt(1).any().any():
+        raise ValueError("A subject appears in both cohorts")
     rows = []
     for cohort, indicator_column in COHORTS.items():
         cohort_table = table.loc[table[indicator_column].astype(bool)].copy()
@@ -149,7 +163,7 @@ def summarize_inference(task: str, output_dir: Path) -> None:
             "contrast": "MHC1_minus_MHC0",
             "metric": difference_metrics,
             "difference": [
-                indexed.loc["MHC1", metric] - indexed.loc["MHC0", metric]
+                indexed.loc["MHC1-psychosis", metric] - indexed.loc["MHC0", metric]
                 for metric in difference_metrics
             ],
         }
