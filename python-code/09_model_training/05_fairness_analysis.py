@@ -9,6 +9,8 @@ Formal fairness analyses can be added here later.
 from __future__ import annotations
 
 import json
+import hashlib
+import os
 from pathlib import Path
 
 import numpy as np
@@ -26,6 +28,7 @@ from sklearn.metrics import (
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+os.environ.setdefault("MPLCONFIGDIR", str(SCRIPT_DIR.parent / ".matplotlib"))
 INFERENCE_OUTPUT_DIRS = {
     "los": SCRIPT_DIR
     / "bioclinicalbert_los_classifier_inference_output_current_cohort",
@@ -92,6 +95,104 @@ def load_threshold(output_dir: Path) -> float:
     with config_path.open("r", encoding="utf-8") as handle:
         config = json.load(handle)
     return float(config["threshold"])
+
+
+def calibration_bins(table: pd.DataFrame) -> pd.DataFrame:
+    """Ten fixed probability intervals, shared by cohorts; retain empty bins."""
+    data = table.copy()
+    data["probability_bin"] = np.minimum((data.predicted_probability * 10).astype(int), 9)
+    rows = []
+    for index in range(10):
+        part = data[data.probability_bin.eq(index)]
+        rows.append({"probability_bin": index, "bin_lower": index / 10,
+            "bin_upper": (index + 1) / 10, "n_admissions": len(part),
+            "n_subjects": part.subject_id.nunique(), "n_events": int(part.true_label.sum()),
+            "mean_predicted_probability": part.predicted_probability.mean(),
+            "observed_event_rate": part.true_label.mean()})
+    return pd.DataFrame(rows)
+
+
+def summarize_calibration(task: str, table: pd.DataFrame, output_dir: Path) -> None:
+    """Descriptive admission-weighted calibration; do not recalibrate predictions.
+
+    No naive observation-independent CIs or p values are reported. Calibration
+    GLMs estimate intercept/slope point summaries only; clustering uncertainty
+    remains a separate analysis. Sparse fixed-width bins are explicitly marked.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.ticker import PercentFormatter
+    import statsmodels.api as sm
+
+    rows, frames = [], []
+    for cohort, flag in COHORTS.items():
+        part = table[table[flag].eq(1)]
+        y = part.true_label.to_numpy(dtype=float)
+        probabilities = part.predicted_probability.to_numpy(dtype=float)
+        clipped = np.clip(probabilities, 1e-6, 1 - 1e-6)
+        log_odds = np.log(clipped / (1 - clipped))
+        offset_fit = sm.GLM(y, np.ones((len(y), 1)), family=sm.families.Binomial(), offset=log_odds).fit()
+        slope_fit = sm.GLM(y, sm.add_constant(log_odds), family=sm.families.Binomial()).fit()
+        if not offset_fit.converged or not slope_fit.converged:
+            raise RuntimeError(f"Calibration diagnostic GLM did not converge: {task}, {cohort}")
+        bins = calibration_bins(part)
+        bins.insert(0, "cohort", cohort)
+        bins.insert(0, "task", task)
+        frames.append(bins)
+        rows.append({"task": task, "cohort": cohort, "n_admissions": len(part),
+            "n_subjects": part.subject_id.nunique(), "mean_predicted_probability": probabilities.mean(),
+            "observed_event_rate": y.mean(), "observed_minus_predicted_percentage_points": 100 * (y.mean() - probabilities.mean()),
+            "observed_expected_ratio": y.sum() / probabilities.sum(),
+            "calibration_in_the_large_intercept": float(offset_fit.params[0]),
+            "joint_calibration_intercept": float(slope_fit.params[0]),
+            "calibration_slope": float(slope_fit.params[1]),
+            "brier_score": float(np.mean((y - probabilities) ** 2)),
+            "n_probabilities_clipped_for_logit": int((clipped != probabilities).sum())})
+    summary = pd.DataFrame(rows)
+    binned = pd.concat(frames, ignore_index=True)
+    summary.to_csv(output_dir / "calibration_summary.csv", index=False)
+    binned.to_csv(output_dir / "calibration_bins.csv", index=False)
+    colors = {"MHC1-psychosis": "#7851A9", "MHC0": "#27864C"}
+    fig, (ax, hist) = plt.subplots(2, 1, figsize=(7.4, 8), sharex=True,
+        gridspec_kw={"height_ratios": [3, 1]}, constrained_layout=True)
+    ax.plot([0, 1], [0, 1], linestyle="--", color="0.5", linewidth=1.2, label="Perfect calibration")
+    for position, cohort in enumerate(COHORTS):
+        bins = binned[binned.cohort.eq(cohort)]
+        present = bins[bins.n_admissions.gt(0)]
+        ax.plot(present.mean_predicted_probability, present.observed_event_rate,
+            color=colors[cohort], linewidth=1.5, label=cohort)
+        dense, sparse = present[present.n_admissions.ge(50)], present[present.n_admissions.lt(50)]
+        ax.scatter(dense.mean_predicted_probability, dense.observed_event_rate, color=colors[cohort], s=35, zorder=3)
+        ax.scatter(sparse.mean_predicted_probability, sparse.observed_event_rate,
+            edgecolor=colors[cohort], facecolor="white", s=35, zorder=3)
+        centers = (bins.bin_lower + bins.bin_upper) / 2 + (-0.019 if position == 0 else 0.019)
+        hist.bar(centers, bins.n_admissions, width=0.036, color=colors[cohort], alpha=0.8)
+    ax.set(title="Hospital stay >7 days" if task == "los" else "Readmission within 30 days",
+           ylabel="Observed outcome proportion", xlim=(0, 1), ylim=(0, 1))
+    ax.legend(loc="upper left", frameon=False)
+    ax.text(0.98, 0.02, "Hollow points: fewer than 50 admissions\nDescriptive; no confidence intervals",
+            ha="right", va="bottom", transform=ax.transAxes, fontsize=9, color="0.3")
+    ax.yaxis.set_major_formatter(PercentFormatter(1))
+    hist.set(xlabel="Predicted probability", ylabel="Admissions", xticks=np.linspace(0, 1, 11))
+    hist.xaxis.set_major_formatter(PercentFormatter(1))
+    for axis in (ax, hist):
+        axis.spines[["top", "right"]].set_visible(False)
+        axis.grid(axis="y", alpha=0.15)
+    fig.savefig(output_dir / "calibration_plot.png", dpi=180)
+    fig.savefig(output_dir / "calibration_plot.pdf")
+    plt.close(fig)
+    (output_dir / "calibration_manifest.json").write_text(json.dumps({
+        "predictions_sha256": hashlib.sha256((output_dir / PREDICTIONS_FILENAME).read_bytes()).hexdigest(),
+        "bin_edges": list(np.linspace(0, 1, 11)), "bin_rule": "[lower, upper), final interval includes 1.0",
+        "weighting": "Each admission contributes once; readmitted subjects can contribute multiple admissions",
+        "uncertainty": "Descriptive point estimates only; no independence-based CIs or significance tests",
+        "calibration_in_the_large": "Logistic intercept with logit(predicted probability) as offset; ideal 0",
+        "joint_intercept_and_slope": "Logistic outcome on intercept plus logit(predicted probability); ideals 0 and 1",
+        "predictions_recalibrated": False}, indent=2))
+    print("Calibration:")
+    print(summary[["cohort", "mean_predicted_probability", "observed_event_rate",
+        "observed_minus_predicted_percentage_points", "calibration_slope"]].to_string(index=False))
 
 
 def summarize_inference(task: str, output_dir: Path) -> None:
@@ -169,6 +270,7 @@ def summarize_inference(task: str, output_dir: Path) -> None:
         }
     )
     differences.to_csv(output_dir / DIFFERENCE_FILENAME, index=False)
+    summarize_calibration(task, table, output_dir)
 
     print(f"\n{task.upper()} (threshold={threshold:g})")
     display_columns = [
