@@ -392,6 +392,8 @@ def main():
         help="Retain failed responses for review with no accepted classification label")
     parser.add_argument("--reuse-response-dir", type=Path,
         help="Reuse matching saved responses by admission ID, including a subset such as the completed 100")
+    parser.add_argument("--retry-invalid-from", type=Path,
+        help="Make one fresh classification for each invalid response in a completed run; preserve that run")
     args = parser.parse_args()
     if args.prepare_comparison and args.run:
         raise ValueError("Comparison sample preparation is an offline operation")
@@ -399,6 +401,9 @@ def main():
         raise ValueError("Pause must be at least one second")
     if args.all_admissions and (args.comparison_sample or args.prepare_comparison):
         raise ValueError("Choose either all admissions or the comparison sample")
+    if args.retry_invalid_from and (args.all_admissions or args.comparison_sample
+            or args.prepare_comparison or args.reuse_response_dir):
+        raise ValueError("Invalid-response retry cannot be combined with other selection or reuse modes")
     # Offline modes do not open credential files or read the API-key variable.
     config = load_config(args.env_file) if args.run else {
         key: os.environ[key] for key in ["DIAGNOSTIC_OVERSHADOWING_MODEL_NAME",
@@ -431,6 +436,29 @@ def main():
     shared = args.comparison_sample or args.prepare_comparison
     n = len(data) if args.all_admissions else (COMPARISON_N if shared else args.max_admissions)
     selected = select_sample(data, n, args.seed, shared=shared)
+    retry_source = None
+    if args.retry_invalid_from:
+        source = args.retry_invalid_from
+        previous = json.loads((source / "run_manifest.json").read_text())
+        base_prompt = {"A": SYSTEM_PROMPT_A, "B": SYSTEM_PROMPT_B}[args.prompt_version]
+        if (previous["input_sha256"] != input_hash or previous["model"] != model
+                or previous["prompt_version"] != args.prompt_version
+                or previous["prompt_sha256"] != hashlib.sha256(base_prompt.encode()).hexdigest()):
+            raise ValueError("Retry source must match the input, model, and original prompt")
+        if previous.get("retry_source"):
+            raise ValueError("Only one classification retry is permitted; cannot retry a retry run")
+        source_csv = source / "diagnostic_overshadowing_admission_results.csv"
+        prior = pd.read_csv(source_csv)
+        if (prior.classification_input_id.duplicated().any()
+                or len(prior) != previous["n_classification_requests"]):
+            raise ValueError("Retry source is incomplete or contains duplicate admissions")
+        ids = prior.loc[prior.validation_status.eq("invalid"), "classification_input_id"].tolist()
+        if not ids or not set(ids).issubset(set(data.classification_input_id)):
+            raise ValueError("No invalid admissions, or retry admissions are absent from the source input")
+        selected = data.set_index("classification_input_id", drop=False).loc[ids].reset_index(drop=True)
+        n = len(selected)
+        retry_source = {"directory": str(source.resolve()), "results_sha256": sha256(source_csv),
+                        "manifest_sha256": sha256(source / "run_manifest.json")}
     if args.all_admissions and args.reuse_response_dir:
         # Keep the completed comparison sample first, then the remaining admissions.
         prior_ids = json.loads((args.reuse_response_dir / "run_manifest.json").read_text())["selected_input_ids"]
@@ -447,11 +475,20 @@ def main():
         print("Offline preparation only; no credentials read or API requests made.")
         return
     prompt = {"A": SYSTEM_PROMPT_A, "B": SYSTEM_PROMPT_B}[args.prompt_version]
+    if args.retry_invalid_from:
+        prompt += ("\n\nQuotation formatting reminder: Copy each evidence quote verbatim from its named "
+                   "input section. Use a short contiguous excerpt, preserving the original words, "
+                   "spelling, capitalization, and punctuation. Do not paraphrase, correct, join "
+                   "separate passages, or insert ellipses. The classification criteria above are unchanged.")
     if not prompt.strip():
         raise ValueError("Selected prompt is empty")
     output = args.output_dir or prompt_output(args.prompt_version, n, args.seed, shared)
     if args.all_admissions and args.output_dir is None:
         output = HERE / f"output_prompt_{args.prompt_version}_full_cohort"
+    if args.retry_invalid_from and args.output_dir is None:
+        output = HERE / f"output_prompt_{args.prompt_version}_invalid_retry"
+    if args.retry_invalid_from and output.resolve() == args.retry_invalid_from.resolve():
+        raise ValueError("Retry output must not overwrite the original run")
     if args.reuse_response_dir and output.resolve() == args.reuse_response_dir.resolve():
         raise ValueError("Full output must not overwrite the reused source run")
     output.mkdir(parents=True, exist_ok=True)
@@ -472,6 +509,8 @@ def main():
     settings["reuse_response_dir"] = str(args.reuse_response_dir) if args.reuse_response_dir else None
     settings.update({"all_admissions": args.all_admissions, "pause_seconds": args.pause_seconds,
                      "max_concurrent_requests": 1, "retry_base_seconds": 10})
+    if retry_source:
+        settings["retry_source"] = retry_source
     reuse_paths = reuse_response_paths(args.reuse_response_dir, settings, requests)
     settings["reused_response_sha256"] = {key: sha256(path) for key, path in reuse_paths.items()}
     run_manifest = output / "run_manifest.json"
