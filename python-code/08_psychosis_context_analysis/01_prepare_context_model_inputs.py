@@ -22,6 +22,64 @@ COV = ["age_at_admission_per_10y", "elixhauser_score_per_5pt",
 LANG = PYTHON / "03_discharge_note_text_analysis/01_language_complexity"
 
 
+def summarize_overshadowing(base):
+    """Descriptive ratios within MHC1 contexts; unscreened admissions are not negatives."""
+    source_path = PYTHON / ("06_classification/01_classification_diag_overshadowing/"
+        "output_prompt_B_semantic_verification_gemma/semantic_judgement_summary/"
+        "combined_labels_with_verification_status.csv")
+    labels = pd.read_csv(source_path, keep_default_na=False,
+        usecols=KEY + ["semantic_accepted_label", "semantic_verdict", "supporting_excerpt_status"])
+    if labels.hadm_id.duplicated().any() or not labels.semantic_accepted_label.isin(["positive", "negative", "unclear", ""]).all():
+        raise ValueError("Duplicate admissions or unexpected overshadowing labels")
+    cases = base.loc[base.cohort.eq("MHC1_psychotic"), KEY + ["context_group",
+        "has_prior_psychosis", "has_current_secondary_psychosis"]].copy()
+    if not set(labels.hadm_id).issubset(set(cases.hadm_id)):
+        raise ValueError("Classification admissions are outside the current matched context cohort")
+    joined = cases.merge(labels, on=KEY, how="left", validate="one_to_one", indicator=True)
+    if joined._merge.eq("both").sum() != len(labels):
+        raise ValueError("Classification metadata do not match context membership")
+    joined["selected_for_classification"] = joined._merge.eq("both")
+    joined = joined.drop(columns="_merge")
+    rows = []
+    for group, data in joined.groupby("context_group"):
+        selected = data.selected_for_classification
+        accepted = selected & data.semantic_accepted_label.isin(["positive", "negative", "unclear"])
+        positive = selected & data.semantic_accepted_label.eq("positive")
+        n_selected, n_accepted, n_positive = int(selected.sum()), int(accepted.sum()), int(positive.sum())
+        rows.append({"context_group": group, "n_matched_admissions": len(data),
+            "n_matched_subjects": data.subject_id.nunique(), "n_classified_admissions": n_selected,
+            "n_not_selected_by_keyword_prefilter": int((~selected).sum()),
+            "classification_coverage_pct": 100 * n_selected / len(data),
+            "n_admissions_with_accepted_label": n_accepted,
+            "n_unresolved_admissions": int((selected & ~accepted).sum()),
+            "n_positive_admissions": n_positive,
+            "n_negative_admissions": int((selected & data.semantic_accepted_label.eq("negative")).sum()),
+            "n_unclear_admissions": int((selected & data.semantic_accepted_label.eq("unclear")).sum()),
+            "positive_pct_among_all_matched_admissions": 100 * n_positive / len(data),
+            "positive_pct_among_accepted_labels": 100 * n_positive / n_accepted if n_accepted else np.nan,
+            "positive_pct_among_selected_admissions": 100 * n_positive / n_selected if n_selected else np.nan,
+            "n_selected_subjects": data.loc[selected, "subject_id"].nunique(),
+            "n_subjects_with_positive_admission": data.loc[positive, "subject_id"].nunique()})
+    summary = pd.DataFrame(rows)
+    assert summary.n_positive_admissions.sum() == labels.semantic_accepted_label.eq("positive").sum()
+    assert summary.n_classified_admissions.sum() == len(labels)
+    assert (summary.n_admissions_with_accepted_label + summary.n_unresolved_admissions).eq(summary.n_classified_admissions).all()
+    out = OUTPUT / "diagnostic_overshadowing"
+    out.mkdir(parents=True, exist_ok=True)
+    summary.to_csv(out / "context_overshadowing_summary.csv", index=False)
+    joined.to_csv(out / "context_overshadowing_admissions.csv", index=False)
+    manifest = {"classification_source": str(source_path.relative_to(PYTHON)),
+        "classification_sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
+        "context_membership_sha256": hashlib.sha256(cases.sort_values(KEY).to_csv(index=False).encode()).hexdigest(),
+        "label_column": "semantic_accepted_label", "semantic_verifier": "google/gemma-4-31B-it-qat-w4a16-ct",
+        "denominator": "Whole-cohort percentage uses all matched MHC1-psychosis admissions in each context group; classified-subset percentages are retained separately",
+        "not_selected": "Admissions not selected by psychiatric keyword prefilter have no classification and are not counted as negative",
+        "scope": "Descriptive admission-level comparison; repeated patients and subgroup overlap are not inferentially adjusted"}
+    (out / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    print(summary.to_string(index=False))
+    print(f"Saved context-specific overshadowing ratios to {out}")
+
+
 def prepare_clinical_activity(base, common):
     """Whole matched cohort; reuse established inpatient event/time definitions.
 
@@ -179,6 +237,9 @@ def main():
              "context_group"] = "history_only"
     base.loc[case_mask & (base.has_current_secondary_psychosis == 1),
              "context_group"] = "current_with_or_without_history"
+    if "--overshadowing" in sys.argv:
+        summarize_overshadowing(base)
+        return
     cov_path = LANG / "analysis_output_language_complexity_inference/language_complexity_model_covariates.csv"
     cov = pd.read_csv(cov_path, usecols=KEY + COV)
     assert set(cov.hadm_id) == set(base.hadm_id)
