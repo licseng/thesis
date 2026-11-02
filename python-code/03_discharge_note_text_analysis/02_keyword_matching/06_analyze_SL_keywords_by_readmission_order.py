@@ -615,7 +615,7 @@ def main() -> None:
     """Run the readmission-order SL keyword analysis."""
     sl_module = load_sl_module()
     parser = sl_module.load_parser_module()
-    section_columns = sl_module.selected_section_columns(parser)
+    section_columns = sl_module.section_columns_to_scan(parser)
     compiled_patterns = sl_module.compile_keyword_patterns()
 
     matched_ids = load_matched_ids()

@@ -7,8 +7,10 @@ summaries for manual review.
 The keyword list follows the provided three-group SL table, with clearly positive
 or broad neutral descriptors removed to focus the screen on potentially
 stigmatizing, blame-related, credibility-related, or friction-related language.
-A small set of retained terms from the prior project list is also included. This
-is a broad lexical screen, not a classifier. The list is adapted from:
+A small set of retained terms from the prior project list is also included.
+Agitation/agitated are excluded as clinical symptom descriptors; the psychiatric
+keyword vocabulary is maintained separately and is unchanged.
+This is a broad lexical screen, not a classifier. The list is adapted from:
  https://physionet.org/content/stigmatizing-language/1.0.0/
 Keyword hits should be interpreted manually in context.
 
@@ -109,8 +111,6 @@ KEYWORD_PATTERNS = {
         r"\baggression\b",
         r"\baggressive\b",
         r"\baggressively\b",
-        r"\bagitated\b",
-        r"\bagitation\b",
         r"\banger\b",
         r"\bangered\b",
         r"\bangers\b",
@@ -192,8 +192,6 @@ KEYWORD_PATTERN_LABELS = {
     r"\baggression\b": "aggressive",
     r"\baggressive\b": "aggressive",
     r"\baggressively\b": "aggressive",
-    r"\bagitated\b": "agitation",
-    r"\bagitation\b": "agitation",
     r"\banger\b": "angry",
     r"\bangered\b": "angry",
     r"\bangers\b": "angry",
