@@ -1,10 +1,11 @@
 """Psychiatric-keyword masking for the frozen admission classifiers.
 
-Run one task per GPU job; see run_interpretability_analysis.sbatch. All matched
+Run one task per GPU job, or all eight remaining analyses with
+--bundle-remaining and run_interpretability_bundle.sbatch. All matched
 test-pool admissions eligible for that task are retained, including keyword-free
 admissions. Matching wordpieces are replaced by [MASK] AFTER tokenization and
 truncation, preserving all chunk boundaries, positions, and attention masks.
-Choose broad psychiatric vocabulary or psychosis-related diagnostic labels with
+Choose broad psychiatric vocabulary, psychosis-related diagnostic labels or SL with
 --masking-mode. All groups in that mode are masked jointly. Changes are
 descriptive perturbation effects, not causal effects or individual attributions.
 
@@ -66,7 +67,85 @@ DIAGNOSTIC_LABEL_PATTERNS = {
         r"\bpsychosis\s*,?\s*(?:nos|not\s+otherwise\s+specified|unspecified)\b",
     ],
 }
-MASKING_VOCABULARIES = {"broad": KEYWORD_PATTERNS, "diagnostic_labels": DIAGNOSTIC_LABEL_PATTERNS}
+# Snapshot of the revised SL screen; agitation/agitated deliberately excluded.
+SL_KEYWORD_PATTERNS = {'adamant': ['\\badamant\\b',
+             '\\badamantly\\b',
+             '\\badament\\b',
+             '\\badamently\\b',
+             '\\ballegedly\\b',
+             '\\bclaim\\b',
+             '\\bclaimed\\b',
+             '\\bclaiming\\b',
+             '\\bclaims\\b',
+             '\\binconsistent\\s+historian\\b',
+             '\\binsist\\b',
+             '\\binsisted\\b',
+             '\\binsistence\\b',
+             '\\binsisting\\b',
+             '\\binsists\\b',
+             '\\bpurportedly\\b',
+             '\\bquestionable\\b',
+             '\\breportedly\\b',
+             '\\bsupposedly\\b',
+             '\\bunreliable\\s+historian\\b'],
+ 'compliance': ['\\bdeclined\\b',
+                '\\bdeclines\\b',
+                '\\bdeclining\\b',
+                '\\bnonadherance\\b',
+                '\\bnonadherence\\b',
+                '\\bnonadherent\\b',
+                '\\bnoncompliance\\b',
+                '\\bnoncompliant\\b',
+                '\\brefusal\\b',
+                '\\brefuse\\b',
+                '\\brefused\\b',
+                '\\brefuses\\b',
+                '\\brefusing\\b'],
+ 'other': ['\\baggression\\b',
+           '\\baggressive\\b',
+           '\\baggressively\\b',
+           '\\banger\\b',
+           '\\bangered\\b',
+           '\\bangers\\b',
+           '\\bangrier\\b',
+           '\\bangrily\\b',
+           '\\bangry\\b',
+           '\\bargumentative\\b',
+           '\\bargumentatively\\b',
+           '\\bbelligerence\\b',
+           '\\bbelligerent\\b',
+           '\\bbelligerently\\b',
+           '\\bcombative\\b',
+           '\\bcombatively\\b',
+           '\\bconfrontational\\b',
+           '\\bdefensive\\b',
+           '\\bdifficult\\s+patient\\b',
+           '\\bdisheveled\\b',
+           '\\bdrug[\\s-]+seeking\\b',
+           '\\bexaggerate\\b',
+           '\\bexaggerates\\b',
+           '\\bexaggerating\\b',
+           '\\bfake\\b',
+           '\\bfakes\\b',
+           '\\bfaking\\b',
+           '\\bhomeless\\b',
+           '\\bhomelessness\\b',
+           '\\bin\\s+denial\\b',
+           '\\bmalinger\\b',
+           '\\bmalingered\\b',
+           '\\bmalingerer\\b',
+           '\\bmalingering\\b',
+           '\\bmalingers\\b',
+           '\\bnarcotic[\\s-]+seeking\\b',
+           '\\bpoorly[\\s-]+groomed\\b',
+           '\\bpoor\\s+historian\\b',
+           '\\bsecondary\\s+gain\\b',
+           '\\buncooperative\\b',
+           '\\bunkempt\\b',
+           '\\bunmotivated\\b',
+           '\\bunwilling\\b',
+           '\\bunwillingly\\b']}
+MASKING_VOCABULARIES = {"broad": KEYWORD_PATTERNS, "diagnostic_labels": DIAGNOSTIC_LABEL_PATTERNS, "sl": SL_KEYWORD_PATTERNS}
 
 
 def load_inference_module():
@@ -82,10 +161,18 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--task", choices=["los", "readmission"])
     parser.add_argument("--training-output-dir", type=Path)
+    parser.add_argument("--bundle-remaining", action="store_true",
+                        help="Run SL plus three matched random controls for BOTH frozen models in one process")
+    parser.add_argument("--los-training-output-dir", type=Path)
+    parser.add_argument("--readmission-training-output-dir", type=Path)
+    parser.add_argument("--random-repeats", type=int, default=10,
+                        help="Independent, reproducible random masks per control (bundle only; default 10)")
     parser.add_argument("--masking-mode", choices=list(MASKING_VOCABULARIES), default="broad",
-                        help="broad: previous psychiatric filter; diagnostic_labels: psychosis-related diagnosis label mentions only")
+                        help="broad: fixed psychiatric filter; diagnostic_labels: psychosis labels; sl: revised SL screen")
     parser.add_argument("--summarize-saved-dir", type=Path,
                         help="Offline: validate saved scores and summarize the complete-pair fairness subset; no model loading")
+    parser.add_argument("--compare-saved-dir", type=Path,
+                        help="Compare cached uncertainty results against this second masking run; requires --summarize-saved-dir")
     parser.add_argument("--dataset", type=Path, default=SCRIPT_DIR / "01_training_data_creation/prediction_model_dataset_current_cohort_test/test_fairness_mhc1_mhc0.parquet")
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--batch-size", type=int, default=16)
@@ -100,7 +187,19 @@ def parse_args():
     args = parser.parse_args()
     if args.bootstrap_samples < 0 or 0 < args.bootstrap_samples < 100:
         parser.error("Bootstrap samples must be zero or at least 100")
+    if args.compare_saved_dir and (not args.summarize_saved_dir or args.bootstrap_samples):
+        parser.error("Comparison requires --summarize-saved-dir and existing bootstrap outputs; omit --bootstrap-samples")
     if args.summarize_saved_dir:
+        return args
+    if args.bundle_remaining:
+        if not args.los_training_output_dir or not args.readmission_training_output_dir:
+            parser.error("Bundle requires both --los-training-output-dir and --readmission-training-output-dir")
+        if args.task or args.training_output_dir or args.threshold is not None or args.reference_predictions:
+            parser.error("Bundle selects both tasks and frozen thresholds; omit single-task arguments")
+        if args.bootstrap_samples or args.random_repeats < 2 or args.batch_size < 1 or (args.max_rows is not None and args.max_rows < 1):
+            parser.error("Bundle requires >=2 random repeats, positive batch/max rows, and no bootstrap")
+        if args.output_dir is None:
+            parser.error("Bundle requires a new --output-dir")
         return args
     if args.bootstrap_samples:
         parser.error("Bootstrap uncertainty uses saved outputs: specify --summarize-saved-dir")
@@ -222,10 +321,253 @@ def summarize(results, inference, threshold, keyword_patterns=None):
     return pd.DataFrame(summary), pd.DataFrame(metrics), pd.DataFrame(coverage)
 
 
+SECTION_HEADING = re.compile(
+    r"(?:\A|\n\n)(Chief Complaint|History of Present Illness|Medical History|"
+    r"Admission Medications|Allergies|Physical Exam|Family History|Social History):\n")
+
+
+def random_mask_metadata(text, offsets, exclusion_patterns):
+    """Locate visible section content and exclude every target vocabulary.
+
+    Offsets are those of the same truncated, unchunked WordPiece input. Heading
+    tokens, punctuation-only tokens and all psychiatric/SL matches are ineligible.
+    No source text or offsets are exported.
+    """
+    sections = np.zeros(len(offsets), dtype=int)
+    eligible = np.array([bool(re.search(r"\w", text[a:b])) for a, b in offsets], dtype=bool)
+    headings = list(SECTION_HEADING.finditer(text))
+    for i, heading in enumerate(headings):
+        end = headings[i + 1].start() if i + 1 < len(headings) else len(text)
+        for j, (a, b) in enumerate(offsets):
+            if a < heading.end() and b > heading.start():
+                eligible[j] = False
+            elif a >= heading.end() and a < end:
+                sections[j] = i + 1
+    for pattern in exclusion_patterns:
+        for match in pattern.finditer(text):
+            eligible &= ~np.array([a < match.end() and b > match.start() for a, b in offsets])
+    return sections, eligible
+
+
+def select_matched_random_tokens(target, sections, eligible, rng):
+    """Match WordPiece budget exactly, preferring section and contiguous lengths.
+
+    Longest target runs are placed first. When a complete run cannot be placed,
+    sample individual eligible tokens in the same section, then elsewhere in
+    the admission if necessary. Every relaxation is counted in the outputs.
+    Eligible tokens exclude the UNION of all three target vocabularies.
+    """
+    selected = np.zeros(len(target), dtype=bool)
+    available = eligible.copy()
+    if int(target.sum()) > int(available.sum()):
+        raise ValueError("Insufficient non-target content tokens for the requested random-mask budget")
+    indices = np.flatnonzero(target)
+    runs = []
+    for index in indices:
+        if runs and index == runs[-1][-1] + 1 and sections[index] == sections[runs[-1][0]]:
+            runs[-1].append(index)
+        else:
+            runs.append([int(index)])
+    span_fallback = section_fallback = 0
+    for run in sorted(runs, key=len, reverse=True):
+        length, section = len(run), sections[run[0]]
+        same_section = available & (sections == section)
+        windows = np.flatnonzero(np.convolve(same_section.astype(int), np.ones(length, dtype=int), mode="valid") == length)
+        if len(windows):
+            start = int(rng.choice(windows))
+            chosen = np.arange(start, start + length)
+        else:
+            span_fallback += 1
+            candidates = np.flatnonzero(same_section)
+            n_local = min(length, len(candidates))
+            chosen = rng.choice(candidates, size=n_local, replace=False)
+            available[chosen] = False
+            if n_local < length:
+                extra = rng.choice(np.flatnonzero(available), size=length - n_local, replace=False)
+                chosen = np.concatenate([chosen, extra])
+                section_fallback += length - n_local
+        selected[chosen] = True
+        available[chosen] = False
+    if selected.sum() != target.sum() or (selected & ~eligible).any():
+        raise AssertionError("Random masking budget/exclusion invariant failed")
+    return selected, {"n_random_span_fallbacks": span_fallback,
+                      "n_random_tokens_outside_target_section": section_fallback}
+
+
+def random_mask_batch(original, target_masked, texts, tokenizer, max_length, max_chunks,
+                      exclusion_patterns, row_keys, mode, repeat, seed, context=None):
+    """Generate stable per-admission random controls, independent of batch size."""
+    import torch
+    capacity = max_length - 2
+    if context is None:
+        encoded = tokenizer(texts, add_special_tokens=False, truncation=True,
+                            max_length=capacity * max_chunks, return_offsets_mapping=True)
+        context = [random_mask_metadata(text, offsets, exclusion_patterns)
+                   for text, offsets in zip(texts, encoded["offset_mapping"])]
+    masked = {**original, "input_ids": original["input_ids"].clone()}
+    audits = []
+    for i, ((sections, eligible), key) in enumerate(zip(context, row_keys)):
+        n = len(sections)
+        target = (original["input_ids"][i, :, 1:capacity + 1] !=
+                  target_masked["input_ids"][i, :, 1:capacity + 1]).numpy().ravel()[:n]
+        digest = hashlib.sha256(f"{seed}|{mode}|{repeat}|{key}".encode()).digest()
+        rng = np.random.default_rng(int.from_bytes(digest[:8], "little"))
+        selected, audit = select_matched_random_tokens(target, sections, eligible, rng)
+        indices = np.flatnonzero(selected)
+        masked["input_ids"][i, indices // capacity, indices % capacity + 1] = tokenizer.mask_token_id
+        audits.append(audit)
+    return masked, audits
+
+
+def write_bundle_run(folder, table, scores, counts, mode, vocabulary, inference, manifest):
+    """Write the same numeric-only format as single-mode masking runs."""
+    folder.mkdir(parents=True, exist_ok=True)
+    metadata = [c for c in ["subject_id", "hadm_id", "pair_id", "cohort", "note_id", "partition"] if c in table]
+    results = table[metadata].reset_index(drop=True).copy()
+    results["true_label"] = table.labels.to_numpy()
+    results["masking_mode"] = mode
+    results[["original_probability", "masked_probability"]] = scores
+    results = pd.concat([results, pd.DataFrame(counts)], axis=1)
+    results["probability_change_pp"] = 100 * (results.masked_probability - results.original_probability)
+    for condition in ["original", "masked"]:
+        results[f"{condition}_label"] = results[f"{condition}_probability"].ge(manifest["threshold"]).astype(int)
+    results.to_csv(folder / "admission_masking_effects.csv", index=False)
+    summary, metrics, coverage = summarize(results, inference, manifest["threshold"], vocabulary)
+    summary.to_csv(folder / "cohort_summary.csv", index=False)
+    metrics.to_csv(folder / "metrics_original_vs_masked.csv", index=False)
+    coverage.to_csv(folder / "keyword_coverage.csv", index=False)
+    manifest = {**manifest, "status": "complete", "masking_mode": mode,
+                "keyword_patterns": vocabulary, "n_admissions": len(results),
+                "n_admissions_with_visible_keywords": int(results.n_masked_tokens.gt(0).sum())}
+    (folder / "run_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+
+
+def run_remaining_bundle(args):
+    """Eight analyses, sequentially on one GPU; each checkpoint loaded once.
+
+    Per task: targeted SL masking and random controls for broad, diagnostic_labels
+    and SL. Random controls retain every repeat separately; repeat predictions
+    must not be averaged and presented as a single masked model's performance.
+    """
+    import gc
+    import torch
+    if args.output_dir.exists() and any(args.output_dir.iterdir()):
+        raise FileExistsError("Bundle output directory is not empty; choose a new --output-dir")
+    if args.require_cuda and not torch.cuda.is_available():
+        raise RuntimeError("A CUDA GPU was requested but is unavailable")
+    inference = load_inference_module()
+    training = inference.load_training_module()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    directories = {"los": args.los_training_output_dir, "readmission": args.readmission_training_output_dir}
+    # Validate BOTH checkpoints and task labels before starting costly inference.
+    configs = {}
+    for task, folder in directories.items():
+        config = inference.load_run_config(folder)
+        expected = "prolonged_los_gt_7d" if task == "los" else "readmission_within_30d"
+        if config.get("label_column") != expected or not (folder / "best_model").is_dir():
+            raise ValueError(f"Invalid {task} checkpoint/configuration: {folder}")
+        configs[task] = config
+    patterns = {mode: {g: [re.compile(p, re.I) for p in ps] for g, ps in vocab.items()}
+                for mode, vocab in MASKING_VOCABULARIES.items()}
+    exclusions = [re.compile(p, re.I) for p in sorted({p for v in MASKING_VOCABULARIES.values() for ps in v.values() for p in ps})]
+    args.output_dir.mkdir(parents=True)
+    bundle = {"status": "running", "random_repeats": args.random_repeats, "seed": args.seed,
+              "analyses": [], "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+    bundle_path = args.output_dir / "bundle_manifest.json"
+    bundle_path.write_text(json.dumps(bundle, indent=2) + "\n")
+    for task, folder in directories.items():
+        config = configs[task]
+        text_column = config.get("text_column", "model_text")
+        table = inference.load_eval_split(args.dataset, text_column, config["label_column"],
+                                          "eligible_for_30d_readmission" if task == "readmission" else None, args.max_rows)
+        if "cohort" not in table or table.cohort.isna().any() or table.hadm_id.duplicated().any():
+            raise ValueError("Expected unique admissions with cohort labels")
+        if not table[config["label_column"]].isin([0, 1, False, True]).all():
+            raise ValueError("Expected binary target labels")
+        model, tokenizer = inference.build_model_and_tokenizer(training, folder / "best_model",
+                            config["model_name"], config["pooling_strategy"], device)
+        max_length, max_chunks = int(config["max_length"]), int(config["max_chunks"])
+        conditions = [("sl", 0)] + [(f"random_{mode}", repeat) for mode in MASKING_VOCABULARIES
+                                                       for repeat in range(args.random_repeats)]
+        scores = {key: [] for key in conditions}
+        counts = {key: [] for key in conditions}
+        print(f"BUNDLE {task}: {len(table):,} admissions; SL + 3 random controls x {args.random_repeats} repeats", flush=True)
+        for start in range(0, len(table), args.batch_size):
+            batch = table.iloc[start:start + args.batch_size]
+            texts = batch[text_column].tolist()
+            prepared = {mode: prepare_batch(texts, tokenizer, max_length, max_chunks, compiled)
+                        for mode, compiled in patterns.items()}
+            original = prepared["sl"][0]
+            baseline = predict(model, original, device, args.fp16)
+            row_keys = [f"{int(row.subject_id)}:{int(row.hadm_id)}" for row in batch.itertuples()]
+            encoded = tokenizer(texts, add_special_tokens=False, truncation=True,
+                                max_length=(max_length - 2) * max_chunks, return_offsets_mapping=True)
+            random_context = [random_mask_metadata(text, offsets, exclusions)
+                              for text, offsets in zip(texts, encoded["offset_mapping"])]
+            for condition, repeat in conditions:
+                mode = condition.removeprefix("random_")
+                _, masked, stats = prepared[mode]
+                stats = [dict(row) for row in stats]
+                if condition.startswith("random_"):
+                    masked, audits = random_mask_batch(original, masked, texts, tokenizer, max_length, max_chunks,
+                                                       exclusions, row_keys, mode, repeat, args.seed, random_context)
+                    for row, audit in zip(stats, audits):
+                        row.update(audit)
+                changed = np.array([row["n_masked_tokens"] > 0 for row in stats])
+                probability = baseline.copy()
+                if changed.any():
+                    probability[changed] = predict(model, {k: v[torch.tensor(changed)] for k, v in masked.items()}, device, args.fp16)
+                scores[(condition, repeat)].extend(zip(baseline.tolist(), probability.tolist()))
+                counts[(condition, repeat)].extend(stats)
+            if start == 0 or (start // args.batch_size + 1) % 10 == 0 or start + args.batch_size >= len(table):
+                print(f"BUNDLE {task}: processed {min(start + args.batch_size, len(table)):,}/{len(table):,} for all conditions", flush=True)
+        common = {"task": task, "threshold": .25 if task == "los" else .20,
+                  "training_output_dir": str(folder.resolve()), "dataset": str(args.dataset.resolve()),
+                  "training_config": config, "max_rows": args.max_rows, "batch_size": args.batch_size,
+                  "max_length": max_length, "max_chunks": max_chunks, "device": str(device),
+                  "fp16": args.fp16, "torch_version": torch.__version__, "mask_token": tokenizer.mask_token,
+                  "script_sha256": bundle["script_sha256"], "bundle_seed": args.seed,
+                  "change_direction": "masked minus original; percentage points",
+                  "baseline": "One same-run original prediction per admission reused across all conditions",
+                  "interpretation": "Exploratory perturbations; no causal, stigma or unfairness inference"}
+        for condition, repeat in conditions:
+            mode = condition.removeprefix("random_")
+            destination = args.output_dir / task / condition
+            manifest = dict(common)
+            if condition.startswith("random_"):
+                destination = destination / f"repeat_{repeat + 1:02d}"
+                manifest.update(random_repeat=repeat + 1, random_repeats=args.random_repeats,
+                    target_masking_mode=mode,
+                    random_rule="Exact target WordPiece count per admission; same section and contiguous lengths when feasible; longest runs first; fallback counts exported",
+                    excluded_keyword_patterns={g: v for g, v in MASKING_VOCABULARIES.items()},
+                    random_excludes="Union of all target vocabularies, section headings, special/padding and punctuation-only tokens",
+                    counts_interpretation="Keyword/group/span counts describe the TARGET mask budget, not random token identities")
+            write_bundle_run(destination, table, scores[(condition, repeat)], counts[(condition, repeat)],
+                             condition, MASKING_VOCABULARIES[mode], inference, manifest)
+        for condition in ["sl", "random_broad", "random_diagnostic_labels", "random_sl"]:
+            bundle["analyses"].append({"task": task, "condition": condition,
+                "directory": str(Path(task) / condition), "status": "complete",
+                "repeats": 1 if condition == "sl" else args.random_repeats})
+        bundle_path.write_text(json.dumps(bundle, indent=2) + "\n")
+        del model, tokenizer, scores, counts, prepared, original, masked
+        gc.collect()
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
+    bundle["status"] = "complete"
+    bundle_path.write_text(json.dumps(bundle, indent=2) + "\n")
+    print(f"All eight analyses complete: {args.output_dir}", flush=True)
+
+
 def main():
     args = parse_args()
+    if args.bundle_remaining:
+        run_remaining_bundle(args)
+        return
     if args.summarize_saved_dir:
-        summarize_saved_outputs(args.summarize_saved_dir, args.bootstrap_samples, args.seed)
+        if args.compare_saved_dir:
+            compare_saved_masking_runs(args.summarize_saved_dir, args.compare_saved_dir)
+        else:
+            summarize_saved_outputs(args.summarize_saved_dir, args.bootstrap_samples, args.seed)
         return
     if args.output_dir.exists() and any(args.output_dir.iterdir()):
         raise FileExistsError("Output directory is not empty; choose a new --output-dir")
@@ -304,7 +646,8 @@ def main():
         "max_length": max_length, "max_chunks": max_chunks, "mask_token": tokenizer.mask_token,
         "mask_rule": "Joint masking of all matched wordpieces within the original truncated input; positions and chunk boundaries preserved",
         "change_direction": "masked minus original; probability_change_pp is in percentage points",
-        "vocabulary_source": VOCABULARY_SOURCE if args.masking_mode == "broad" else "06_interpretability_analysis.py::DIAGNOSTIC_LABEL_PATTERNS",
+        "vocabulary_source": (VOCABULARY_SOURCE if args.masking_mode == "broad" else
+                              "06_interpretability_analysis.py::" + ("SL_KEYWORD_PATTERNS" if args.masking_mode == "sl" else "DIAGNOSTIC_LABEL_PATTERNS")),
         "keyword_patterns": vocabulary,
         "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "n_admissions_with_visible_keywords": int(results.n_masked_tokens.gt(0).sum()),
@@ -312,6 +655,7 @@ def main():
         "reference_prediction_check": reference_check,
         "interpretation": "Admission-weighted descriptive perturbation effects. " + (
             "Broad vocabulary includes medications, substance use and cognitive symptoms. " if args.masking_mode == "broad" else
+            "Revised candidate SL vocabulary excluding agitation/agitated; no contextual stigma classification. " if args.masking_mode == "sl" else
             "Psychosis-related diagnostic label mentions only; includes negation and family history; bare symptoms and medication names remain. ") +
             "No causal or unfairness inference; no significance tests.",
     }
@@ -543,6 +887,59 @@ def summarize_masking_uncertainty(complete, paired, run_manifest, folder, n_boot
     }, indent=2) + "\n")
     print(pd.DataFrame(effect_rows).query("population == 'all_admissions'").to_string(index=False), flush=True)
     print(f"Saved masking uncertainty: {destination}", flush=True)
+
+
+def compare_saved_masking_runs(first, second):
+    """Direct paired comparison of two masking interventions on identical draws."""
+    paths = [first / "paired_analysis", second / "paired_analysis"]
+    metadata = [json.loads((p / "uncertainty/manifest.json").read_text()) for p in paths]
+    for key in ["task", "n_pairs", "n_blocks", "bootstrap_samples", "seed"]:
+        if metadata[0][key] != metadata[1][key]:
+            raise ValueError(f"Masking runs differ in bootstrap setting {key}")
+    data = [pd.read_csv(p / "admission_masking_effects.csv").sort_values(["pair_id", "hadm_id"]).reset_index(drop=True) for p in paths]
+    keys = ["pair_id", "cohort", "subject_id", "hadm_id", "true_label"]
+    if not data[0][keys].equals(data[1][keys]) or not np.array_equal(data[0].original_probability, data[1].original_probability):
+        raise ValueError("Direct comparison requires identical admissions, outcomes and unmasked probabilities")
+    samples = [np.load(p / "uncertainty/bootstrap_replicates.npz") for p in paths]
+    for key in ["cohorts", "conditions", "metric_names", "populations", "effects"]:
+        if not np.array_equal(samples[0][key], samples[1][key]):
+            raise ValueError(f"Bootstrap array order differs for {key}")
+    if not np.allclose(samples[0]["metric_samples"][:, :, 0], samples[1]["metric_samples"][:, :, 0], equal_nan=True, atol=1e-12, rtol=1e-12):
+        raise ValueError("Unmasked bootstrap results differ; identical resampling is required")
+    modes = [m.get("masking_mode", "broad") for m in metadata]
+    effect_tables = [pd.read_csv(p / "uncertainty/probability_changes_with_ci.csv") for p in paths]
+    metric_tables = [pd.read_csv(p / "uncertainty/cohort_metrics_and_changes_with_ci.csv") for p in paths]
+    rows = []
+
+    def add(cohort, metric, estimates, distribution):
+        valid = distribution[np.isfinite(distribution)]
+        lower, upper = np.quantile(valid, [.025, .975]) if len(valid) else (np.nan, np.nan)
+        rows.append({"task": metadata[0]["task"], "cohort": cohort, "metric": metric,
+            "first_mode": modes[0], "second_mode": modes[1], "first_estimate": estimates[0], "second_estimate": estimates[1],
+            "first_minus_second": estimates[0] - estimates[1], "ci_lower": lower, "ci_upper": upper,
+            "n_valid_bootstrap": len(valid), "n_bootstrap": metadata[0]["bootstrap_samples"]})
+
+    for i, cohort in enumerate(samples[0]["cohorts"].tolist()):
+        for j, metric in enumerate(samples[0]["effects"].tolist()):
+            estimates = [t.loc[t.cohort.eq(cohort) & t.population.eq("all_admissions") & t.metric.eq(metric), "estimate"].item() for t in effect_tables]
+            add(cohort, metric, estimates, samples[0]["effect_samples"][:, i, 0, j] - samples[1]["effect_samples"][:, i, 0, j])
+        for j, metric in enumerate(samples[0]["metric_names"].tolist()):
+            estimates = [t.loc[t.cohort.eq(cohort) & t.condition.eq("masked_minus_original") & t.metric.eq(metric), "estimate"].item() for t in metric_tables]
+            changes = [s["metric_samples"][:, i, 1, j] - s["metric_samples"][:, i, 0, j] for s in samples]
+            add(cohort, metric, estimates, changes[0] - changes[1])
+    destination = paths[0] / f"comparison_with_{modes[1]}"
+    destination.mkdir(exist_ok=True)
+    pd.DataFrame(rows).to_csv(destination / "masking_comparison_with_ci.csv", index=False)
+    (destination / "manifest.json").write_text(json.dumps({
+        "first_run": str(first), "second_run": str(second), "direction": f"{modes[0]} minus {modes[1]}",
+        "comparison": "Difference between within-run masking effects using identical block-bootstrap draws; all complete-pair admissions",
+        "seed": metadata[0]["seed"], "bootstrap_samples": metadata[0]["bootstrap_samples"],
+        "baseline_and_resampling_verified": True,
+        "inference": "95% pointwise percentile intervals; fixed models and matching; no multiplicity adjustment",
+        "interpretation": "Comparison of two joint text perturbations, not an additive decomposition into diagnostic-label and other-information contributions",
+    }, indent=2) + "\n")
+    print(pd.DataFrame(rows).loc[lambda d: d.metric.eq("mean_probability_change_pp")].to_string(index=False))
+    print(f"Saved direct masking comparison: {destination}")
 
 
 if __name__ == "__main__":
