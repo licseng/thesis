@@ -1,7 +1,8 @@
 #!/usr/bin/env Rscript
 # Exploratory sensitivity: prior/current secondary neurocognitive category.
 # Scripts and outputs live together in the language-complexity subfolder.
-# Each specification retains patient and matched-pair random intercepts.
+# Default: patient/pair clustered OLS, aligned with the primary analysis.
+# --mixed-effects reproduces the earlier random-intercept sensitivity.
 args <- commandArgs(FALSE)
 script_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", args, value=TRUE))))
 Sys.setenv(LANGUAGE_COMPLEXITY_FUNCTIONS_ONLY="1")
@@ -9,6 +10,10 @@ source(file.path(script_dir, "03_test_language_complexity.R"))
 Sys.unsetenv("LANGUAGE_COMPLEXITY_FUNCTIONS_ONLY")
 output_dir <- file.path(script_dir, "analysis_output_neurocognitive_sensitivity")
 flags <- read.csv(file.path(output_dir, "neurocognitive_model_covariates.csv"))
+if (clustered_primary) {
+  output_dir <- file.path(output_dir, "clustered_primary")
+  dir.create(output_dir,recursive=TRUE,showWarnings=FALSE)
+}
 data <- attach_model_covariates(attach_pair_ids(read.csv(section_path)))
 data <- data[data$section_name == "discharge_instructions", ]
 data <- merge(data, flags[, c("cohort", "subject_id", "hadm_id", "neurocognitive")],
@@ -25,8 +30,15 @@ for (base in c("M2_age_elixhauser_prior_utilization", "M3_age_elixhauser_prior_u
     if (spec == "plus_neurocognitive") fixed <- c(fixed, "neurocognitive")
     for (outcome in section_outcomes) {
       message(base, " / ", spec, " / ", outcome)
-      fits[[length(fits)+1]] <- fit_one_adjusted_mixed_model(
-        selected, outcome, "prose_section", paste(base, spec, sep="__"), fixed, "discharge_instructions")
+      if (clustered_primary) {
+        selected_outcome <- complete_clustered_sample(selected,outcome,
+          c(adjusted_model_definitions[[3]],"race_ethnicity_group","neurocognitive"))
+        fits[[length(fits)+1]] <- fit_one_clustered_model(
+          selected_outcome,outcome,"prose_section",paste(base,spec,sep="__"),fixed,"discharge_instructions")
+      } else {
+        fits[[length(fits)+1]] <- fit_one_adjusted_mixed_model(
+          selected, outcome, "prose_section", paste(base, spec, sep="__"), fixed, "discharge_instructions")
+      }
     }
   }
 }
@@ -38,4 +50,21 @@ write.csv(summary, file.path(output_dir, "discharge_instructions_neurocognitive_
 write.csv(coefficients, file.path(output_dir, "discharge_instructions_neurocognitive_coefficients.csv"), row.names=FALSE)
 coverage <- aggregate(neurocognitive ~ cohort, data, function(x) c(n=length(x), n_neurocognitive=sum(x)))
 write.csv(coverage, file.path(output_dir, "discharge_instructions_neurocognitive_coverage.csv"), row.names=FALSE)
-print(summary[, c("model", "outcome", "n_admissions", "mhc1_coefficient", "ci_low", "ci_high", "FDR", "singular_fit")], row.names=FALSE)
+if (clustered_primary) {
+  write.csv(do.call(rbind,lapply(fits,`[[`,"diagnostic_bins")),
+    file.path(output_dir,"residual_diagnostics_by_fitted_bin.csv"),row.names=FALSE)
+  writeLines(c("Exploratory neurocognitive sensitivity: patient/pair two-way HC1 clustered OLS, asymptotic normal Wald inference.",
+    "M2/M3 baseline, additional neurocognitive covariate, and complete-pair exclusion of neurocognitive MHC1 admissions.",
+    "Complete outcome pairs; same covariate availability requirements as primary clustered models.",
+    "BH across nine discharge-instruction scores separately per specification; no automatic outlier exclusions.",
+    "Original mixed-effects outputs remain in the parent directory."),file.path(output_dir,"methods.txt"))
+  capture.output(sessionInfo(),file=file.path(output_dir,"R_session_info.txt"))
+  paths <- c(file.path(script_dir,"03_test_language_complexity.R"),
+    file.path(script_dir,"05_test_discharge_instructions_neurocognitive.R"),
+    file.path(dirname(output_dir),"neurocognitive_model_covariates.csv"),covariates_path,section_path,pairs_path)
+  hashes <- tools::md5sum(paths)
+  write.csv(data.frame(path=names(hashes),md5=unname(hashes)),
+    file.path(output_dir,"input_and_code_hashes.csv"),row.names=FALSE)
+}
+print(summary[, c("model", "outcome", "n_admissions", "mhc1_coefficient", "ci_low", "ci_high", "FDR",
+  if(clustered_primary) "diagnostic_flags" else "singular_fit")], row.names=FALSE)
