@@ -9,6 +9,7 @@ Outputs are local derivatives, not replacements for SQL exports or model inputs.
 """
 from pathlib import Path
 import importlib.util
+import sys
 
 import duckdb
 import numpy as np
@@ -22,6 +23,99 @@ OUT = HERE / "analysis_output_lab_linkage_and_timing"
 KEYS = ["cohort", "subject_id", "hadm_id"]
 BINS = [("0–24h", 0, 24), ("24–48h", 24, 48), ("48–72h", 48, 72),
         ("days 4–7", 72, 168), ("after day 7", 168, np.inf)]
+
+
+def describe_fine_timing(retained, labs, other_events):
+    """Descriptive exposure checks; save aggregates only, without refitting models."""
+    target = OUT / "fine_timing"
+    target.mkdir(parents=True, exist_ok=True)
+    valid = retained.admittime.notna() & retained.dischtime.notna() & retained.dischtime.gt(retained.admittime)
+    keep = retained.assign(valid=valid).groupby("pair_id").valid.all()
+    base = retained[retained.pair_id.isin(keep[keep].index)].copy()
+    duration = (base.dischtime-base.admittime).dt.total_seconds()/3600
+    configs = {
+        "laboratory_measurements": (labs, "labevent_id"),
+        "laboratory_specimens": (labs, "specimen_id"),
+        "microbiology_records": (other_events["microbiology_records"], "microevent_id"),
+        "provider_order_activity": (other_events["provider_order_activity"], "poe_id"),
+    }
+    # Days beyond 30 remain in a labelled tail; no long admissions are removed.
+    grids = {
+        "first_day_6h": [(f"{h}–{h+6}h", h, h+6) for h in range(0,24,6)],
+        "daily": [(f"Day {d+1}", 24*d, 24*(d+1)) for d in range(30)] + [("After day 30",720,np.inf)],
+        "original_periods": BINS,
+    }
+    rows = []
+    for measure, (source, identifier) in configs.items():
+        event = source[KEYS+[identifier,"charttime"]].copy()
+        if measure == "laboratory_specimens":
+            event = event.groupby(KEYS+[identifier], as_index=False).charttime.min()
+        event = event.merge(base[KEYS+["admittime","dischtime"]], on=KEYS, validate="many_to_one")
+        event = event[event.charttime.ge(event.admittime) & event.charttime.lt(event.dischtime)].copy()
+        event["hours"] = (event.charttime-event.admittime).dt.total_seconds()/3600
+        for grid, bins in grids.items():
+            check_count = 0
+            check_exposure = 0.
+            for order, (label, low, high) in enumerate(bins):
+                f = base[KEYS+["pure_cc_group"]].copy()
+                f["exposure_days"] = (np.minimum(duration,high)-low).clip(lower=0)/24
+                counts = event[event.hours.ge(low) & event.hours.lt(high)].groupby(KEYS).size().rename("n_events")
+                f = f.join(counts, on=KEYS)
+                f["n_events"] = f.n_events.fillna(0).astype(int)
+                check_count += f.n_events.sum()
+                check_exposure += f.exposure_days.sum()
+                f = f[f.exposure_days.gt(0)].copy()
+                f["coverage"] = np.where(duration.loc[f.index].ge(high), "full_interval", "partial_interval")
+                if np.isinf(high):
+                    f["coverage"] = "open_ended"
+                for scope in ["all_five_CCs", "by_CC"]:
+                    groups = ["cohort"] if scope == "all_five_CCs" else ["pure_cc_group","cohort"]
+                    for coverage in ["all", "full_interval", "partial_interval", "open_ended"]:
+                        sub = f if coverage == "all" else f[f.coverage.eq(coverage)]
+                        for key, g in sub.groupby(groups[0] if len(groups)==1 else groups):
+                            cohort = key[-1] if isinstance(key,tuple) else key
+                            cc = key[0] if scope == "by_CC" else "All five CCs"
+                            exposure = g.exposure_days.sum()
+                            rows.append(dict(measure=measure,grid=grid,interval=label,order=order,
+                                cc_group=cc,cohort=cohort,coverage=coverage,
+                                n_admissions=len(g),n_subjects=g.subject_id.nunique(),
+                                n_events=int(g.n_events.sum()),exposure_days=exposure,
+                                events_per_day=g.n_events.sum()/exposure))
+            expected = len(event) if grid != "first_day_6h" else int(event.hours.lt(24).sum())
+            assert check_count == expected, (measure, grid, "event partition")
+            expected_exposure = (duration.clip(upper=24) if grid == "first_day_6h" else duration).sum()/24
+            assert np.isclose(check_exposure,expected_exposure), (measure,grid,"exposure partition")
+    summary = pd.DataFrame(rows)
+    summary.to_csv(target / "timing_summary.csv", index=False)
+    import os
+    os.environ.setdefault("MPLCONFIGDIR", str(OUT / ".matplotlib"))
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    colors = {"MHC0":"#238b45", "MHC1_psychotic":"#8055ad"}
+    for grid, xmax in [("first_day_6h",4),("daily",30)]:
+        fig, axes = plt.subplots(4,2,figsize=(13,15))
+        for axrow, measure in zip(axes,configs):
+            sub = summary[(summary.grid==grid)&(summary.measure==measure)&(summary.coverage=="all")&(summary.cc_group=="All five CCs")&(summary.order<xmax)]
+            for cohort,color in colors.items():
+                g = sub[sub.cohort==cohort].sort_values("order")
+                for ax,col in zip(axrow,["events_per_day","n_admissions"]):
+                    ax.plot(g.order,g[col],marker="o",color=color,label=cohort)
+                    if grid == "first_day_6h":
+                        ax.set_xticks(g.order,g.interval)
+                    else:
+                        ax.set_xlabel("Hospital day (1 = first 24 hours)")
+                        ax.set_xticks([0,4,9,14,19,24,29],[1,5,10,15,20,25,30])
+                    ax.grid(alpha=.2)
+            axrow[0].set_title(measure.replace("_"," "))
+            axrow[0].set_ylabel("Events per observed hospital day")
+            axrow[1].set_ylabel("Admissions contributing")
+        axes[0,0].legend()
+        fig.suptitle("Five retained CC subgroups pooled; descriptive, changing admission composition")
+        fig.tight_layout(rect=[0,0,1,.97])
+        fig.savefig(target / f"{grid}.png",dpi=160)
+        plt.close(fig)
+    print(f"Fine timing: {base.pair_id.nunique()} pairs; aggregate outputs: {target}")
 
 
 def describe_variation(data):
@@ -213,6 +307,9 @@ def main():
         raise ValueError("Duplicate lab attribution detected")
     if set(linked.labevent_id) & set(recovered.labevent_id):
         raise ValueError("Recovered lab duplicated an existing link")
+    if "--fine-timing" in sys.argv:
+        describe_fine_timing(retained, pd.concat([linked,recovered],ignore_index=True), other_events)
+        return
     linked_counts = linked.groupby(KEYS).size().rename("n_linked_source_rows").reset_index()
     recovery_counts = recovered.groupby(KEYS).size().rename("n_recovered_lab_rows").reset_index()
     corrected = retained.merge(linked_counts, on=KEYS, how="left", validate="one_to_one").merge(
