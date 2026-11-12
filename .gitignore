@@ -148,3 +148,6 @@ python-code/04_clinical_route_analyses/analysis_output_lab_linkage_and_timing/
 
 # Local editor settings
 /.vscode/
+
+# Generated input truncation summary
+/python-code/09_model_training/analysis_output_input_truncation/token_truncation_summary.csv
