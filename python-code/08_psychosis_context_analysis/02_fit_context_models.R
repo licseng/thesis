@@ -1,12 +1,13 @@
 #!/usr/bin/env Rscript
 # Exploratory three-group comparisons; M0, M1 and M2 use identical endpoint samples.
+# Readability uses OLS; clinical events and durations use log-link PPML.
 # No multiplicity adjustment: raw p-values are exploratory, not confirmatory.
 file_arg <- grep("^--file=", commandArgs(FALSE), value=TRUE)
 here <- dirname(normalizePath(sub("^--file=", "", file_arg)))
 python <- dirname(here)
 .libPaths(c(file.path(python,
  "03_discharge_note_text_analysis/01_language_complexity/.r-library"), .libPaths()))
-suppressPackageStartupMessages({library(lmerTest); library(sandwich)})
+suppressPackageStartupMessages({library(sandwich)})
 output <- file.path(here, "analysis_output")
 clinical <- "--clinical-events" %in% commandArgs(TRUE)
 if(clinical) output <- file.path(output,"clinical_activity")
@@ -39,26 +40,25 @@ for (outcome in unique(d_all$outcome)) for (stage in names(model_adjustments)) {
  stopifnot(outcome %in% c("laboratory_measurements","laboratory_specimens",
   "microbiology_records","provider_order_activity","discharge_instructions_flesch_reading_ease",
   "whole_note_flesch_reading_ease", "hospital_los_days", "ed_los_hours"))
- mixed <- outcome %in% c("discharge_instructions_flesch_reading_ease",
+ linear <- outcome %in% c("discharge_instructions_flesch_reading_ease",
   "whole_note_flesch_reading_ease")
- form <- reformulate(c(fixed, if(mixed)
-  c("(1 | patient)","(1 | matched_pair)")), response="value")
+ form <- reformulate(fixed, response="value")
  warnings <- character()
  fit <- withCallingHandlers(
-  if(mixed) lmer(form, data=d, REML=TRUE,
-   control=lmerControl(optimizer="bobyqa",optCtrl=list(maxfun=200000)))
+  if(linear) lm(form, data=d)
   else glm(form, data=d, family=quasipoisson(link="log"),
    control=glm.control(maxit=100,epsilon=1e-10)),
   warning=function(w){warnings <<- c(warnings,conditionMessage(w));invokeRestart("muffleWarning")})
- b <- if(mixed)fixef(fit) else coef(fit)
- v <- if(mixed)as.matrix(vcov(fit)) else vcovCL(fit,
+ b <- coef(fit)
+ v <- vcovCL(fit,
   cluster=d[,c("patient","matched_pair")], type="HC1",
   cadjust=TRUE, multi0=FALSE, fix=FALSE)
- if(!mixed) {
+ {
   # Independently verify the two-way sandwich including observed intersections.
   x <- model.matrix(fit)
-  bread <- solve(crossprod(x,x*as.numeric(fit$weights)))
-  scores <- x*as.numeric(fit$residuals*fit$weights)
+  weights <- if(linear) rep(1,nrow(d)) else as.numeric(fit$weights)
+  bread <- solve(crossprod(x,x*weights))
+  scores <- x*as.numeric(fit$residuals*weights)
   component <- function(g) {
    s <- rowsum(scores,g,reorder=FALSE); G <- nrow(s)
    crossprod(s)*G/(G-1)*(nrow(x)-1)/(nrow(x)-ncol(x))
@@ -69,21 +69,22 @@ for (outcome in unique(d_all$outcome)) for (stage in names(model_adjustments)) {
   stopifnot(isTRUE(all.equal(unname(v),unname(manual),tolerance=1e-7)))
   if(stage=="M0" && !clinical) {
    means <- tapply(d$value,d$context_group,mean)
-   stopifnot(isTRUE(all.equal(as.numeric(exp(b[2:3])),
-    as.numeric(means[2:3]/means[1]),tolerance=1e-7)))
+   observed <- if(linear) means[2:3]-means[1] else means[2:3]/means[1]
+   estimated <- if(linear) b[2:3] else exp(b[2:3])
+   stopifnot(isTRUE(all.equal(as.numeric(estimated),as.numeric(observed),tolerance=1e-7)))
   }
  }
  eigenvalues <- eigen(v,symmetric=TRUE,only.values=TRUE)$values
  valid <- all(is.finite(b)) && all(is.finite(v)) &&
   all(diag(v)>0) && min(eigenvalues)>=-1e-8*max(abs(eigenvalues))
- messages <- if(mixed)fit@optinfo$conv$lme4$messages else character()
- converged <- if(mixed)is.null(messages) && fit@optinfo$conv$opt==0 else fit$converged
+ messages <- character()
+ converged <- if(linear) fit$rank==ncol(x) else fit$converged
+ valid <- valid && fit$rank==ncol(x)
  valid <- valid && isTRUE(converged)
- singular <- if(mixed)isSingular(fit,tol=1e-4) else NA
+ singular <- NA
  warning_flag <- !valid || length(warnings)>0 || isTRUE(singular)
  key <- paste(outcome,stage,sep="__")
- vc <- if(mixed)as.data.frame(VarCorr(fit)) else NULL
- variance <- function(group) if(mixed)vc$vcov[vc$grp==group][1] else NA_real_
+ variance <- function(group) NA_real_
  diagnostics[[key]] <- data.frame(outcome=outcome,stage=stage,
   n_admissions=nrow(admissions),n_observations=nrow(d),n_pairs=nlevels(d$matched_pair),
   n_patients=nlevels(d$patient),converged=converged,
@@ -91,7 +92,7 @@ for (outcome in unique(d_all$outcome)) for (stage in names(model_adjustments)) {
   patient_variance=variance("patient"),pair_variance=variance("matched_pair"),
   residual_variance=variance("Residual"),covariance_min_eigenvalue=min(eigenvalues),
   warnings=paste(c(warnings,messages),collapse=" | "),
-  framework=if(mixed)"REML linear mixed model" else "PPML; two-way patient/pair HC1 SE")
+  framework=if(linear)"OLS; two-way patient/pair HC1 SE" else "PPML; two-way patient/pair HC1 SE")
  terms <- c("context_grouphistory_only",
   "context_groupcurrent_with_or_without_history")
  stopifnot(all(terms %in% names(b)))
@@ -103,19 +104,15 @@ for (outcome in unique(d_all$outcome)) for (stage in names(model_adjustments)) {
   beta <- sum(L*b)
   se <- sqrt(as.numeric(t(L)%*%v%*%L))
   df <- Inf
-  if(mixed) {
-   test <- contest1D(fit,L,ddf="Satterthwaite")
-   df <- test[["df"]]
-  }
-  cutoff <- if(mixed)qt(.975,df) else qnorm(.975)
+  cutoff <- qnorm(.975)
   p <- if(valid)2*pt(-abs(beta/se),df=df) else NA_real_
   lo <- beta-cutoff*se; hi <- beta+cutoff*se
   results[[paste(key,label)]] <- data.frame(outcome=outcome,stage=stage,
    contrast=label,beta=beta,se=se,df=df,
-   effect=if(mixed)beta else exp(beta),
-   ci_low=if(mixed)lo else exp(lo),ci_high=if(mixed)hi else exp(hi),
+   effect=if(linear)beta else exp(beta),
+   ci_low=if(linear)lo else exp(lo),ci_high=if(linear)hi else exp(hi),
    p_raw_exploratory=p,warning_flag=warning_flag,
-   effect_type=if(clinical)"event rate ratio" else if(mixed)"Flesch reading ease point difference" else
+   effect_type=if(clinical)"event rate ratio" else if(linear)"Flesch reading ease point difference" else
     if(outcome=="ed_los_hours")"mean ED stay ratio" else "mean LOS ratio")
  }
  coefficients[[key]] <- data.frame(outcome=outcome,stage=stage,
