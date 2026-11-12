@@ -145,3 +145,6 @@ python-code/04_clinical_route_analyses/analysis_output_lab_linkage_and_timing/
 
 # Local modelling reference
 /MODELLING_GUIDE.md
+
+# Local editor settings
+/.vscode/
