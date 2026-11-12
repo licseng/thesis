@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-# Aggregate MHC1-psychosis vs MHC0 PPML; raw exploratory p-values.
+# Aggregate MHC1-psychosis vs MHC0 PPML; BH across four outcomes per stage.
 # Invoked by 03_analyze_chief_complaint_subgroup_outcomes.py.
 file_arg <- grep("^--file=",commandArgs(FALSE),value=TRUE)
 here <- dirname(normalizePath(sub("^--file=","",file_arg)))
@@ -8,6 +8,44 @@ python <- dirname(here)
  "03_discharge_note_text_analysis/01_language_complexity/.r-library"),.libPaths()))
 suppressPackageStartupMessages(library(sandwich))
 output <- file.path(here,"analysis_output_whole_matched_clinical_activity")
+adjust_activity_p_values <- function(results) {
+ expected <- c("laboratory_measurements", "laboratory_specimens",
+               "microbiology_records", "provider_order_activity")
+ stopifnot(!anyDuplicated(results[,c("outcome","stage")]))
+ results$p_value <- results$p_raw_exploratory
+ results$FDR <- NA_real_
+ for(stage in unique(results$stage)) {
+  ix <- which(results$stage==stage)
+  stopifnot(length(ix)==4L,setequal(results$outcome[ix],expected))
+  p <- results$p_value[ix]
+  stopifnot(all(is.na(p) | (is.finite(p) & p>=0 & p<=1)))
+  # Keep unavailable comparisons in the planned family, without reporting them.
+  adjusted <- p.adjust(ifelse(is.na(p),1,p),method="BH")
+  adjusted[is.na(p)] <- NA_real_
+  results$FDR[ix] <- adjusted
+ }
+ results$analysis_family <- "whole_matched_clinical_activity_4_outcomes_per_stage"
+ results
+}
+save_activity_effects <- function(results) {
+ results <- adjust_activity_p_values(results)
+ write.csv(results,file.path(output,"group_contrasts.csv"),row.names=FALSE)
+ writeLines(c(
+  "Exploratory whole matched-cohort clinical-activity comparison.",
+  "BH correction across four cohort-effect tests separately within each model stage (M0, M2, M3, M4).",
+  "Outcomes: laboratory measurements, laboratory specimens, microbiology records, provider-order activity.",
+  "Families are separate from CC-specific comparisons. Adjustment-variable coefficients are not included.",
+  "p_value and the retained legacy p_raw_exploratory column contain identical unadjusted two-sided Wald p-values; FDR contains BH-adjusted p-values.",
+  "95% confidence intervals remain pointwise and unadjusted for multiplicity.",
+  "Unavailable tests remain in the planned four-test family as p=1; their adjusted values are not reported."
+ ),file.path(output,"multiplicity_methods.txt"))
+ invisible(results)
+}
+if("--adjust-p-values-only" %in% commandArgs(TRUE)) {
+ save_activity_effects(read.csv(file.path(output,"group_contrasts.csv")))
+ cat("Updated BH correction across four outcomes per stage; no models refitted.\n")
+ quit(save="no",status=0)
+}
 data <- read.csv(file.path(output,"model_inputs.csv"))
 data$outcome <- data$measure; data$value <- data$n_events
 data$period <- factor(data$interval,
@@ -81,7 +119,7 @@ for(outcome in unique(data$outcome)) for(stage in names(models)) {
  cal$outcome <- outcome; cal$stage <- stage; calibration[[key]] <- cal
  cat(outcome,stage,":",nrow(admissions),"admissions; warning flag",flag,"\n")
 }
-write.csv(do.call(rbind,effects),file.path(output,"group_contrasts.csv"),row.names=FALSE)
+save_activity_effects(do.call(rbind,effects))
 write.csv(do.call(rbind,diagnostics),file.path(output,"model_diagnostics.csv"),row.names=FALSE)
 write.csv(do.call(rbind,coefficients),file.path(output,"model_coefficients.csv"),row.names=FALSE)
 write.csv(do.call(rbind,calibration),file.path(output,"mean_calibration_by_group_period.csv"),row.names=FALSE)
