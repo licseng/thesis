@@ -91,7 +91,7 @@ python-code/03_discharge_note_text_analysis/02_keyword_matching/analysis_output_
 python-code/03_discharge_note_text_analysis/02_keyword_matching/analysis_output_SL_keyword_readmission_order/
 python-code/03_discharge_note_text_analysis/02_keyword_matching/analysis_output_SL_by_overshadowing/
 python-code/03_discharge_note_text_analysis/01_language_complexity/.r-library/
-outputs/language_complexity_results_20261002/
+python-code/03_discharge_note_text_analysis/01_language_complexity/language_complexity_results_20261002/
 
 python-code/06_classification/01_classification_diag_overshadowing/prefilter_output/
 python-code/06_classification/01_classification_diag_overshadowing/diagnostic_overshadowing_classifier_output*/
@@ -151,3 +151,6 @@ python-code/04_clinical_route_analyses/analysis_output_lab_linkage_and_timing/
 
 # Generated input truncation summary
 /python-code/09_model_training/analysis_output_input_truncation/token_truncation_summary.csv
+
+# Generated thesis PDFs
+/pdf/
