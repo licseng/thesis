@@ -119,5 +119,72 @@ def main():
     print(f'Complete: {complete}. Numeric outputs: {OUT}', flush=True)
 
 
+def test_density():
+    """OLS M0/M2 with patient/pair HC1 covariance; four-scope BH per stage."""
+    import subprocess
+    if not json.loads((OUT / 'status.json').read_text())['complete']:
+        raise ValueError('Extraction must finish before testing')
+    r = r'''
+args <- commandArgs(trailingOnly=TRUE)
+.libPaths(c(file.path(args[1],'.r-library'),.libPaths()))
+library(sandwich)
+out <- args[2]
+x <- read.csv(file.path(out,'note_section_density.csv'))
+cov <- read.csv(file.path(args[1],'analysis_output_language_complexity_inference',
+                         'race_ethnicity_sensitivity','model_covariates.csv'))
+keys <- c('cohort','subject_id','hadm_id')
+stopifnot(!anyDuplicated(cov[,keys]))
+x <- merge(x,cov,by=keys,all.x=TRUE,sort=FALSE)
+stopifnot(nrow(x)==12864*4,!anyNA(x$pair_id))
+models <- list(M0='mhc1', M2=c('mhc1','age_at_admission_per_10y',
+                     'elixhauser_score_per_5pt','log1p_prior_all_admissions'))
+results <- list(); descriptives <- list()
+for(scope in unique(x$section)) {
+ d <- x[x$section==scope,]
+ required <- c('density_pct','pair_id','subject_id',models$M2[-1])
+ valid <- complete.cases(d[,required])
+ keep <- tapply(valid,d$pair_id,all) & table(d$pair_id)==2
+ d <- d[d$pair_id %in% names(keep)[keep],]
+ stopifnot(all(table(d$pair_id)==2))
+ d$mhc1 <- as.integer(d$cohort=='MHC1_psychotic')
+ stopifnot(all(tapply(d$mhc1,d$pair_id,sum)==1))
+ for(cohort in unique(d$cohort)) {
+  z <- d[d$cohort==cohort,]
+  descriptives[[paste(scope,cohort)]] <- data.frame(section=scope,cohort,
+   n_admissions=nrow(z),n_patients=length(unique(z$subject_id)),
+   mean=mean(z$density_pct),sd=sd(z$density_pct),median=median(z$density_pct))
+ }
+ for(stage in names(models)) {
+  fit <- lm(reformulate(models[[stage]],response='density_pct'),data=d)
+  stopifnot(fit$rank==length(coef(fit)))
+  v <- vcovCL(fit,cluster=list(d$subject_id,d$pair_id),type='HC1',cadjust=TRUE,fix=FALSE)
+  eig <- eigen(v,symmetric=TRUE,only.values=TRUE)$values
+  stopifnot(min(eig)> -1e-8*max(1,max(abs(eig))),v['mhc1','mhc1']>0)
+  b <- coef(fit)['mhc1']; se <- sqrt(v['mhc1','mhc1'])
+  results[[paste(scope,stage)]] <- data.frame(section=scope,stage,
+   n_pairs=length(unique(d$pair_id)),difference_pp=b,se,
+   ci_low=b-qnorm(.975)*se,ci_high=b+qnorm(.975)*se,
+   p=2*pnorm(-abs(b/se)),covariance_psd=TRUE)
+ }
+}
+r <- do.call(rbind,results)
+for(stage in names(models)) { ix <- r$stage==stage; r$FDR[ix] <- p.adjust(r$p[ix],'BH',n=4) }
+write.csv(r,file.path(out,'density_cohort_effects.csv'),row.names=FALSE)
+write.csv(do.call(rbind,descriptives),file.path(out,'density_complete_pair_descriptives.csv'),row.names=FALSE)
+writeLines(c('OLS M0 cohort only; M2 additionally age/10, Elixhauser/5, log(1+prior all-MIMIC admissions).',
+ 'Patient and matched-pair two-way HC1 clustered covariance, finite cluster corrections, no covariance repair.',
+ 'Outcome-specific complete pairs; same sample for M0/M2. Normal Wald tests and pointwise 95% confidence intervals.',
+ 'BH separately across four text scopes within M0 and within M2. Exploratory analysis added after original readability results.',
+ 'Effect is MHC1 minus MHC0 in percentage points of alphabetic word coverage, not relative percent difference.'),
+ file.path(out,'density_inference_methods.txt'))
+print(r,row.names=FALSE)
+'''
+    subprocess.run(['/usr/local/bin/Rscript','-',str(HERE),str(OUT)],input=r,text=True,check=True)
+
+
 if __name__ == '__main__':
-    main()
+    import sys
+    if '--test-density' in sys.argv:
+        test_density()
+    else:
+        main()
