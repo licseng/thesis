@@ -338,5 +338,48 @@ def main() -> None:
     print(
         prose_section_summary.loc[:, section_display_columns].to_string(index=False)
     )
+def decompose_saved_readability_effects():
+    """Explain saved OLS effects using exact linear formula identities; no refits."""
+    source = SCRIPT_DIR / "analysis_output_language_complexity_inference" / "clustered_primary"
+    effects = pd.read_csv(source / "cohort_effects.csv")
+    rows = []
+    for (section, model), group in effects.groupby(["section_name", "model"]):
+        g = group.set_index("outcome")
+        names = ["mean_words_per_sentence", "mean_characters_per_alpha_word",
+                 "pct_complex_alpha_words", "automated_readability_index",
+                 "gunning_fog_index", "flesch_reading_ease"]
+        if not g.loc[names, "n_admissions"].eq(g.loc[names[0], "n_admissions"]).all():
+            raise ValueError("Component models have different sample sizes")
+        b = g.mhc1_coefficient
+        sentence = b["mean_words_per_sentence"]
+        components = {
+            "automated_readability_index": (.5 * sentence, 4.71 * b["mean_characters_per_alpha_word"], "characters per alphabetic word"),
+            "gunning_fog_index": (.4 * sentence, .4 * b["pct_complex_alpha_words"], "percentage polysyllabic alphabetic words"),
+            "flesch_reading_ease": (-1.015 * sentence, b["flesch_reading_ease"] + 1.015 * sentence, "syllables per alphabetic word (inferred by formula identity)"),
+        }
+        for outcome, (a, c, label) in components.items():
+            np.testing.assert_allclose(a+c, b[outcome], atol=1e-10, rtol=1e-8)
+            rows.append(dict(section_name=section, model=model, outcome=outcome,
+                sentence_length_contribution=a, word_structure_contribution=c,
+                word_structure_component=label, total_cohort_coefficient=b[outcome],
+                implied_syllables_per_word_difference=(-c/84.6 if outcome == "flesch_reading_ease" else np.nan),
+                FDR=g.loc[outcome, "FDR"]))
+    result = pd.DataFrame(rows)
+    result.to_csv(source / "readability_effect_decomposition.csv", index=False)
+    (source / "readability_effect_decomposition_methods.txt").write_text(
+        "Exact algebraic decomposition of saved OLS cohort coefficients, with identical model specifications and samples.\n"
+        "ARI = 4.71 characters/alpha-word + 0.5 words/sentence - 21.43.\n"
+        "Fog = 0.4 words/sentence + 0.4 percent polysyllabic alpha-words.\n"
+        "FRE = 206.835 - 1.015 words/sentence - 84.6 syllables/alpha-word.\n"
+        "FRE vocabulary contribution and implied syllable coefficient inferred algebraically, not independently fitted.\n"
+        "No additional significance tests; component contributions have no independently estimated confidence intervals.\n"
+        "This explains formula arithmetic, not causal mechanisms or accuracy of syllable estimation.\n")
+    print(result[result.model.str.startswith("M2_")].to_string(index=False))
+
+
 if __name__ == "__main__":
-    main()
+    import sys
+    if "--decompose-saved-effects" in sys.argv:
+        decompose_saved_readability_effects()
+    else:
+        main()
