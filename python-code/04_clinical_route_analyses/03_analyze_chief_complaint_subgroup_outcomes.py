@@ -2191,7 +2191,7 @@ def fit_whole_cohort_stay_mortality_sensitivity():
     for _, family in effects.groupby("stage"):
         adjusted = multipletests(family.p.fillna(1), method="fdr_bh")[1]
         effects.loc[family.index, "FDR"] = np.where(family.p.notna(), adjusted, np.nan)
-    effects["analysis_family"] = "whole_matched_4_tests_per_sensitivity_stage"
+    effects = adjust_duration_mortality_fdr(effects)
     effects.to_csv(output / "effects.csv", index=False)
     keys = ["stage", "pure_cc_group", "outcome"]
     diagnostics = pd.read_csv(output / "diagnostics.csv")
@@ -2221,7 +2221,7 @@ def fit_whole_cohort_stay_mortality_sensitivity():
                          if r.numeric_valid else "Unavailable: numerical diagnostic")
         lines.append(f"| {label} | {int(rows.loc['M2', 'n_pairs'])} | " + " | ".join(cells) + " |")
     lines.extend(["", "Duration ratios are arithmetic mean-duration ratios; mortality ratios are odds ratios.",
-                  "BH FDR uses four endpoints within each stage, retained for comparison with M0/M2.",
+                  "BH FDR separately for two duration and two mortality endpoints within each stage.",
                   "This is not thesis-wide multiplicity control; final family policy remains to be settled.",
                   "Raw p-values are retained in effects.csv and the comparison CSV.",
                   "English and White are reference categories. Missing language and unknown/declined/missing race",
@@ -2592,6 +2592,76 @@ def fit_stay_mortality_mixed_models(post_discharge_only: bool = False):
                    "numeric_valid","boundary_fit","sparse_mortality","predictive_check_flag"]].to_string(index=False))
 
 
+def adjust_duration_mortality_fdr(effects):
+    """BH separately by stage and duration/mortality; retain unavailable planned tests."""
+    import numpy as np
+    from statsmodels.stats.multitest import multipletests
+    effects = effects.copy()
+    effects["analysis_family"] = effects.outcome.map({
+        "hospital_los_days": "duration", "ed_los_hours": "duration",
+        "in_hospital_mortality": "mortality",
+        "post_discharge_death_within_1y": "mortality"})
+    if effects.analysis_family.isna().any():
+        raise ValueError("Unexpected stay/mortality endpoint")
+    for _, group in effects.groupby(["stage", "analysis_family"]):
+        adjusted = multipletests(group.p.fillna(1), method="fdr_bh")[1]
+        effects.loc[group.index, "FDR"] = np.where(group.p.notna(), adjusted, np.nan)
+    return effects
+
+
+def refresh_stay_mortality_fdr():
+    """Refresh reporting from saved fits, without refitting or changing model inputs."""
+    import numpy as np
+    whole = SCRIPT_DIR / "analysis_output_whole_matched_stay_mortality"
+    primary = PAIRED_WORKUP_OUTPUT_DIR / "primary_stay_mortality_results"
+    sensitivity = whole / "language_race_sensitivity"
+    note = ("BH FDR separately for duration and mortality within each model stage. "
+            "Whole cohort: two endpoints per family; CC analyses: ten tests per family "
+            "(two endpoints across five CCs). Revised after initial results inspection. "
+            "Raw p-values, estimates, confidence intervals and fitted models are unchanged.\n")
+    for directory in [primary, whole, sensitivity]:
+        effects = adjust_duration_mortality_fdr(pd.read_csv(directory / "effects.csv"))
+        effects.to_csv(directory / "effects.csv", index=False)
+        keys = ["stage", "pure_cc_group", "outcome"]
+        # Refresh every reporting CSV containing these cohort effects.
+        for filename in ["M0_M2_reporting.csv", "M3_M4_reporting.csv"]:
+            path = directory / filename
+            if path.exists():
+                old = pd.read_csv(path)
+                new = old.drop(columns=["FDR", "analysis_family"], errors="ignore").merge(
+                    effects[keys + ["FDR", "analysis_family"]], on=keys, validate="one_to_one")
+                new.to_csv(path, index=False)
+        report = pd.read_csv(directory / ("M3_M4_reporting.csv" if directory == sensitivity else "M0_M2_reporting.csv"))
+        lines = ["# Stay duration and mortality comparisons", "", note.strip(), "",
+                 "| Population | Outcome | Stage | Pairs | Ratio [95% CI] | FDR |",
+                 "|---|---|---|---:|---|---|"]
+        for r in report.itertuples():
+            value = f"{r.ratio:.3f} [{r.ci_low:.3f}, {r.ci_high:.3f}]" if r.numeric_valid else "Unavailable"
+            fdr = "<0.001" if r.FDR < .001 else f"{r.FDR:.3f}"
+            lines.append(f"| {r.pure_cc_group} | {r.outcome} | {r.stage} | {r.n_pairs} | {value} | {fdr} |")
+        (directory / "results_summary.md").write_text("\n".join(lines) + "\n")
+        (directory / "multiplicity_methods.txt").write_text(note)
+        methods = directory / "methods.txt"
+        if methods.exists():
+            lines = [line for line in methods.read_text().splitlines()
+                     if not any(x in line for x in ["BH FDR", "multiplicity control", "family policy", "four-endpoint FDR"])]
+            methods.write_text("\n".join(lines) + "\n" + note)
+    # The two CC fitting folders are subsets of the joint mortality/duration families.
+    cc = pd.read_csv(primary / "effects.csv")
+    for folder in ["stay_and_mortality_models", "post_discharge_1y_mortality_models"]:
+        directory = PAIRED_WORKUP_OUTPUT_DIR / folder
+        old = pd.read_csv(directory / "effects.csv")
+        new = old.drop(columns=["FDR", "analysis_family"], errors="ignore").merge(
+            cc[keys + ["FDR", "analysis_family"]], on=keys, validate="one_to_one")
+        np.testing.assert_allclose(old.p, new.p, equal_nan=True)
+        new.to_csv(directory / "effects.csv", index=False)
+        (directory / "multiplicity_methods.txt").write_text(note)
+    comparison = pd.concat([pd.read_csv(whole / "M0_M2_reporting.csv").query("stage == 'M2'"),
+                            pd.read_csv(sensitivity / "M3_M4_reporting.csv")], ignore_index=True)
+    comparison.to_csv(sensitivity / "M2_M3_M4_comparison.csv", index=False)
+    print("Updated duration/mortality FDR families from saved fits.")
+
+
 def fit_primary_stay_mortality_models(whole_matched: bool = False):
     """Primary clinical outcome inference: PPML/logistic with two-way clustering."""
     if whole_matched:
@@ -2615,7 +2685,8 @@ def fit_primary_stay_mortality_models(whole_matched: bool = False):
             frame["analysis_family"] = family
             frames.append(frame)
         pd.concat(frames, ignore_index=True).to_csv(output / name,index=False)
-    effects = pd.read_csv(output / "effects.csv")
+    effects = adjust_duration_mortality_fdr(pd.read_csv(output / "effects.csv"))
+    effects.to_csv(output / "effects.csv", index=False)
     diagnostics = pd.read_csv(output / "diagnostics.csv")
     keys = ["stage","pure_cc_group","outcome"]
     expected = 8 if whole_matched else 40
@@ -2646,9 +2717,9 @@ def fit_primary_stay_mortality_models(whole_matched: bool = False):
             caution=" (sparse deaths)" if rows.sparse_mortality.any() else ""
             lines.append(f"| {cc} | {label}{caution} | {int(rows.loc['M0','n_pairs'])} | {cells[0]} | {cells[1]} |")
     lines.extend(["", "Duration ratios concern arithmetic means; mortality ratios are odds ratios.",
-        ("BH FDR: four whole-cohort endpoints per stage, separate from all CC-specific tests."
-         if whole_matched else "BH FDR: 15 LOS/ED/in-hospital comparisons per stage; five post-discharge comparisons separately."),
-        "Families were specified before inspecting the new p-values.",
+        ("BH FDR: two duration and two mortality endpoints separately per stage, separate from CC tests."
+         if whole_matched else "BH FDR: ten duration and ten mortality comparisons separately per stage across five CCs."),
+        "Duration/mortality families were revised after initial results inspection.",
         "Fewer than 20 deaths is a descriptive caution, not a validated adequacy threshold.",
         "Convergence does not certify adequate inference when deaths are sparse or influential patients dominate.",
         "influence.csv checks three score-ranked patients and three pairs per fit; it is not exhaustive.",
@@ -2836,7 +2907,11 @@ if __name__ == "__main__":
     parser.add_argument("--fit-whole-cohort-stay-mortality", action="store_true", help="Fit M0/M2 for all four endpoints across the full matched cohort; save separate outputs")
     parser.add_argument("--fit-whole-cohort-stay-mortality-sensitivity", action="store_true", help="Fit M3 language and M4 language/race adjustments on the saved whole-cohort M0/M2 sample")
     parser.add_argument("--fit-whole-cohort-clinical-activity", action="store_true", help="Fit aggregate M0/M2/M3/M4 PPML workup models across all matched complaints")
+    parser.add_argument("--refresh-stay-mortality-fdr", action="store_true", help="Recompute separate duration/mortality FDR families from saved fits only")
     options = parser.parse_args()
+    if options.refresh_stay_mortality_fdr:
+        refresh_stay_mortality_fdr()
+        sys.exit(0)
     if options.fit_whole_cohort_clinical_activity:
         fit_whole_cohort_clinical_activity()
         sys.exit(0)
