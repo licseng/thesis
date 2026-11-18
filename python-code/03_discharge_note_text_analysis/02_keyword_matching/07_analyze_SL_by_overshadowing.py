@@ -10,6 +10,7 @@ versus negative comparison. Logistic SEs cluster by patient because only MHC1
 admissions enter: there is no second member of a matched pair in this analysis.
 """
 from pathlib import Path
+import argparse
 import hashlib
 import json
 import importlib.util
@@ -237,5 +238,88 @@ def main():
     analyze_person_labelling(joined)
 
 
+def run_covariate_sensitivity():
+    """Fit exploratory covariate models from the saved numeric bridge inputs."""
+    from statsmodels.stats.multitest import multipletests
+
+    out = OUTPUT / "covariate_sensitivity"
+    out.mkdir(parents=True, exist_ok=True)
+    covariate_path = PYTHON / (
+        "03_discharge_note_text_analysis/01_language_complexity/"
+        "analysis_output_language_complexity_inference/race_ethnicity_sensitivity/model_covariates.csv"
+    )
+    los_path = PYTHON / "04_clinical_route_analyses/analysis_output_whole_matched_stay_mortality/model_inputs.csv"
+    keys = ["pair_id", "cohort", "subject_id", "hadm_id"]
+    age_elixhauser = ["age_at_admission_per_10y", "elixhauser_score_per_5pt"]
+    prior = "log1p_prior_all_admissions"
+    covariates = pd.read_csv(covariate_path, usecols=keys + age_elixhauser + [
+        prior, "language_group", "race_ethnicity_group"])
+    los = pd.read_csv(los_path, usecols=keys + ["outcome", "value"])
+    los = los.loc[los.outcome.eq("hospital_los_days"), keys + ["value"]]
+    assert np.isfinite(los.value).all() and los.value.gt(0).all()
+    los = los.assign(log1p_current_los_days=np.log1p(los.value)).drop(columns="value")
+    data = pd.read_csv(out.parent / "admission_level_SL_and_overshadowing.csv", usecols=keys + [
+        "classification_group", "SL_keyword_positive", WORDS])
+    data = data.loc[data.classification_group.isin(["positive", "negative"])].copy()
+    assert data.cohort.eq("MHC1_psychotic").all() and data[WORDS].gt(0).all()
+    assert data.SL_keyword_positive.isin([0, 1]).all()
+    n_eligible = len(data)
+    data = data.merge(covariates, on=keys, how="left", validate="one_to_one")
+    assert data[age_elixhauser + [prior, "language_group", "race_ethnicity_group"]].notna().all().all()
+    data = data.merge(los, on=keys, how="left", validate="one_to_one")
+    data = data.dropna(subset=["log1p_current_los_days"]).copy()
+    data["overshadowing_positive"] = data.classification_group.eq("positive").astype(int)
+    data["log_note_words"] = np.log(data[WORDS])
+    language = pd.Categorical(data.language_group, categories=["English", "Non-English", "Missing"])
+    race = pd.Categorical(data.race_ethnicity_group, categories=[
+        "White", "Black", "Asian", "Hispanic/Latino",
+        "Other recorded categories", "Unknown/declined/missing"])
+    assert not pd.isna(language).any() and not pd.isna(race).any()
+    language_cols = pd.get_dummies(language, prefix="language", drop_first=True, dtype=float).set_axis(data.index)
+    race_cols = pd.get_dummies(race, prefix="race", drop_first=True, dtype=float).set_axis(data.index)
+    data = pd.concat([data, language_cols, race_cols], axis=1)
+    exposure = "overshadowing_positive"
+    m0 = [exposure]
+    length = m0 + ["log_note_words"]
+    m1 = length + age_elixhauser
+    m2 = m1 + [prior]
+    m3 = m2 + list(language_cols)
+    m4 = m3 + list(race_cols)
+    models = {
+        "M0": m0, "note_length_only": length, "M1_plus_age_elixhauser": m1,
+        "M2_plus_prior_admissions": m2, "M2_plus_current_LOS": m2 + ["log1p_current_los_days"],
+        "M3_plus_language": m3, "M4_plus_race_ethnicity": m4,
+        "M4_plus_current_LOS": m4 + ["log1p_current_los_days"],
+    }
+    rows = []
+    for name, cols in models.items():
+        design = sm.add_constant(data[cols], has_constant="add")
+        assert np.linalg.matrix_rank(design) == design.shape[1]
+        fit = sm.GLM(data.SL_keyword_positive, design, family=sm.families.Binomial()).fit(
+            cov_type="cluster", cov_kwds={"groups": data.subject_id, "use_correction": True})
+        assert fit.converged and np.isfinite(fit.bse).all() and (fit.bse > 0).all()
+        low, high = np.exp(fit.conf_int().loc[exposure])
+        rows.append(dict(model=name, terms=" + ".join(cols), odds_ratio=np.exp(fit.params[exposure]),
+                         ci_low=low, ci_high=high, p_value=fit.pvalues[exposure],
+                         n_admissions=len(data), n_patients=data.subject_id.nunique()))
+    results = pd.DataFrame(rows)
+    results["FDR_across_specifications"] = multipletests(results.p_value, method="fdr_bh")[1]
+    results.to_csv(out / "SL_by_overshadowing_sensitivity.csv", index=False)
+    (out / "methods.txt").write_text(
+        "Exploratory within-MHC1 logistic regression of any SL keyword match on positive versus negative overshadowing label.\n"
+        "Patient-clustered standard errors. All specifications use the same accepted-label admissions with available covariates.\n"
+        "Length is log(note word count excluding chief complaint); LOS is log(1 + current hospital stay in days).\n"
+        "English and White are reference categories. BH is reported across the eight exposure tests as a supplemental check.\n"
+    )
+    print(f"Common sample: {len(data)}/{n_eligible} admissions, {data.overshadowing_positive.sum()} positive labels.")
+    print(results.drop(columns="terms").to_string(index=False))
+
+
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--covariate-sensitivity", action="store_true",
+                        help="Fit the additional bridge models from saved numeric inputs")
+    if parser.parse_args().covariate_sensitivity:
+        run_covariate_sensitivity()
+    else:
+        main()
