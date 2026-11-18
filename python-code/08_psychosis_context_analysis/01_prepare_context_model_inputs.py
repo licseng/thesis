@@ -249,37 +249,41 @@ def main():
         prepare_clinical_activity(base, common)
         return
     section_path = LANG / "analysis_output_language_complexity/language_complexity_prose_section_metrics.csv"
+    readability_metrics = ["flesch_reading_ease", "automated_readability_index"]
     sections = pd.read_csv(section_path, usecols=[
-        "cohort", "subject_id", "hadm_id", "section_name", "flesch_reading_ease"])
+        *KEY[1:], "section_name", *readability_metrics])
     instructions = sections[sections.section_name == "discharge_instructions"].copy()
     assert not instructions.hadm_id.duplicated().any()
     readability = base.merge(instructions.drop(columns="section_name"),
         on=KEY[1:], how="left", validate="one_to_one")
-    readability["outcome"] = "discharge_instructions_flesch_reading_ease"
-    readability["value"] = readability.flesch_reading_ease
     note_path = LANG / "analysis_output_language_complexity/language_complexity_note_level_metrics.csv"
-    notes = pd.read_csv(note_path, usecols=KEY[1:] + ["flesch_reading_ease"])
+    notes = pd.read_csv(note_path, usecols=KEY[1:] + readability_metrics)
     assert not notes.hadm_id.duplicated().any()
     assert set(notes.hadm_id).issubset(set(base.hadm_id))
     whole_note = base.merge(notes, on=KEY[1:], how="left", validate="one_to_one")
-    whole_note["outcome"] = "whole_note_flesch_reading_ease"
-    whole_note["value"] = whole_note.flesch_reading_ease
+    outcomes = [
+        data.assign(outcome=f"{scope}_{metric}", value=data[metric])
+        for scope, data in [("discharge_instructions", readability), ("whole_note", whole_note)]
+        for metric in readability_metrics
+    ]
     stay_path = PYTHON / "04_clinical_route_analyses/analysis_output_whole_matched_stay_mortality/model_inputs.csv"
     stay = pd.read_csv(stay_path)
-    durations = []
-    for outcome in ["hospital_los_days", "ed_los_hours"]:
+    mortality = ["in_hospital_mortality", "post_discharge_death_within_1y"]
+    for outcome in ["hospital_los_days", "ed_los_hours", *mortality]:
         endpoint = stay[stay.outcome == outcome].copy()
         if endpoint.empty:
-            raise ValueError(f"Missing duration outcome: {outcome}")
+            raise ValueError(f"Missing hospital outcome: {outcome}")
         assert not endpoint.hadm_id.duplicated().any()
         assert set(endpoint.hadm_id).issubset(set(base.hadm_id))
-        duration = base.merge(endpoint[KEY + COV + ["value"]], on=KEY, how="left",
-                              validate="one_to_one", suffixes=("", "_stay"))
+        joined = base.merge(endpoint[KEY + COV + ["value"]], on=KEY, how="left",
+                            validate="one_to_one", suffixes=("", "_stay"))
+        if joined.value.notna().sum() != len(endpoint):
+            raise ValueError(f"Hospital endpoint rows do not match the context cohort: {outcome}")
         for col in COV:
-            valid = duration.value.notna()
-            assert np.allclose(duration.loc[valid, col], duration.loc[valid, col + "_stay"])
-        duration["outcome"] = outcome
-        durations.append(duration)
+            valid = joined.value.notna()
+            assert np.allclose(joined.loc[valid, col], joined.loc[valid, col + "_stay"])
+        joined["outcome"] = outcome
+        outcomes.append(joined)
     OUTPUT.mkdir(exist_ok=True)
     base.groupby("context_group").agg(n_admissions=("hadm_id", "size"),
         n_subjects=("subject_id", "nunique")).to_csv(OUTPUT / "group_counts.csv")
@@ -287,10 +291,13 @@ def main():
     pd.DataFrame([{"n_MHC1_subjects_in_both_subgroups": int((membership == 2).sum())}]).to_csv(
         OUTPUT / "subject_overlap.csv", index=False)
     retained, coverage, descriptions = [], [], []
-    for data in [readability, whole_note] + durations:
+    for data in outcomes:
+        outcome = data.outcome.iloc[0]
         eligible = np.isfinite(data.value)
-        if data.outcome.iloc[0] in ["hospital_los_days", "ed_los_hours"]:
+        if outcome in ["hospital_los_days", "ed_los_hours"]:
             eligible &= data.value >= 0
+        if outcome in mortality and not data.loc[eligible, "value"].isin([0, 1]).all():
+            raise ValueError(f"Expected binary mortality outcomes: {outcome}")
         complete = data.loc[eligible].groupby("pair_id").size()
         keep = complete.index[complete == 2]
         data = data[data.pair_id.isin(keep)].copy()
@@ -304,7 +311,10 @@ def main():
                 "n_admissions": len(d), "n_subjects": d.subject_id.nunique(),
                 "mean": d.value.mean(), "sd": d.value.std(),
                 "median": d.value.median(), "q1": d.value.quantile(.25),
-                "q3": d.value.quantile(.75)})
+                "q3": d.value.quantile(.75),
+                "n_positive_admissions": int(d.value.sum()) if outcome in mortality else None,
+                "n_positive_subjects": d.loc[d.value.eq(1), "subject_id"].nunique()
+                if outcome in mortality else None})
     pd.concat(retained).to_csv(OUTPUT / "model_inputs.csv", index=False)
     pd.DataFrame(coverage).to_csv(OUTPUT / "coverage.csv", index=False)
     pd.DataFrame(descriptions).to_csv(OUTPUT / "descriptives.csv", index=False)

@@ -1,16 +1,55 @@
 #!/usr/bin/env Rscript
 # Exploratory three-group comparisons; M0, M1 and M2 use identical endpoint samples.
-# Readability uses OLS; clinical events and durations use log-link PPML.
-# No multiplicity adjustment: raw p-values are exploratory, not confirmatory.
+# Readability uses OLS, mortality uses logistic regression, and events/durations use PPML.
+# Exploratory cohort contrasts use BH adjustment within outcome family and stage.
 file_arg <- grep("^--file=", commandArgs(FALSE), value=TRUE)
 here <- dirname(normalizePath(sub("^--file=", "", file_arg)))
 python <- dirname(here)
 .libPaths(c(file.path(python,
  "03_discharge_note_text_analysis/01_language_complexity/.r-library"), .libPaths()))
-suppressPackageStartupMessages({library(sandwich)})
 output <- file.path(here, "analysis_output")
 clinical <- "--clinical-events" %in% commandArgs(TRUE)
 if(clinical) output <- file.path(output,"clinical_activity")
+
+outcomes <- list(
+  readability=c("discharge_instructions_flesch_reading_ease", "whole_note_flesch_reading_ease",
+                "discharge_instructions_automated_readability_index", "whole_note_automated_readability_index"),
+  duration=c("hospital_los_days", "ed_los_hours"),
+  mortality=c("in_hospital_mortality", "post_discharge_death_within_1y"),
+  clinical_activity=c("laboratory_measurements", "laboratory_specimens",
+                      "microbiology_records", "provider_order_activity"))
+families <- if(clinical) "clinical_activity" else c("readability", "duration", "mortality")
+
+save_context_contrasts <- function(results) {
+ contrasts <- c("history_only_vs_MHC0", "current_vs_MHC0", "current_vs_history_only")
+ stages <- c("M0", "M1", "M2")
+ stopifnot(setequal(results$outcome, unlist(outcomes[families], use.names=FALSE)),
+           setequal(results$stage, stages), setequal(results$contrast, contrasts),
+           !anyDuplicated(results[,c("outcome", "stage", "contrast")]))
+ results$p_value <- results$p_raw_exploratory
+ results$FDR <- NA_real_
+ results$analysis_family <- NA_character_
+ for(family in families) for(stage in stages) {
+  ix <- results$outcome %in% outcomes[[family]] & results$stage==stage
+  n_tests <- length(outcomes[[family]])*length(contrasts)
+  stopifnot(sum(ix)==n_tests)
+  results$FDR[ix] <- p.adjust(results$p_value[ix], method="BH", n=n_tests)
+  results$analysis_family[ix] <- family
+ }
+ write.csv(results,file.path(output,"group_contrasts.csv"),row.names=FALSE)
+ writeLines(c("Exploratory cohort contrasts: BH adjustment separately within each model stage (M0, M1, M2) and outcome family.",
+   "Readability: four outcomes x three contrasts. Duration and mortality: two outcomes x three contrasts each.",
+   "Clinical activity: four outcomes x three contrasts.",
+   "Unavailable p-values count toward the planned family size and remain missing.",
+   "p_value and p_raw_exploratory are the same raw p-value. FDR is the BH-adjusted p-value. Confidence intervals are pointwise."),
+   file.path(output,"multiplicity_methods.txt"))
+}
+
+if("--adjust-p-values-only" %in% commandArgs(TRUE)) {
+ save_context_contrasts(read.csv(file.path(output,"group_contrasts.csv")))
+ quit(save="no")
+}
+suppressPackageStartupMessages({library(sandwich)})
 d_all <- read.csv(file.path(output, "model_inputs.csv"))
 if(clinical) {
  d_all$outcome <- d_all$measure
@@ -37,16 +76,15 @@ for (outcome in unique(d_all$outcome)) for (stage in names(model_adjustments)) {
   all(tapply(admissions$context_group=="MHC0",admissions$matched_pair,sum)==1))
  fixed <- c("context_group", model_adjustments[[stage]],
   if(clinical)c("period","offset(log(exposure_days))"))
- stopifnot(outcome %in% c("laboratory_measurements","laboratory_specimens",
-  "microbiology_records","provider_order_activity","discharge_instructions_flesch_reading_ease",
-  "whole_note_flesch_reading_ease", "hospital_los_days", "ed_los_hours"))
- linear <- outcome %in% c("discharge_instructions_flesch_reading_ease",
-  "whole_note_flesch_reading_ease")
+ stopifnot(outcome %in% unlist(outcomes[families], use.names=FALSE))
+ linear <- outcome %in% outcomes$readability
+ mortality <- outcome %in% outcomes$mortality
+ if(mortality) stopifnot(all(d$value %in% c(0,1)))
  form <- reformulate(fixed, response="value")
  warnings <- character()
  fit <- withCallingHandlers(
   if(linear) lm(form, data=d)
-  else glm(form, data=d, family=quasipoisson(link="log"),
+  else glm(form, data=d, family=if(mortality) binomial() else quasipoisson(link="log"),
    control=glm.control(maxit=100,epsilon=1e-10)),
   warning=function(w){warnings <<- c(warnings,conditionMessage(w));invokeRestart("muffleWarning")})
  b <- coef(fit)
@@ -69,6 +107,7 @@ for (outcome in unique(d_all$outcome)) for (stage in names(model_adjustments)) {
   stopifnot(isTRUE(all.equal(unname(v),unname(manual),tolerance=1e-7)))
   if(stage=="M0" && !clinical) {
    means <- tapply(d$value,d$context_group,mean)
+   if(mortality) means <- means/(1-means)
    observed <- if(linear) means[2:3]-means[1] else means[2:3]/means[1]
    estimated <- if(linear) b[2:3] else exp(b[2:3])
    stopifnot(isTRUE(all.equal(as.numeric(estimated),as.numeric(observed),tolerance=1e-7)))
@@ -92,7 +131,9 @@ for (outcome in unique(d_all$outcome)) for (stage in names(model_adjustments)) {
   patient_variance=variance("patient"),pair_variance=variance("matched_pair"),
   residual_variance=variance("Residual"),covariance_min_eigenvalue=min(eigenvalues),
   warnings=paste(c(warnings,messages),collapse=" | "),
-  framework=if(linear)"OLS; two-way patient/pair HC1 SE" else "PPML; two-way patient/pair HC1 SE")
+  n_positive_admissions=if(mortality) sum(d$value) else NA_integer_,
+  framework=paste(if(linear) "OLS" else if(mortality) "Logistic regression" else "PPML",
+                  "two-way patient/pair HC1 SE", sep="; "))
  terms <- c("context_grouphistory_only",
   "context_groupcurrent_with_or_without_history")
  stopifnot(all(terms %in% names(b)))
@@ -112,7 +153,9 @@ for (outcome in unique(d_all$outcome)) for (stage in names(model_adjustments)) {
    effect=if(linear)beta else exp(beta),
    ci_low=if(linear)lo else exp(lo),ci_high=if(linear)hi else exp(hi),
    p_raw_exploratory=p,warning_flag=warning_flag,
-   effect_type=if(clinical)"event rate ratio" else if(linear)"Flesch reading ease point difference" else
+   effect_type=if(clinical)"event rate ratio" else if(mortality)"mortality odds ratio" else
+    if(linear && grepl("automated_readability_index$",outcome))"Automated Readability Index point difference" else
+    if(linear)"Flesch reading ease point difference" else
     if(outcome=="ed_los_hours")"mean ED stay ratio" else "mean LOS ratio")
  }
  coefficients[[key]] <- data.frame(outcome=outcome,stage=stage,
@@ -127,7 +170,7 @@ for (outcome in unique(d_all$outcome)) for (stage in names(model_adjustments)) {
  }
  cat(outcome,stage,":",nrow(admissions),"admissions; warning flag",warning_flag,"\n")
 }
-write.csv(do.call(rbind,results),file.path(output,"group_contrasts.csv"),row.names=FALSE)
+save_context_contrasts(do.call(rbind,results))
 write.csv(do.call(rbind,diagnostics),file.path(output,"model_diagnostics.csv"),row.names=FALSE)
 write.csv(do.call(rbind,coefficients),file.path(output,"model_coefficients.csv"),row.names=FALSE)
 if(clinical)write.csv(do.call(rbind,calibration),
