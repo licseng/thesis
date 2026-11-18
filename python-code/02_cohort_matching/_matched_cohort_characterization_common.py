@@ -1410,11 +1410,11 @@ def build_psychosis_context_summary(context: pd.DataFrame) -> pd.DataFrame:
     return summary.sort_values("n_admissions", ascending=False)
 
 
-def build_matched_MHC1_comorbidity_outputs(
+def matched_MHC1_admission_comorbidity_categories(
     context: pd.DataFrame,
     diagnosis_history: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Build aggregate nonpsychotic psychiatric-comorbidity summaries."""
+) -> pd.DataFrame:
+    """Return distinct nonpsychotic categories per admission and their timing."""
     context_required = {"subject_id", "hadm_id", "admittime"}
     history_required = {
         "subject_id",
@@ -1465,11 +1465,7 @@ def build_matched_MHC1_comorbidity_outputs(
         | joined["has_prior_comorbidity"]
     ].copy()
 
-    if joined.empty:
-        empty = pd.DataFrame()
-        return empty, empty, empty
-
-    admission_categories = (
+    return (
         joined.groupby(
             ["subject_id", "target_hadm_id", "psych_category"],
             as_index=False,
@@ -1489,8 +1485,18 @@ def build_matched_MHC1_comorbidity_outputs(
         )
     )
 
+def build_matched_MHC1_comorbidity_outputs(
+    context: pd.DataFrame,
+    diagnosis_history: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Build aggregate nonpsychotic psychiatric-comorbidity summaries."""
+    admission_categories = matched_MHC1_admission_comorbidity_categories(context, diagnosis_history)
+    if admission_categories.empty:
+        empty = pd.DataFrame()
+        return empty, empty, empty
+    targets = context[["subject_id", "hadm_id"]].drop_duplicates()
     n_subjects = targets["subject_id"].nunique()
-    n_admissions = targets["target_hadm_id"].nunique()
+    n_admissions = targets["hadm_id"].nunique()
     category_summary = (
         admission_categories.groupby("comorbidity_category", as_index=False)
         .agg(
@@ -1538,10 +1544,7 @@ def build_matched_MHC1_comorbidity_outputs(
         .rename("n_comorbidity_categories")
         .reset_index()
     )
-    all_targets = targets.rename(columns={"target_hadm_id": "hadm_id"})[
-        ["subject_id", "hadm_id"]
-    ]
-    category_counts = all_targets.merge(
+    category_counts = targets.merge(
         category_counts,
         on=["subject_id", "hadm_id"],
         how="left",

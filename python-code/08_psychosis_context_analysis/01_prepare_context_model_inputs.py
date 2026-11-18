@@ -22,6 +22,35 @@ COV = ["age_at_admission_per_10y", "elixhauser_score_per_5pt",
 LANG = PYTHON / "03_discharge_note_text_analysis/01_language_complexity"
 
 
+def summarize_context_balance(base, context, common):
+    """Describe admission-level balance between the two psychosis contexts."""
+    groups = ["history_only", "current_with_or_without_history"]
+    cases = base.loc[base.context_group.isin(groups)].copy()
+    categories = common.matched_MHC1_admission_comorbidity_categories(
+        context, common.load_required_table("subject_diagnosis_history"))
+    counts = categories.groupby(["subject_id", "hadm_id"]).size().rename("psychiatric_categories")
+    cases = cases.merge(counts, on=["subject_id", "hadm_id"], how="left", validate="one_to_one")
+    cases["psychiatric_categories"] = cases.psychiatric_categories.fillna(0).astype(int)
+    rows = []
+    for measure in ["age_at_admission", "elixhauser_score", "psychiatric_categories"]:
+        values = [cases.loc[cases.context_group.eq(group), measure] for group in groups]
+        history, current = values
+        pooled_sd = np.sqrt((history.var() + current.var()) / 2)
+        smd = (current.mean() - history.mean()) / pooled_sd if pooled_sd > 0 else np.nan
+        for group, x in zip(groups, values):
+            rows.append(dict(measure=measure, context_group=group, n_admissions=int(x.notna().sum()),
+                n_patients=cases.loc[x.dropna().index, "subject_id"].nunique(),
+                mean=x.mean(), sd=x.std(), median=x.median(), q1=x.quantile(.25), q3=x.quantile(.75),
+                smd_current_minus_history=smd))
+    out = pd.DataFrame(rows)
+    OUTPUT.mkdir(exist_ok=True)
+    out.to_csv(OUTPUT / "context_balance.csv", index=False)
+    counts = pd.crosstab(cases.psychiatric_categories, cases.context_group)
+    counts.to_csv(OUTPUT / "context_comorbidity_count_distribution.csv")
+    print(out.to_string(index=False))
+    print(counts.to_string())
+
+
 def summarize_overshadowing(base):
     """Compare detection yields and accepted-label positivity within MHC1 contexts."""
     import statsmodels.api as sm
@@ -254,6 +283,8 @@ def main():
     assert set(base[base.cohort == "MHC0"].subject_id).isdisjoint(
         base[base.cohort == "MHC1_psychotic"].subject_id)
     context = common.load_required_table("psychosis_context")
+    if "--balance" in sys.argv:
+        comorbidity_context = context[KEY + ["admittime"]].copy()
     flags = ["has_prior_psychosis", "has_current_secondary_psychosis"]
     context = context[KEY + flags]
     assert not context.hadm_id.duplicated().any()
@@ -273,10 +304,14 @@ def main():
         summarize_overshadowing(base)
         return
     cov_path = LANG / "analysis_output_language_complexity_inference/language_complexity_model_covariates.csv"
-    cov = pd.read_csv(cov_path, usecols=KEY + COV)
+    metrics = ["age_at_admission", "elixhauser_score"] if "--balance" in sys.argv else []
+    cov = pd.read_csv(cov_path, usecols=KEY + COV + metrics)
     assert set(cov.hadm_id) == set(base.hadm_id)
     base = base.merge(cov, on=KEY, validate="one_to_one")
     assert np.isfinite(base[COV].to_numpy()).all()
+    if "--balance" in sys.argv:
+        summarize_context_balance(base, comorbidity_context, common)
+        return
     if "--clinical-events" in sys.argv:
         prepare_clinical_activity(base, common)
         return
