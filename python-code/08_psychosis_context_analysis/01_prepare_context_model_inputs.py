@@ -23,7 +23,9 @@ LANG = PYTHON / "03_discharge_note_text_analysis/01_language_complexity"
 
 
 def summarize_overshadowing(base):
-    """Descriptive ratios within MHC1 contexts; unscreened admissions are not negatives."""
+    """Compare detection yields and accepted-label positivity within MHC1 contexts."""
+    import statsmodels.api as sm
+
     source_path = PYTHON / ("06_classification/01_classification_diag_overshadowing/"
         "output_prompt_B_semantic_verification_gemma/semantic_judgement_summary/"
         "combined_labels_with_verification_status.csv")
@@ -68,15 +70,45 @@ def summarize_overshadowing(base):
     out.mkdir(parents=True, exist_ok=True)
     summary.to_csv(out / "context_overshadowing_summary.csv", index=False)
     joined.to_csv(out / "context_overshadowing_admissions.csv", index=False)
+    comparisons = []
+    for sample, data in [
+        ("all_matched_detection_yield", joined),
+        ("accepted_positive_or_negative", joined.loc[
+            joined.semantic_accepted_label.isin(["positive", "negative"])]),
+    ]:
+        positive = data.semantic_accepted_label.eq("positive").astype(int)
+        current = data.context_group.eq("current_with_or_without_history").astype(int)
+        if pd.crosstab(current, positive).shape != (2, 2) or (pd.crosstab(current, positive) == 0).any().any():
+            raise ValueError(f"Both psychosis groups need positive and nonpositive observations: {sample}")
+        fit = sm.GLM(positive, sm.add_constant(current.rename("current")),
+                     family=sm.families.Binomial()).fit(
+            cov_type="cluster", cov_kwds={"groups": data.subject_id})
+        if not fit.converged or not np.isfinite(fit.bse["current"]) or fit.bse["current"] <= 0:
+            raise ValueError(f"Invalid patient-clustered logistic fit: {sample}")
+        low, high = np.exp(fit.conf_int().loc["current"])
+        history_count = int((current == 0).sum())
+        current_count = int(current.sum())
+        history_positive = int(positive[current == 0].sum())
+        current_positive = int(positive[current == 1].sum())
+        comparisons.append(dict(sample=sample, n_patients=data.subject_id.nunique(),
+            history_n=history_count, history_positive=history_positive,
+            current_n=current_count, current_positive=current_positive,
+            difference_pp=100*(current_positive/current_count-history_positive/history_count),
+            odds_ratio=np.exp(fit.params["current"]), ci_low=low, ci_high=high,
+            p_value=fit.pvalues["current"]))
+    results = pd.DataFrame(comparisons)
+    results.to_csv(out / "context_overshadowing_group_comparison.csv", index=False)
     manifest = {"classification_source": str(source_path.relative_to(PYTHON)),
         "classification_sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
         "context_membership_sha256": hashlib.sha256(cases.sort_values(KEY).to_csv(index=False).encode()).hexdigest(),
         "label_column": "semantic_accepted_label", "semantic_verifier": "google/gemma-4-31B-it-qat-w4a16-ct",
         "denominator": "Whole-cohort percentage uses all matched MHC1-psychosis admissions in each context group; classified-subset percentages are retained separately",
         "not_selected": "Admissions not selected by psychiatric keyword prefilter have no classification and are not counted as negative",
-        "scope": "Descriptive admission-level comparison; repeated patients and subgroup overlap are not inferentially adjusted"}
+        "scope": "Admission-level logistic regression, current versus history-only, with patient-clustered standard errors and no covariate adjustment.",
+        "inference": "Whole-cohort detection yield compares receiving an accepted positive classification versus all other workflow outcomes. Sensitivity analysis compares positives versus negatives among accepted binary labels. Both p-values are raw; the sensitivity analysis repeats the same contrast on a restricted sample."}
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2))
     print(summary.to_string(index=False))
+    print(results.to_string(index=False))
     print(f"Saved context-specific overshadowing ratios to {out}")
 
 
