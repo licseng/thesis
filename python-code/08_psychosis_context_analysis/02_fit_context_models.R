@@ -10,6 +10,10 @@ python <- dirname(here)
 output <- file.path(here, "analysis_output")
 clinical <- "--clinical-events" %in% commandArgs(TRUE)
 if(clinical) output <- file.path(output,"clinical_activity")
+los_sensitivity <- "--mortality-los-sensitivity" %in% commandArgs(TRUE)
+stopifnot(!(clinical && los_sensitivity))
+input_dir <- output
+if(los_sensitivity) output <- file.path(output,"mortality_los_sensitivity")
 
 outcomes <- list(
   readability=c("discharge_instructions_flesch_reading_ease", "whole_note_flesch_reading_ease",
@@ -18,11 +22,11 @@ outcomes <- list(
   mortality=c("in_hospital_mortality", "post_discharge_death_within_1y"),
   clinical_activity=c("laboratory_measurements", "laboratory_specimens",
                       "microbiology_records", "provider_order_activity"))
-families <- if(clinical) "clinical_activity" else c("readability", "duration", "mortality")
+families <- if(clinical) "clinical_activity" else if(los_sensitivity) "mortality" else c("readability", "duration", "mortality")
 
 save_context_contrasts <- function(results) {
  contrasts <- c("history_only_vs_MHC0", "current_vs_MHC0", "current_vs_history_only")
- stages <- c("M0", "M1", "M2")
+ stages <- if(los_sensitivity) c("M2", "M2_plus_LOS") else c("M0", "M1", "M2")
  stopifnot(setequal(results$outcome, unlist(outcomes[families], use.names=FALSE)),
            setequal(results$stage, stages), setequal(results$contrast, contrasts),
            !anyDuplicated(results[,c("outcome", "stage", "contrast")]))
@@ -37,7 +41,7 @@ save_context_contrasts <- function(results) {
   results$analysis_family[ix] <- family
  }
  write.csv(results,file.path(output,"group_contrasts.csv"),row.names=FALSE)
- writeLines(c("Exploratory cohort contrasts: BH adjustment separately within each model stage (M0, M1, M2) and outcome family.",
+ writeLines(c("Exploratory cohort contrasts: BH adjustment separately within each model stage and outcome family.",
    "Readability: four outcomes x three contrasts. Duration and mortality: two outcomes x three contrasts each.",
    "Clinical activity: four outcomes x three contrasts.",
    "Unavailable p-values count toward the planned family size and remain missing.",
@@ -50,7 +54,21 @@ if("--adjust-p-values-only" %in% commandArgs(TRUE)) {
  quit(save="no")
 }
 suppressPackageStartupMessages({library(sandwich)})
-d_all <- read.csv(file.path(output, "model_inputs.csv"))
+d_all <- read.csv(file.path(input_dir, "model_inputs.csv"))
+if(los_sensitivity) {
+ keys <- c("pair_id","cohort","subject_id","hadm_id","context_group")
+ stay <- d_all[d_all$outcome=="hospital_los_days",c(keys,"value")]
+ stopifnot(!anyDuplicated(stay[keys]),all(is.finite(stay$value)),all(stay$value>0))
+ stay$log1p_current_los_days <- log1p(stay$value)
+ mortality_inputs <- d_all[d_all$outcome %in% outcomes$mortality,]
+ d_all <- merge(mortality_inputs,stay[c(keys,"log1p_current_los_days")],by=keys,all.x=TRUE)
+ stopifnot(nrow(d_all)==nrow(mortality_inputs))
+ d_all <- do.call(rbind,lapply(split(d_all,d_all$outcome),function(d) {
+  keep <- tapply(is.finite(d$log1p_current_los_days),d$pair_id,sum)
+  d[d$pair_id %in% names(keep)[keep==2],]
+ }))
+ dir.create(output,recursive=TRUE,showWarnings=FALSE)
+}
 if(clinical) {
  d_all$outcome <- d_all$measure
  d_all$value <- d_all$n_events
@@ -68,6 +86,8 @@ d_all$matched_pair <- factor(d_all$pair_id)
 adjustments <- c("age_at_admission_per_10y", "elixhauser_score_per_5pt",
  "log1p_prior_all_admissions")
 model_adjustments <- list(M0=character(), M1=adjustments[1:2], M2=adjustments)
+if(los_sensitivity) model_adjustments <- list(M2=adjustments,
+ M2_plus_LOS=c(adjustments,"log1p_current_los_days"))
 results <- list(); diagnostics <- list(); coefficients <- list(); calibration <- list()
 for (outcome in unique(d_all$outcome)) for (stage in names(model_adjustments)) {
  d <- droplevels(d_all[d_all$outcome==outcome,])
@@ -176,3 +196,29 @@ write.csv(do.call(rbind,coefficients),file.path(output,"model_coefficients.csv")
 if(clinical)write.csv(do.call(rbind,calibration),
  file.path(output,"mean_calibration_by_group_period.csv"),row.names=FALSE)
 capture.output(sessionInfo(),file=file.path(output,"R_session_info.txt"))
+
+if(los_sensitivity) {
+ effects <- read.csv(file.path(output,"group_contrasts.csv"))
+ diagnostics <- read.csv(file.path(output,"model_diagnostics.csv"))
+ stopifnot(nrow(effects)==12, all(diagnostics$numeric_valid), !any(diagnostics$warning_flag),
+           all(tapply(diagnostics$n_pairs, diagnostics$outcome, function(n) length(unique(n)))==1))
+ keys <- c("outcome","contrast")
+ columns <- c(keys,"effect","ci_low","ci_high","p_value","FDR")
+ comparison <- merge(effects[effects$stage=="M2",columns],
+                     effects[effects$stage=="M2_plus_LOS",columns],
+                     by=keys,suffixes=c("_M2","_plus_LOS"))
+ old <- read.csv(file.path(input_dir,"group_contrasts.csv"))
+ old <- old[old$stage=="M2" & old$outcome %in% outcomes$mortality,columns]
+ names(old)[-(1:2)] <- paste0(names(old)[-(1:2)],"_original_M2")
+ comparison <- merge(comparison,old,by=keys)
+ comparison$crossed_05 <- (comparison$FDR_M2<.05)!=(comparison$FDR_plus_LOS<.05)
+ comparison$crossed_05_vs_original <- (comparison$FDR_original_M2<.05)!=(comparison$FDR_plus_LOS<.05)
+ write.csv(comparison,file.path(output,"comparison.csv"),row.names=FALSE)
+ writeLines(c("Exploratory context mortality models: M2 and M2 plus log(1 + current hospital LOS in days).",
+  "Logistic regression, two-way patient/pair HC1 covariance, identical complete pairs per endpoint.",
+  "BH across two mortality endpoints and all three contrasts per model stage (six tests each)."),
+  file.path(output,"multiplicity_methods.txt"))
+ print(comparison[,c(keys,"effect_M2","effect_plus_LOS","ci_low_plus_LOS","ci_high_plus_LOS",
+                     "FDR_M2","FDR_plus_LOS","crossed_05","crossed_05_vs_original")],row.names=FALSE)
+ print(diagnostics[,c("outcome","stage","n_pairs","n_positive_admissions")],row.names=FALSE)
+}

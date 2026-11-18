@@ -2033,6 +2033,9 @@ if(length(args)>=4 && args[4]=="language_race_sensitivity") {
  models <- list(M3=c(models$M2,"language_group"),
                 M4=c(models$M2,"language_group","race_ethnicity_group"))
 }
+if(length(args)>=4 && args[4]=="mortality_los_sensitivity") {
+ models <- list(M2=models$M2, M2_plus_LOS=c(models$M2,"log1p_current_los_days"))
+}
 for(stage in names(models)) for(group in sort(unique(data$pure_cc_group)))
  for(outcome in sort(unique(data$outcome))) {
  key <- paste(stage,group,outcome,sep="__")
@@ -2127,6 +2130,67 @@ for(item in c("effects","coefficients","diagnostics","calibration","influence"))
  write.csv(do.call(rbind,get(item)),file.path(out,paste0(item,".csv")),row.names=FALSE)
 writeLines(capture.output(sessionInfo()),file.path(out,"R_session_info.txt"))
 '''
+
+
+def fit_whole_cohort_mortality_los_sensitivity():
+    """Fit the two mortality endpoints with and without current hospital LOS."""
+    from tempfile import TemporaryDirectory
+
+    import numpy as np
+    from statsmodels.stats.multitest import multipletests
+
+    baseline = SCRIPT_DIR / "analysis_output_whole_matched_stay_mortality"
+    output = baseline / "mortality_los_sensitivity"
+    output.mkdir(parents=True, exist_ok=True)
+    library = PROJECT_DIR / "03_discharge_note_text_analysis/01_language_complexity/.r-library"
+    path = baseline / "model_inputs.csv"
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == (baseline / "model_input_sha256.txt").read_text().strip()
+    data = pd.read_csv(path)
+    keys = ["pair_id", "cohort", "subject_id", "hadm_id"]
+    endpoints = ["in_hospital_mortality", "post_discharge_death_within_1y"]
+    los = data.loc[data.outcome.eq("hospital_los_days"), keys + ["value"]]
+    assert np.isfinite(los.value).all() and los.value.gt(0).all()
+    los = los.assign(log1p_current_los_days=np.log1p(los.value)).drop(columns="value")
+    mortality = data.loc[data.outcome.isin(endpoints)].merge(los, on=keys, how="left", validate="many_to_one")
+    assert mortality.value.isin([0, 1]).all() and not mortality.duplicated(["outcome", *keys]).any()
+    complete = mortality.groupby(["outcome", "pair_id"]).log1p_current_los_days.transform("count").eq(2)
+    matched = mortality.loc[complete]
+    assert matched.groupby(["outcome", "pair_id"]).size().eq(2).all()
+
+    with TemporaryDirectory() as temp:
+        inputs = Path(temp) / "model_inputs.csv"
+        matched.to_csv(inputs, index=False)
+        subprocess.run(["/usr/local/bin/Rscript", "-", str(inputs), str(output), str(library), "mortality_los_sensitivity"],
+                       input=STAY_MORTALITY_R, text=True, check=True)
+        # Persist aggregate outputs only.
+        for stage in ("M2", "M2_plus_LOS"):
+            for endpoint in endpoints:
+                (output / f"{stage}__whole_matched_cohort__{endpoint}.rds").unlink(missing_ok=True)
+
+    effects = pd.read_csv(output / "effects.csv")
+    assert len(effects) == 4 and effects.numeric_valid.all()
+    effects["FDR"] = effects.groupby("stage").p.transform(lambda p: multipletests(p, method="fdr_bh")[1])
+    diag = pd.read_csv(output / "diagnostics.csv")
+    effects = effects.merge(diag[["stage", "outcome", "n_pairs", "n_deaths"]], on=["stage", "outcome"], validate="one_to_one")
+    effects.to_csv(output / "effects.csv", index=False)
+    cols = ["outcome", "ratio", "ci_low", "ci_high", "p", "FDR", "n_pairs"]
+    comparison = effects.loc[effects.stage.eq("M2"), cols].merge(
+        effects.loc[effects.stage.eq("M2_plus_LOS"), cols], on="outcome",
+        suffixes=("_M2", "_plus_LOS"), validate="one_to_one")
+    old = pd.read_csv(baseline / "M0_M2_reporting.csv").query("stage == 'M2'")
+    old = old.loc[old.outcome.isin(endpoints), cols].set_index("outcome").add_suffix("_original_M2")
+    comparison = comparison.join(old, on="outcome")
+    comparison["crossed_05"] = comparison.FDR_M2.lt(.05) != comparison.FDR_plus_LOS.lt(.05)
+    assert comparison.n_pairs_M2.eq(comparison.n_pairs_plus_LOS).all()
+    comparison.to_csv(output / "comparison.csv", index=False)
+    matched.groupby(["outcome", "cohort"]).value.agg(admissions="size", positives="sum").to_csv(output / "counts.csv")
+    (output / "methods.txt").write_text(
+        "Whole matched cohort. M2 and M2 plus log(1 + current hospital LOS in days).\n"
+        "Both fits per endpoint use identical complete pairs. Post-discharge mortality retains eligible survivor pairs.\n"
+        "Logistic regression with two-way patient and pair HC1 clustered standard errors.\n"
+        "BH across both mortality endpoints within each model. Exploratory conditional association.\n"
+    )
+    print(comparison.to_string(index=False))
 
 
 def fit_whole_cohort_stay_mortality_sensitivity():
@@ -2908,7 +2972,12 @@ if __name__ == "__main__":
     parser.add_argument("--fit-whole-cohort-stay-mortality-sensitivity", action="store_true", help="Fit M3 language and M4 language/race adjustments on the saved whole-cohort M0/M2 sample")
     parser.add_argument("--fit-whole-cohort-clinical-activity", action="store_true", help="Fit aggregate M0/M2/M3/M4 PPML workup models across all matched complaints")
     parser.add_argument("--refresh-stay-mortality-fdr", action="store_true", help="Recompute separate duration/mortality FDR families from saved fits only")
+    parser.add_argument("--fit-mortality-los-sensitivity", action="store_true",
+                        help="Fit whole-cohort M2 mortality models with current hospital LOS")
     options = parser.parse_args()
+    if options.fit_mortality_los_sensitivity:
+        fit_whole_cohort_mortality_los_sensitivity()
+        sys.exit(0)
     if options.refresh_stay_mortality_fdr:
         refresh_stay_mortality_fdr()
         sys.exit(0)
