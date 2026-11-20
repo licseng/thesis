@@ -192,6 +192,28 @@ def bootstrap_contrasts(paired, contributions, n_samples, seed, fairness):
     return pd.DataFrame(rows)
 
 
+def summarize_los_predictions_by_visible_sl(bridge):
+    """Compare original LOS predictions within each cohort and observed stay category."""
+    los = bridge.loc[bridge.task.eq("los")]
+    rows = []
+    for (cohort, actual), group in los.groupby(["cohort", "true_label"]):
+        row = {"cohort": cohort, "actual_stay": ">7 days" if actual else "<=7 days"}
+        for visible, label in [(0, "without_sl"), (1, "with_sl")]:
+            predictions = group.loc[group.visible_SL.eq(visible), "predicted_label"]
+            row[f"n_{label}"] = len(predictions)
+            row[f"n_predicted_prolonged_{label}"] = int(predictions.sum())
+            row[f"pct_predicted_prolonged_{label}"] = 100 * predictions.mean()
+        row["difference_pp_with_minus_without"] = (
+            row["pct_predicted_prolonged_with_sl"] - row["pct_predicted_prolonged_without_sl"]
+        )
+        for prediction, label in [(0, "short"), (1, "prolonged")]:
+            row[f"pct_with_sl_among_predicted_{label}"] = (
+                100 * group.loc[group.predicted_label.eq(prediction), "visible_SL"].mean()
+            )
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bundle-dir", type=Path, required=True)
@@ -338,7 +360,11 @@ def main():
     grouped[metric_cols].agg(["min", "max", "std"]).to_csv(out / "performance_repeat_variation.csv")
     pd.DataFrame(effects).to_csv(out / "masking_effects_and_error_changes.csv", index=False)
     pd.concat(contrasts, ignore_index=True).to_csv(out / "target_minus_random_with_ci.csv", index=False)
-    pd.concat(bridges, ignore_index=True).to_csv(out / "test_admission_bridge.csv", index=False)
+    admission_bridge = pd.concat(bridges, ignore_index=True)
+    admission_bridge.to_csv(out / "test_admission_bridge.csv", index=False)
+    summarize_los_predictions_by_visible_sl(admission_bridge).to_csv(
+        out / "los_predictions_by_visible_sl.csv", index=False
+    )
     pd.concat(association_rows, ignore_index=True).to_csv(out / "documentation_error_rates.csv", index=False)
     pd.concat(model_rows, ignore_index=True).to_csv(out / "documentation_error_associations.csv", index=False)
     pd.concat(coverages, ignore_index=True).to_csv(out / "overshadowing_test_coverage.csv", index=False)
